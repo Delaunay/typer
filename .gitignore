@@ -1,0 +1,9 @@
+typer
+*.elc
+*.annot
+*.cmi
+*.cmo
+.depend
+*.toc
+manual.??
+*.info

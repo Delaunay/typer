@@ -1,0 +1,1711 @@
+-*- outline -*-
+
+* Syntax
+
+FIXME:
+- Not only are -> => and ≡> réquisitionés for the language, but also :=
+  and :- and :≡.  That's a lot of attractive infix ops to  take away from
+  the programmer.
+  • Note: And only one of := :- :≡ is really needed since the nature of an
+    arg can be taken from the type.
+- Because our sexp reader strips parentheses we can't distinguish
+
+       inductive T
+         | C1 (x : Footype) => T1 T2
+  from
+       inductive T
+         | C1 (x : Footype) => (T1 T2)
+
+  hence forcing the user to use
+
+       inductive T
+         | C1 (x : Footype) => (y : T1 T2)
+
+- I can't think of any reason why the parameter of a type constructor would
+  need to be implicit but not erasable, nor why it would be erasable but
+  can't be introduced by the "generalize" step, so "inductive" could
+  probably be limited to "INDUCTIVE id args ('|' id telescope)*".
+
+arw   ::= '≡>' | '=>' | '->'
+assign::= ':≡' | ':=' | ':-'
+exp   ::= '(' id ':' exp ')' arw exp | exp arw exp     # Function Types
+        | LET decls IN exp
+	| exp exp                                      # normal actual arg
+	| exp '(' id assign exp ')'                    # explicit/named actual
+	| exp ':' exp				       # type annotation
+	| LAMBDA args arw exp
+	| CASE exp ('|' pattern '->' exp)*
+	| INDUCTIVE id args ('|' id telescope)*        # Kinda like a μ
+decls ::= ε | decl ';' decls
+decl  ::= id ':' exp
+	| id telescope '=' exp
+args  ::= (id | '('id ':' exp')')*
+telescope_elem ::= '(' id ':' exp ')' | exp
+telescope ::= (telescope_elem+ '≡>')? (telescope_elem+ '=>')? telescope_elem*
+pattern ::= id | id args
+
+* Infix
+
+We should try to use ≤ constraints in the process of turning a bnf
+to a precedence table, and we should then automatically map something like
+
+   (lambda (-> args body))
+
+to a (lambda_-> args body)
+
+* Syntax trials
+** Types
+
+*** ≡> | => | ->
+    Types: (e:t₁) ≡> (i:t₂) => (x:t₃) -> t₄
+    Types: t₁ ≡> t₂ => t₃ -> t₄
+*** {},[],()
+    Types: {e:t₁} -> [i:t₂] -> (x:t₃) -> t₄
+    Types: {t₁} -> [t₂] -> t₃ -> t₄
+
+** Telescopes:
+
+For Datatypes, we'd like to be able to drop the arg name:
+
+      Foo {e:t₁} [i:t₂] (x:t₃) {_:t₂ = t₄}
+vs
+      Foo {e:t₁} [i:t₂] t₃ {t₂ = t₄}
+
+whereas for functions, it's generally the reverse:
+
+      lambda {e:t₁} [i:t₂] (x:t₃) -> body
+vs
+      lambda {e} [i] x -> body
+
+since "body" should make it possible to infer the types of these args.
+
+So even if the syntax is superficially similar, it's likely to be different
+in meaning.
+
+Also, this means there is an underlying similarity between the Datatypes
+case and the Types case, that is not present between the Lambdas case and
+the Types case.
+
+The "common" case should be to only have either the type or the id:
+
+    Datatypes:  Foo [Eq t] (List t) {t₂ = List t}
+    Lambdas:    lambda {t} [dict] x {eq:t₂ = List t} -> body
+
+The exact placement of erasable/implicit args is not important: they just
+need to obey the dependencies.  So they could be specified separately and
+then placed automatically.
+
+    Datatypes:  Foo [Eq t] (List t)  with  (t₂ = List t)
+    Lambdas:    lambda [dict] x with (eq:t₂ = List t) -> body
+    Types:      [Eq t] -> (List t) -> t₂  with  (t₂ = List t)
+
+*** {},[],()
+   Datatypes: Foo {e:t₁} [i:t₂] (x:t₃) {t₂ = t₁}
+   Lambda:    lambda {e:t₁} [i:t₂] (x:t₃) -> body
+
+   Downsides:
+   - I'd prefer not to use {...} here, so as to keep it for "lexical quoting"
+
+*** [],[::],()
+    Datatypes:  Foo [Eq t] (List t)  where  t₂ = List t
+    Lambdas:    lambda [dict] x [eq:t₂ = List t] -> body
+
+    [id] or [exp]  means "implicit"
+    [id:exp]       means "erasable"
+    [id::exp]      means "implicit"
+
+    Trailing [_:exp]s can be replaced by "where exp1 exp2"
+
+    Upside:
+    - mostly works and keeps the common code concise
+    Downside:
+    - Irregular
+
+*** [[]], [], ()
+
+    Datatypes:  Foo [Eq t] (List t) [[t₂ = List t]]
+    Lambdas:    lambda [[t]] [dict] x [[eq:t₂ = List t]] -> body
+
+
+*** ??, ?, ()
+
+    Datatypes:  Foo (? Eq t) (List t) (?? t₂ = List t)
+    Lambdas:    lambda (?? t) (? dict) x (??eq:t₂ = List t) -> body
+
+*** .., ., ()
+
+    Datatypes:  Foo (. Eq t) (List t) (.. t₂ = List t)
+    Lambdas:    lambda ..t .dict x (.. eq : t₂ = List t) -> body
+
+*** =>, ≡>
+   Datatypes: Foo t₁ (t₂ = t₄) ≡> (i:t₂) => (x:t₃)
+   Lambda:    lambda (e:t₁) ≡> (i:t₂) (i₂:t₂) => (x:t₃) -> body
+
+The erasable/implicit args will automatically be re-ordered to satisfy
+dependencies, so there's never any need to interleave implicit/erasable
+and normal args!
+
+   Upsides:
+   - Consistency with Types
+   - Similarity with Haskell
+   Downsides:
+   - Makes the Datatypes case look like it returns the last field.
+   - The syntax below has a grammar conflict for -> because the "FUN
+     telescope -> exp" rule implies that "a => b -> c" needs to be parsed as
+     "(a => b) -> c", whereas it should be parsed as "a => (b -> c)" if
+   - Collision for "lambda t₁ => t₂ -> t₃" since that could mean "lambda (t₁
+     => t₂) -> t₃" or "lambda t₁ => (t₂ -> t₃)".  Unless we only use
+     "lambda" for single-arg cases, and then use "fun" only with telescopes
+     that end in "->"!
+
+Maybe we could use
+
+   LAMBDA telescope  
+
+*** [], =>
+   Datatypes: Foo [e:t₁] (i:t₂) => (x:t₃) [_:t₂ = t₁]
+   Lambda:    lambda [e:t₁] (i:t₂) => (x:t₃) -> body
+
+   Upside:
+   - keeps the similarity with Haskell's type class notation
+   Downsides:
+   - Different kind of syntax for implicit and erasable
+   - Can't have implicit fields after explicit fields
+   - Weird "Foo (x:t) =>" for implicit field without explicit fields
+
+** Funcalls
+*** {}, [], ()
+  Funcalls:  f {e=foo} [i=bar] x
+
+  Upsides:
+  - Nice syntactic consistency except for Types.
+  Downsides:
+  - Prevents using [...] and {...} as normal argument values.
+  - Syntax for Types is different from everything else.
+
+*** (:=)
+   Funcalls:  f (e:=foo) (i:=bar) x
+
+  Upsides:
+  - The (f:=a) syntax can also be used for normal args.
+  Downsides:
+  - Need types to know which arg is erasable.
+  - No syntactic consistency between lambda and funcall.
+
+*** (:≡), (:=)
+   Funcalls:  f (e:≡foo) (i:=bar) x
+
+  Upsides:
+  - The (f:=a) syntax could also be used for normal args.
+  - Some consistency between the Types and Funcall syntax.
+  Downsides:
+  - No syntactic consistency between lambda and funcall.
+
+*** (<≡), (<=), (<-)
+   Funcalls:  f (e<≡foo) (i<=bar) x
+
+  Upsides:
+  - The (f<-a) syntax could also be used for normal args.
+  - Nice consistency between the Types and Funcall syntax.
+  Downsides:
+  - No syntactic consistency between lambda and funcall.
+  - Conflicts with the standard <= as ASCII for ≤
+
+* TODO
+** Mention Minamide&Garrigue's "on the runtime complexity of type-directed unboxing" for "threesomes, with and without blame" by Jeremy Siek and Philip Wadler
+** blame calculus, threesomes for coercions-that-dont-accumulate
+** Pass implicit args even if there's no subsequent explicit arg.
+E.g. "f" might need to be applied to some implicit arg.
+E.g. "f x" might need extra implicit args *after* x.
+** Represent {n:Int | P(n)} with P(n) erasable
+type IntSubset P = mkIS : (n:Int) -> (P n) ≡> IntSubset P
+[ This is an example where there's a trailing implicit arg.  ]
+** Unify Nat, Fin n, Mem x xs
+type Singleton x = mkSingleton : (x : t) -> Singleton x
+type (∃x ≡> T') = Pack : (x:_) ≡> T' -> (∃x ≡> T')
+
+Summary below is encouraging, but hides the remaining difficulty:
+each constructor (and each branch of the Cases) has a different number (and
+type) of erasable arguments.
+The Swiss Coercion did solve such problems, so we should be able to
+use a similar approach.
+
+type Coerce T₁ T₂
+  = App : Coerce ((x : T₁) ≡> T₂ x) (T₂ X)
+  | 
+
+*** For Nat
+type Nat = Zero | Succ Nat
+type Nat' = ∃n ≡> Singleton (nat→int n)
+Zero' = Pack {n=Zero}  (mkSingleton 0)
+Succ' = λ (Pack {n} (mkSingleton i)) -> Pack {n=Succ n} (mkSingleton (i + 1))
+CaseNat' n f₀ f₁
+  = λ (Pack {n} i) -> if i = 0 then f₀ () else f₁ (Pack ? (i - 1))
+Proof : (n : Nat) -> (n' : Singleton (nat→int n))
+        -> CaseNat n f₀ f₁ = CaseNat' n' f₀ f₁
+*** For Fin n
+type Fin n = FZero : Fin (S n) | FSucc : Fin n -> Fin (S n)
+type Fin' l = ∃n : Fin l ≡> Singleton (fin→int n)
+Zero' = Pack {n=FZero} (mkSingleton 0)
+Succ' = λ (Pack {n} (mkSingleton i)) -> Pack {n=FSucc n} (mkSingleton (i + 1))
+CaseFin' n f₀ f₁
+  = λ (Pack {n} i) -> if i = 0 then f₀ () else f₁ (Pack ? (i - 1))
+Proof : (n : Fin l) -> (n' : Singleton (fin→int n))
+        -> CaseFin n f₀ f₁ = CaseFin' n' f₀ f₁
+*** For Member x xs
+type Mem x xs = MZero : Mem x (x::xs) | MSucc : Mem x xs -> Mem x (y::xs)
+type Mem' l = ∃n : Mem x xs ≡> Singleton (mem→int n)
+Zero' = Pack {n=MZero} 0
+Succ' = λ (Pack {n} i) -> Pack {n=MSucc n} (i + 1)
+CaseMem' n f₀ f₁
+  = λ (Pack {n} i) -> if i = 0 then f₀ () else f₁ (Pack ? (i - 1))
+Proof : (n : Mem x xs) -> (n' : Singleton (mem→int n))
+        -> CaseMem n f₀ f₁ = CaseMem' n' f₀ f₁
+	
+** "applicative notation" (see Idris)
+** named patterns (so I can say "foo = A|B" and then use `foo' in case).
+Maybe I can simply perform macro-expansion on patterns.
+** Allow limited overloading
+E.g. allow the use of the same name to refer to a type and the module in
+which it's defined.
+Or same name for a type and its sole constructor.
+* Core syntax
+FIXME: need a syntax for implicit/erasable lambda and call, probably the
+same can be used for both, as in "lambda {x:t} body" and "f{y}".
+- we don't need to distinguish implicit from erasable in function calls.
+- we don't really need to distinguish them in lambda either,
+  because we can simply make them erasable whenever possible.
+- we may need to make an erasable argument non-erase (i.e. just implicit)
+  since the resulting type is different.  So we do need a separate syntax
+  for "implicit and not erasable" arguments in lambda.
+  But it can be cumbersome since it should be needed rather rarely.
+- we could use "lambda farg => exp"
+- if we want "lambda a1 a2 a3 -> exp", then it'd be natural to extend it to
+  something like "lambda {a1} a2 {a3} -> exp".
+- we don't need implicit args in lambda since we can just rely on free vars
+  being turned into implicit args.
+
+  exp ::= var | "_" | integer | float | string | block
+        | "let" decl "in" exp
+        | aarg arw exp
+        | "lambda" farg arw exp
+	| exp exp
+        | "macro_" exp			# `exp' is a function of 3 arguments.
+        | "inductive_" exp_type exp*
+        | "cons_" var_tname i
+        | "case_" exp branch* ["_" "=>" exp]
+
+_ stands for a metavariable to be inferred via unification.
+
+  branch ::= i var* "=>" exp
+  farg ::= var | "(" var ":" exp ")"
+  aarg ::= exp | "(" var ":" exp ")"
+  decl ::= ε
+         | var ":" exp
+         | var "=" exp
+         | decl ";" decl
+  arw  ::= "->" | "=>" | "≡>"
+
+=> is used for functions whose argument is implicit (i.e. will be
+   automatically provided either via unification or by a macro).
+≡> is used for functions whose argument is not only implicit but
+   also erasable (will not be needed at run-time).
+Maybe we'll need another arrow for non-pure functions.
+
+** Syntax for function types, arguments, and type declarations.
+
+*** a -> b, a => b, a ≡> b
+*** Data type declarations
+
+data Foo
+  | Foo1 T1 T2 T3
+
+We need T1, T2, and/or T3 to be sometimes implicit/erasable
+
+It'd be nice to use the same syntax as for function calls.
+
+If it's the same syntax as for function calls, then a non-dependent T1
+would want to look like (fieldname : T1), since in function calls, "e" is
+equivalent to (e : τ) rather than to (x : e).
+
+Imposing a fieldname is not a bad idea, tho it's a bit verbose, OTOH it's
+not indispensable, since the two syntaxes can be "similar but not equal".
+
+It's tempting to accept
+
+  | Foo2 T1 => T2 T3
+
+for implicit args, à la Haskell, but if an implicit arg's type needs to
+refer to a non-implicit arg, that doesn't work, so maybe we can accept this
+syntax, but we also need another.
+
+Maybe another option is to allow
+
+  | Foo2 T1 ≡> T2 => (x : T3) T4
+
+where T1 and T2 can refer to x.  I.e. auto-order the implicit arguments based
+on dependencies.  After all, the "generalize" part of HM will need to perform
+the exact same auto-ordering, so it's no extra work, really.
+This would naturally extend to:
+
+  | Foo2 T1 => T5 ≡> (x : T2) T3
+
+Then the fully-explicit syntax could look like
+
+  | Foo2 (x1 : T1) (x2 :: T2) (x3 ::: T3)
+
+where : is for normal args, :: for implicit and ::: for erasable.
+
+Another approach is to drop Haskell-like syntax and go for:
+
+  | Foo3 {x : T1; y : T2; z : T3}
+
+And then use : for normal args, :: for implicit and ::: for erasable
+
+Equality constraints for data types are implicit, and we'd like some special
+syntax for it, like:
+
+  | Foo5 T1 T2 T3 where x = y
+
+But maybe
+
+  | Foo5 (x = y) => T1 T2 T3
+
+would work as well.
+
+*** Explicit implicit args
+
+Coq uses something like
+
+    f (x := e1) e2 e3
+
+We could make the implicit-vs-erasable choice explicit with ::=.
+We don't necessarily need to know at the call site which is erasable and
+which is implicit, so we could accept a single syntax for all cases (could
+even include normal args, so as to allow out-of-order parameter passing).
+
+It'd be nice to allow passing implicit parameters without referring to
+their name (especially for those where the name is auto-generated).
+Of course
+
+    f (_ := e1) e2 e3
+
+is an option, but it kinda sucks.  Some System F presentations use
+
+    f [τ₁] e2
+
+so we could use this as well, but then that clashes with other uses of [...]
+for arguments, which is a rather big deal, I think.
+
+Hopefully this will not be needed often enough to warrant a special syntax.
+
+** Maybe we need erasable non-implicit args (e.g. type args for module instantiations)?
+
+** let and recursive defs
+*** type annotations may need to refer to earlier defs
+(e.g. first define nat, then use it)
+*** if we use an SCC analysis, we need all defs before we can start
+This is clearly needed especially because of "free vars are implicit args".
+*** First attempt:
+- read decls in sequence.
+- for each decl, if it's an infix declaration, process it immediately.
+- for unknown decl, macro-expand it.
+- once all decls have been read, collect the set of vars defined.
+- perform SCC analysis.
+- elaborate SCC groups in sequence.
+
+Can't work: SCC analysis requires FreeVars, which is only available after
+elaboration (since macro-expansion can't be done before elaboration).
+
+*** Second attempt:
+- read and process decls in sequence.
+- var decls elaborate and then add to the environment.
+- elaboration may partly fail because of forward references.
+- elaboration returns a set of free vars found (which may either be free
+  vars or forward references).
+- as soon as all (formerly) free vars have been encountered, the resulting
+  SCC can be completed (e.g. generalized maybe).
+- as soon as we reach the end of decls, we can distinguish free vars from
+  forward references, and hence complete the corresponding SCCs.
+
+* Implicit args
+** Two varieties: implicit and erasable
+** let-polymorphim
+When `gen' adds implicit args, all the ones that can be erasable are
+marked erasable.
+** free type vars
+Free vars occurring in type declarations are taken to be erasable arguments.
+I.e. implicit args need to be written explicitly.
+** inferring implicit actual args
+By default, unification is used.
+But some types can be associated with specialized decision procedures (macros).
+** optional args
+Implicit args subsume optional args.
+We just need to associate the `Option' type with a macro that always returns
+`None' if the args is not provided and `Some a' when `a' is provided.
+We can even provide a non-None default value.  Just define
+type Default (T : Type) (b : T) =
+   | Actual :: T -> Default T b
+and associate `Default' with a macro that returns `b' if no arg is provided.
+* IF
+`if' should accept more than booleans.  E.g. it should accept Agda's
+"decidable", which is nothing more than a boolean annotated with
+erase proofs (and the erasable proofs should implicitly be available in the
+respective branches).
+
+To be more Lispy (tho not Schemey) maybe it should also accept most other
+datatypes where one of the elements can be meaningfully treated as the
+"false"/"null" value (e.g. the empty list, the "none" of the option type,
+...).
+
+* K axiom
+
+[ See article by Jesper Cockx et al.
+http://dl.acm.org/citation.cfm?id=2628139&CFID=459245005&CFTOKEN=46924550 ]
+
+K : (P : a ≡ a -> Type) -> (p : P refl) -> (e : a ≡ a) -> P e
+
+Example of use:
+
+If we have
+
+  coerce : A ≡ B -> A -> B
+
+then the proof
+
+   coerce-id: (e : Bool ≡ Bool) -> coerce e true ≡ true
+   coerce-id refl = refl
+
+requires the K axiom.
+
+Why can't we prove K?
+
+   Inductive eq (A : Type) (a : A) : A -> Type :=
+   | refl : eq A a a
+   .
+   
+   Definition K (A : Type)
+              (a : A)
+              (P : (eq A a a) -> Type)
+              (p : P (refl A a))
+              (e : eq A a a)
+     : P e :=
+     match e as e0 return P e0 with
+       | refl => p
+     end.
+
+Coq tells us that the "e0" has type "eq A a a0" rather than "eq A a a"!
+
+* Erasure
+
+Conversion checks equality after erasure.
+
+[lambda (var : exp1) exp2] => [exp2] or lambda (var) [exp2]
+[exp1 exp2]                => [exp1] or [exp1] [exp2]
+[var1 vari* => exp]        => var1 (not erasable vari)* => [exp]
+
+congruence everywhere else, e.g.:
+[Π(v:exp1)exp2]            => Π(v:[exp1])[exp2]
+
+** equality:
+
+  eq : inductive _ : Type -> Type -> Type | refl : eq a a
+  eq : inductive _ : (t:Type) => t -> t -> Type | refl : eq a a
+
+** For erasure to work well, we need some value polymorphism restriction.
+
+Actually, it's needed because of implicit arguments as well (a use that's
+syntactically a plain symbol should not perform computation, even if pure).
+
+So the rule should be the usual one: an implicit or erasable lambda's body
+should be a constructor (lambdas are constructors).
+
+** Cast/coercion
+We should be able to add a "swiss coercion" along the lines of:
+
+   Γ ⊢ v : τ₁    Γ ⊢ P: τ₁ ⊆ τ₂
+   ————————————————————————————
+   Γ ⊢ cast P v : τ₂
+
+with
+
+   type τ₁ ≡ τ₂ =
+    | eqid  : T ≡ T
+    | eqpm  : T₁ ⊆ T₂ -> T₂ ⊆ T₁ -> T₁ ≡ T₂
+    | eqcong: Regular F -> (T₁ ≡ T₂) -> (F T₁ ≡ F T₂)
+   type τ₁ ⊆ τ₂ =
+    | eid   : T₁ ≡ T₂ -> T₁ ⊆ T₂
+    | eapp  : ((x : T₁) ≡> T₂ x) ⊆ T₂ T₃
+    | eabs  : ((x : T₁) -> T₂ ⊆ T₃ x) -> T₂ ⊆ ((x : T₁) ≡> T₃ x)
+    | econg+: Positive F -> (T₁ ⊆ T₂) -> (F T₁ ⊆ F T₂)
+    | econg-: Negative F -> (T₁ ⊆ T₂) -> (F T₂ ⊆ F T₁)
+
+Maybe a good τ₁ ⊆ τ₂ constructor would be something like:
+
+    | eimply (F : (x : τ₁) -> τ₂) (_ : (x : τ₁) -> x = F x)
+
+Where the "=" equality uses erasure, hence covering "eapp" and "eabs", and
+probably also econg.
+
+*** What about recursion/induction?
+
+* Inudction-induction or induction-recursion
+
+** email
+
+Hi Jason,
+
+afaik there is no easy way to do this. I discussed this recently with
+Frederik Forsberg, whose PhD thesis is a good source of information about
+induction-induction. See section 5.3.
+
+You can approximate inductive-inductive definition using a similar technique
+as for induction-recursion but you don t get the right eliminator. E.g. If
+you define a family A : Set, B : A -> Set you expect that the elimination
+operators have the form
+
+elim-A : (X : Set)(Y : X -> Set) ->   -> A -> X
+elim-B : (X : Set)(Y : X -> Set) ->   -> (a : A) -> B a -> Y (elim-A X Y   a)
+
+the problem here is the dependency of the 2nd operator on the first.
+
+However, unlike the problem with univalence and extensionality this one is
+relatively easy to fix as Agda shows. Inductive-inductive definitions
+have a straightforward operational semantics and also it is no problem to
+derive eliminators and recursors for them. So why are they not included
+in Coq?
+
+Thorsten
+
+** JFP'09 of Ralph Matthes (and maybe Venanzio Capretta)
+
+* Generalized variables
+Lisp-style generalized variables could look like a pair of a getter+setter
+function in the IO/ST monad.
+So the "x <- general-var" would call the getter and "general-var := e"
+would call the setter.
+And I'd guess that "generalized-var" would be a type-class.
+
+* Translation to/from Java(script)
+We'd want to turn classes and interfaces into Typer type-classes and
+vice-versa.  There's some serious impedance mismatch, tho, so it's not
+obvious how such a matching would work.  Also if the type-classes are
+macro-only then it may be difficult for the compiler to make use of them.
+
+* Univalence
+** Univalence via Agda's primTrustMe again^2
+
+Alan Jeffrey <ajeffrey-zWi12Q5vYqaakBO8gow8eQ@public.gmane.org>
+Subject: Univalence via Agda's primTrustMe again^2
+Newsgroups: gmane.comp.lang.agda
+To: Agda mailing list <agda-TrQ0NnR75azkdzWRgU60H7NAH6kLmebB@public.gmane.org>, Homotopy Type Theory
+	<HomotopyTypeTheory-/JYPxA39Uh5TLH3MbocFFw@public.gmane.org>
+Date: Tue, 17 Feb 2015 12:02:57 -0600 (1 day, 21 hours, 3 minutes ago)
+
+*** Explanation
+
+Hi everyone,
+
+Here is a very tidied up version of how Agda's primTrustMe can be used to
+define a model in which univalence holds...
+
+The idea is to define equivalence and identity types by induction of
+universe level. At level n, (A ≃ B) is the usual definition of half-adjoint
+equivalence, which uses ≡ at level n. At level 0, (a ≡ b) is just skeletal
+propositional equality. At level n+1, (a ≡ b) is defined to be ∀ F → (F a ≃
+F b).
+
+We can postulate J, with its beta reduction rule (using Agda's primTrustMe
+to define postulates with beta-reductions).
+
+Part of univalence is postulating that ≃ is a congruence, that is there
+is a term cong F : (A ≃ B) → (F A ≃ F B). Somewhat annoyingly, this has two
+obvious beta-reductions:
+
+  (cong F refl)  -->  refl
+    (cong id p)  -->  p
+
+Agda doesn't allow such nondeterminism, so in the Agda development
+I introduced two congruence rules, cong and cong′. From cong, we can define
+ua (and ditto ua′) as:
+
+  ua : (A ≃ B) -> (A ≡ B)
+  ua p F = cong F p
+
+These have inverses, with type:
+
+  ua⁻¹ : (A ≡ B) -> (A ≃ B)
+
+The inverse of ua is the usual extension of the identity function using
+J. The invrse of ua′ is:
+
+  ua′⁻¹ p = p id
+
+and we can check that ua′⁻¹ (ua′ e) beta reduces to e. To get univalence, we
+postulate that ua and ua′ are equivalent, that ua⁻¹ and ua′⁻¹ are
+equivalent, and a beta-reduction saying that everything collapses on
+reflexivity:
+
+  ua≡ua′ : ∀ e → (ua n e ≡ ua′ n e)
+  ua⁻¹≡ua′⁻¹-cong : (p ≡ q) → (ua⁻¹ n p ≡ ua′⁻¹ n q)
+  (ua⁻¹≡ua′⁻¹-cong (ua≡ua′ (ua⁻¹ refl)))  -->  refl
+
+From these, we get univalence.
+
+All comments welcome...
+
+Alan.
+
+*** Code
+
+open import Level using (Level ; zero ; suc ; _ _ )
+
+module UnivalenceViaPrimTrustMe3 where
+
+-- Identity and composition of functions
+
+id :   { } {A : Set  }   A   A
+id x = x
+
+_ _ :   {  m n} {A : Set  } {B : Set m} {C : Set n}   (B   C)   (A   B)   (A   C)
+(f   g) x = f(g x)
+
+-- Skeletal propositional equality
+
+data _ _ { } {A : Set  } (a : A) : A   Set   where
+   -refl : (a   a)
+
+{-# BUILTIN EQUALITY _ _ #-}
+{-# BUILTIN REFL   -refl #-}
+
+ -cong :   {  m} {A : Set  } {B : Set m} (f : A   B) {x y : A}   (x   y)   (f x   f y)
+ -cong f  -refl =  -refl
+
+-- Postulates which beta-reduce
+
+private 
+
+  -- (trustMe a b) has type (a   b) for any a and b, handle with care!
+
+  primitive primTrustMe :   { } {A : Set  } {a b : A}   (a   b)
+
+  trustMe :   { } {A : Set  } (a b : A)   (a   b)
+  trustMe a b = primTrustMe
+
+  POSTULATE[_ _] :   {  m} {A : Set  } {B : A   Set m}     a   B a   (  a   B a)
+  POSTULATE[ a   b ] a  with trustMe a a 
+  POSTULATE[ a   b ] .a |  -refl = b
+
+-- Natural numbers
+
+data   : Set where
+  O :  
+  _+1 :      
+
+-- Induction over universe levels
+
+level :     Level
+level O = zero
+level (n +1) = suc (level n)
+
+Type :   n   Set (level (n +1))
+Type n = Set (level n)
+
+-- Equivalence and identity types defined as contextual equivalence
+-- (a   b) at level 0 whenever (a   b)
+-- (a   b) at level n+1 whenever for every F, (F a   F b) at level n
+-- (A   B) at level n is half-adjoint equivalence, using   at level n
+-- Note that this definition is by inudction on universe level
+
+Type_ _ _ _ :   n (A : Type n) (a b : A)   Type n
+ -cong :   n {A B : Type n} (f : A   B) {x y : A}   (Type n   A   x   y)   (Type n   B   f x   f y)
+record Type_ _ _ n (A B : Type n) : Type (n +1)
+
+(Type O        A   a   b) = (a   b)
+(Type (n +1)   A   a   b) =   (F : A   Type n)   (Type n   F a   F b)
+
+ -cong O      f p =  -cong f p
+ -cong (n +1) f p =   F   p (F   f)
+
+record Type_ _ _ n (A B : Type n) where
+  constructor  _,_,_,_,_ 
+  field f : A   B
+  field f ¹ : B   A
+  field   :   a   Type n   A   f ¹(f a)   a
+  field   :   b   Type n   B   f(f ¹ b)   b
+  field   :   a   Type n   (Type n   B   f (f ¹ (f a))   f a)   ( -cong n f (  a))   (  (f a))
+
+-- Reflexivity
+
+ -refl :   n {A} {a}   (Type n   A   a   a)
+ -refl-  :   n {A} {a}   (Type n   (Type n   A   a   a)   ( -cong n (  x   x) ( -refl n))   ( -refl n))
+ -refl :   n {A}   (Type n   A   A)
+
+ -refl O      =  -refl
+ -refl (n +1) =   F    -refl n
+
+ -refl-  O =  -refl
+ -refl-  (n +1) =   F    -refl n
+
+ -refl n =   (  x   x) , (  x   x) , (  x    -refl n) , (  x    -refl n) , (  x    -refl-  n)  
+
+-- Postulate J
+
+J :   n {A} (C :   a b   (Type n   A   a   b)   Type n)   (  a   C a a ( -refl n))     a b p   C a b p
+J n C c a = POSTULATE[ a   POSTULATE[  -refl n   c a ] ]
+
+-- Symmetry and transitivity of   follow from J
+
+ -sym :   n {A a b}   (Type n   A   a   b)   (Type n   A   b   a)
+ -sym n {A} {a} {b} = J n (  a b p   Type n   A   b   a) (  a    -refl n) a b
+
+ -trans :   n {A a b c}   (Type n   A   a   b)   (Type n   A   b   c)   (Type n   A   a   c)
+ -trans n {A} {a} {b} {c} = J n (  a b p   Type n   A   b   c   Type n   A   a   c) (  a   id) a b
+
+-- Two possible definitions of   being a conguruence...
+-- both of them have the type  -cong n F : (Type n   A   B)   (Type n   F A   F B)
+-- but they have different beta-reductions:
+--  -cong n F ( -refl n) beta-reduces to ( -refl n)
+--  -cong  n id p beta-reduces to p
+
+ -cong :   n   (F : Type n   Type n)     {A B}   (Type n   A   B)   (Type n   F A   F B)
+ -cong n F {A} {B} = f B where 
+
+  f :   B   (Type n   A   B)   (Type n   F A   F B)
+  f = POSTULATE[ A   POSTULATE[  -refl n    -refl n ] ]
+
+ -cong  :   n {A B}   (F : Type n   Type n)   (Type n   A   B)   (Type n   F A   F B)
+ -cong  n = POSTULATE[ id   id ]
+
+-- From these two definitions of  -cong, we get two definitions of ua
+
+ua :   n {A B}   (Type n   A   B)   (Type (n +1)   Type n   A   B)
+ua n e F =  -cong n F e
+
+ua  :   n {A B}   (Type n   A   B)   (Type (n +1)   Type n   A   B)
+ua  n e F =  -cong  n F e
+
+-- Each of these has an inverse.
+-- Note that (ua  ¹ n (ua  n p)) beta-reduces to p
+
+ua ¹ :   n {A B}   (Type (n +1)   Type n   A   B)   (Type n   A   B)
+ua ¹ n {A} {B} = J (n +1) (  A B p   (Type n   A   B)) (  A    -refl n) A B
+
+ua  ¹ :   n {A B}   (Type (n +1)   Type n   A   B)   (Type n   A   B)
+ua  ¹ n p = p id
+
+-- We postulate that ua and ua  are the same
+
+postulate ua ua  :   n {A B} e   (Type (n +1)   (Type (n +1)   Type n   A   B)   ua n e   ua  n e)
+
+-- We also postulate that ua and ua ¹ are the same
+-- moreover, (ua ¹ ua  ¹-cong n (ua ua  n ( -refl n)) beta reduces to  -refl (n +1)
+
+ua ¹ ua  ¹-cong :   n {A B p q}   (Type (n +1)   _   p   q)   (Type (n +1)   (Type n   A   B)   ua ¹ n p   ua  ¹ n q)
+ua ¹ ua  ¹-cong n {A} {B} {p} {q} = r B p q where
+
+  r :   B p q   (Type (n +1)   _   p   q)   (Type (n +1)   (Type n   A   B)   ua ¹ n p   ua  ¹ n q)
+  r = POSTULATE[ A   POSTULATE[  -refl (n +1)   POSTULATE[ ua  n ( -refl n)   POSTULATE[ ua ua  n ( -refl n)    -refl (n +1) ] ] ] ]
+
+ua ¹ ua  ¹ :   n {A B} p   (Type (n +1)   (Type n   A   B)   ua ¹ n p   ua  ¹ n p)
+ua ¹ ua  ¹ n p = ua ¹ ua  ¹-cong n ( -refl (n +1))
+
+-- From this, we can show that ua and ua ¹ form an equivalence
+
+ua-  :   n {A B} (p : Type (n +1)   Type n   A   B)   
+  (Type (n +1)   (Type (n +1)   Type n   A   B)   (ua n (ua ¹ n p))   p)
+ua-  n {A} {B} p = J (n +1) (  A B p   Type n +1   _   ua n (ua ¹ n p)   p) (  A    -refl (n +1)) A B p
+
+ua-  :   n {A B} (e : Type n   A   B)   
+  (Type (n +1)   (Type n   A   B)   (ua ¹ n (ua n e))   e)
+ua-  n e = ua ¹ ua  ¹-cong n (ua ua  n e)
+
+ua-  :   n {A B} (p : Type (n +1)   Type n   A   B)   
+  (Type (n +1)   _   ( -cong (n +1) (ua ¹ n) (ua-  n p))   (ua-  n (ua ¹ n p)))
+ua-  n {A} {B} p = J (n +1) (  A B p   Type (n +1)   _   ( -cong (n +1) (ua ¹ n) (ua-  n p))   (ua-  n (ua ¹ n p))) (  A    -refl (n +1)) A B p
+
+-- Thus, we have univalence
+
+univalence :   n {A B}   (Type (n +1)   (Type (n +1)   Type n   A   B)   (Type n   A   B))
+univalence n =   ua ¹ n , ua n , ua-  n , ua-  n , ua-  n  
+
+
+
+* Modules and macros
+If we want to be able to call a macro from another module (via
+"Module.macro <args>"), then we have to allow macro calls to have a "name"
+that's not just a symbol but a module-ref (i.e. a potentially complex
+expression), so it's not obvious how to distinguish macro calls from
+function calls, short of normalizing Pcall's function argument.
+
+Solution: macros have a different type, so if M.x has type "macro", we know
+we should normalize it to get the actual macro.
+
+* Modules
+
+Modules should be able to hold definitions which are universe-polymorphic,
+which means that the module language can't be the CIC-like core calculus but
+has to be a new lambda calculus layered on top, just like the ML
+module language.
+
+Furthermore, module signatures are not really types, but records
+holding types.  Maybe they can be macro-expanded to something like types:
+
+   F = functor (M1 : SIG) => M2
+
+could turn into
+
+   F = λ Mt (M1 : Mt) (Mp : ModuleObeys Mt SIG) => M2
+
+But then M2 will have trouble when extracting elements from M1, since
+they'll have an unknown abstract type, which can only be turned into
+something of a useful type by casting using the proofs in Mp.
+
+* Type providers (F# and Idris)
+* Low-level Typer
+** control over low-level representation
+*** Use `int' for Nat/Fin n/x ∈ xs
+*** Use 0 | 1+<val> for Maybe
+This requires knowing that <val> is always smaller than 2^32-2.
+*** Use 1 tag-bit for A+B
+This requires knowing the useful-bit-size of values (e.g. 30bit for pointers).
+
+** Region allocation
+Can macros be used to implement region-inference?
+How 'bout for non-nested region lifetimes, as in typed-regions?
+
+* Top-level IO
+** Should the top-level be a list of definitions or commands?
+I think a list of definitions is cleaner.
+
+But if we want to allow top-level "IORef" values, then we have to provide
+some way to run some IO during evaluation of a list of definitions.
+
+* eta
+** eta reduction and case analysis
+when unifying "e" with "case e₁ ..." we could use the following eta rule:
+e = case e₁ of T₁ x₁₁ .. x₁ₙ -> assume e₁ = T₁ x₁₁ .. x₁ₙ in e
+             | T₂ x₂₁ .. x₂ₙ -> assume e₁ = T₂ x₂₁ .. x₂ₙ in e
+	     ...
+
+Actually, during type-inference, we should always "assume" those equalities
+when entering a `case' branch, so the issue is how to avoid inf-looping and
+how to then rewrite the result into "core PTS code" using explicit equality
+proofs and casts.
+
+** eta of records
+
+Agda has made its record eta-equivalent.  If we do the same for our inductives:
+
+   Inductive R = T x1 x2
+
+then
+
+   case (x : R)
+   | T x1 x2 => F x1 x2
+
+turns into
+
+   F (π₁ x) (π₂ x)
+
+Aka
+
+   F (case x | T x1 _ => x1) (case x | T _ x2 => x2)
+
+** Generalization to non-records:
+
+I guess a generalization could look like:
+
+  case x
+  | T₁ xs => F (G₁ xs)
+  | T₂ ys => F (G₂ ys)
+  ..
+
+=>
+
+  F (case x
+     | T₁ xs => G₁ xs
+     | T₂ ys => G₂ ys
+     ..)
+
+* Positivity checking
+When X is passed to a function, Agda checks how the function uses it to
+determine if it's (strictly) positive.
+** comp.lang.agda: Strict positivity and indices
+** [Coq-Club] Strictly positive inductive types: non-strictly seems safe
+as long as the type is not large.
+See http://dx.doi.org/10.1007/3-540-52335-9_47.
+
+* Universe polymorphism
+Agda seems to do:
+- Add Level as a new special type (with 0 and S constructors and without elim).
+- Define: "Set : Πl:Level.Set(S l)".
+- Give Πl:Level.e a "non-Set" type to disallow "deep" polymorphism.
+
+* Strong elimination of large types
+*** From "Recursive Families of Inductive Types" by Capretta
+Strong elimination is the elimination rule for inductive types in which the
+elimination predicate is allowed to be big, that is, we can have an
+elimination predicate "x: I ⊢ (P x): □".  If <foo> is impredicative, strong
+elimination result in inconsistency (see Coquand's "An Analysis of Girard's
+Paradox").  Nevertheless, it can still be admitted if the inductive type
+I is defined without the use of impredicativity, that is, as already
+mentioned, if there is a type in □ isomorphic to it.
+
+* Polymorphic recursion inference
+GADTs, nested datatypes, indexed inductive families, all make polymorphic
+recursion much more common, so it's more important to try and infer it.
+One way to try and attack the problem:
+1- Infer the type of a recursive function, ignoring the recursive calls
+   (i.e. delaying them, giving them a fresh return type),
+2- generalize,
+3- type the recursive calls (now that we know how many implicit params to add).
+Of course, this introduces another problem: the generalization depends on
+the set of "free fresh vars", which itself can be affected by the typing of
+the recursive calls.
+** Type Inference with Polymorphic Recursion, Fritz Henglein, toplas 93.
+
+* Mumble
+** Dependent types imply that type-inference needs to call the normalizer.
+** macros means that we need to call the evaluator during sexp->lexp parsing.
+** typed macros means that macro-expansion is done during type-inference.
+** Together this means that sexp->lexp does macro+eval+infer!
+** since macro expansion needs type-information, macros can't implement
+`macroexpand' easily, so macros that require walking the code tree
+(e.g. that need to know the set of freevars in one of its arguments) are
+"impossible" unless Typer provides extra support for them.
+* Syntax
+** Lexical rules
+Tokens will be made of any sequence of letters other than blanks/comments.
+
+  blanks = LF, CR, TAB, SPC
+  comments = %...\n
+  strings = "...\?..."
+  numbers = as standard as possible
+  maybe handle \ specially not only in strings but anywhere else as well
+  special token = sequence of chars which is always treated as a single
+    token even if it's not surrounded by blanks.  The set of special tokens
+    can be extended by the programmer.
+  magic token = the _ char is magical in that it forcefully connects even
+    special tokens: a(b are 3 tokens if ( is special, but a_(_b is a single
+    (magic) token.
+
+** To affect lexing and parsing, declarations have to take effect before the
+  whole file is parsed.  At first we could say that parsing stops (to allow
+  evaluation) at every top-level semi-colon, or after every top-level
+  closer.  But what about
+
+  module Toto = {
+    define _::_ a b = ...
+    define foo = 1 :: 2
+  }
+
+  This seems very reasonable, but requires evaluation in the middle of the
+  parse of a top-level construct.  So we have to handle some top-level
+  elements (like "module = ...") specially.
+
+  E.g.:
+  - make it imperative: "module toto;" is a self-contained top-level
+    expression which affects the interpretation of subsequent expressions
+    to be considered as within `toto'.
+  - if we disallow declarations of new special tokens within such a module,
+    then we could re-parse the remaining expressions after finding the
+    definition for _::_.
+  - make it possible for the evaluation of expressions to read the rest
+    of the input (and hence lex&parse it any way it wants).
+  - define special "reader macros", so "module".
+  - define {...} as special so it gets read and passed to `module'
+    without parsing.
+
+** Provide syntax for backquote&unquote
+Since "," is to be used as separator, maybe (,e) and (`e) could be used?
+** Macros
+*** Papers
+**** ABI Compatibility Through a Customizable Language, Kevin Atkinson and Matthew Flatt and Gary Lindstrom.
+*** Additionally to "typecheck" which takes a sexp and returns the sexp
+representation of its type, we may need to be able to do that within
+some deeper context (i.e. adding some bindings around it).  I guess
+(fun _ -> ..) sexp wrappers can do the trick.
+*** We need to contract (notation) macros for pretty printing.
+We might be able to auto-generate the contraction function from the macro
+definition for simple macros.  For other cases, user-provided contraction
+code might do the trick.  Another approach might be to try and preserve the
+unexpanded form of a macro as some property of the expanded code.
+** Implicit args and free vars
+Free vars can be used as implicit args, as in:
+identity : a -> a
+
+Let definitions are usually presumed to be non-recursive.  There are two
+ways to get recursive definitions: add a type-declaration of a variable
+as a "forward declaration" before its use, or just reference the
+variable without any forward declaration in the case the variable is not
+present in the previous environment (in which case it's presumed to
+be a forward reference).
+
+This "free vars might be forward references" only works for definitions and
+not for type declarations.  This restriction is needed to make sure that
+forward declarations work reliably.
+
+
+* Name-equivalence
+** Generative types
+We want to be able to say that "data A = Ca: Int → A" and "data B = Cb:
+Int → B" are different, so A and B have the same structure but are
+not equal.  Maybe we can do that with a "fresh" operation, so that
+"fresh (Ind (Set; Int → α))" does just that.
+** non-generative types
+We don't want all inductive definitions to be generative, OTOH, because we
+want to be able to generate Inductive definitions for tuples "on the fly"
+without having to hash-cons them.
+OTOH, maybe we can just have a predefined "list of tuple types", so there's
+no need to hash-cons.  If that's the only case where non-generativity is
+needed, that might be sufficient.  Haskell and SML seem happy with
+generative-only datatypes.
+** Opaque definitions
+Maybe the same "fresh" can be used for opaque definitions.
+** Partially generative/opaque
+Maybe we could provide a rule such that "a : fresh τ ⇒ a : τ" and
+vice-versa, while still treating two "fresh τ" as being different.
+E.g. used for "type BufferPos = fresh Int" so BufferPos can be used anywhere
+an Int is needed (and vice-versa), but you can't pass a BufferPos
+to a BufferLength without an explicit conversion.
+
+* Termination checking
+
+** Termination checking with CBV may be slightly different.
+
+***
+
+From: Pierre Boutillier <pierre.boutillier@pps.univ-paris-diderot.fr>
+Subject: Re: [Coq-Club] Termination
+To: coq-club@inria.fr
+Date: Fri, 15 Jun 2012 10:10:41 +0200 (4 hours, 28 minutes, 45 seconds ago)
+
+[1. text/plain]
+
+On 15/06/2012 08:29, Gert Smolka wrote:
+> One of our students discovered that Coq 8.3 accepts
+>
+> Fixpoint foo (x : nat) : nat := (fun _ =>  O) (foo x).
+>
+> although foo diverges under cbv.
+>
+> Is this considered a bug or a feature?
+> (foo terminates under call by name)
+>
+> Gert
+This is definitely not a feature ! This is not really a bug either because
+if strong normalization is broken, weak is not. As a result,
+consistency remains.
+
+In any case, it's a known but not that popular fact. (Each time I show that
+to someone, he can't believe its eyes, then he trys for half a day to
+get a closed proof of false thanks to that. None has succeed yet).
+
+It is also one of the purpose of my proposal for a new implementation of
+guard condition that I formally describe and badly try to explain the
+motivations here :
+http://hal.archives-ouvertes.fr/docs/00/65/17/80/PDF/boutillier.pdf
+
+The main purpose is to exhibit how an abstract machine that computes
+subterm_values instead of lambda terms could at the same time ensure strong
+normalization and allow to interleave "fix" and "injection" tactics (which
+means in CIC term accepting
+
+fix f x := match x with |C y => fun f' => f' y end f.
+
+)
+
+The patch that implements this is in the proof reading queue of the kernel
+guardian for a month...
+
+Pierre.
+
+***
+
+From: Robbert Krebbers <mailinglists@robbertkrebbers.nl>
+Subject: Re: [Coq-Club] Termination
+To: Gert Smolka <smolka@ps.uni-saarland.de>
+CC: coq-club@inria.fr
+Date: Fri, 15 Jun 2012 10:11:39 +0200 (4 hours, 37 minutes, 52 seconds ago)
+
+[1. text/plain]
+
+Hello,
+
+this is a known problem of the termination checker.
+
+What happens is that Coq reduces the body of the fixpoint, and then checks
+whether all recursive calls are guarded. In your example, after reduction,
+the body no longer contains any recursive calls (and in particular the
+non-terminating call), so Coq accepts your definition.
+
+See also:
+
+- http://foundations.cs.ru.nl/chitchat/slides/chit-barras.pdf
+  A talk by Bruno Barras on the implementation of the guard condition. Slide
+22 shows about the same example as below.
+
+- http://cs.ioc.ee/~tarmo/papers/mscs04.pdf
+  Page 2 (last paragraph) - 4 explain the problems of the guard condition.
+
+- http://www.lix.polytechnique.fr/coq/bugs/show_bug.cgi?id=1843
+
+Robbert
+
+* Side-effects
+** Check "Extensible Effects" by Kiselyov and Sabry
+** We can safely provide a "runIO" of type "IO () → ()"
+*** Try to provide HashCons, Memoize, Lazy libraries.
+*** How 'bout pointer-equality?
+** Non-termination and exceptions
+*** We want the language to "feel imperative" to the extent that you don't
+need monads for exceptions and infinite recursion.
+*** We can't just disallow normalization of partial functions.
+This is because if they're used in proofs, we may erase the proof before
+running it, so the partial"ness" is not detected when needed.  Think of
+passing a dummy proof to "array_ref" that can only be evaluated at run-time
+when the actual index is known, but by that time the proof is gone, because
+we assumed it is total!
+*** But we do want to allow partial functions in type expressions.
+*** I.e. we want to un-erase the partial functions.
+So we can only call code that depends on a particular computation once
+that computation has been shown to terminate (without error).
+
+E.g.
+
+   ask_oracle : (α:Type) ⇁ α
+
+   foo = array_get (P:=ask_oracle (n<m)) n v  
+
+would not fail to type-check but would behave like
+
+   p <- ask_oracle (n<m);
+   array_get (P:=p) n v
+
+*** More generally, we want to lift all applications of partial functions
+to a top-level monad!
+
+** Monadic notation?
+
+We'd like to be able to write "a->b->c(!d)" rather than
+"t₁ <- a->b; t₂ <- t₁->c; t₃ <- !d; t₂ t₃".
+
+A similar notational convenience could be used for relations where a natural
+syntax could be "a * b = c" and we'd then want to be able to write "a * b *
+c = d" to mean "∃x. R a b x ⋀ R x c d".
+If we treat it "a * b" as a thing with a monadic type, we'd get "a * b = c" =>
+"bind (a * b) (λt. t = c)" and "a * b * c = d" as "bind (a * b) (λt₁. bind
+(t₁ * c) (λt₂. t₂ = d))" where the "bind" could be defined as
+
+  bind (x * y) f = ∃t. R x y t ⋀ y t
+
+So we'd want to do something like "A-normalize" or "CPS convert" locally.
+
+*** Type-directed control-inversion?
+
+IO could declare an associated macro, so that any expression of type "IO τ"
+is passed to that macro along with its surrounding "continuation".  So
+
+  in "e₁ e₁", if "e₂" has type "IO τ", we'd call that macro with "e₂" as
+  argument as well as with a function λx."e₁ x".
+
+For IO the macro would return "bind e1 e2", whereas for "a * b" it would use
+"∃x. a * b "
+
+
+* Partial functions
+
+Here's an example of a use of partial functions:
+
+   type Exp (e : Env) :=
+     Var i (t : lookup i e)
+
+where "lookup" might fail.  Without partial functions, we have to use
+a relational style, as in:
+
+   type Exp (e : Env) :=
+     Var i (_: lookup i e t) t
+
+In the present case, we could make "lookup" return False, but if we change
+it to:
+
+   type Exp (e : Env) (τ : EType) :=
+     SetVar i (v : Exp Env (lookup i e))
+
+Suddenly, this doesn't work any more.
+
+* Erasable constructors
+
+Some constructors should be erased!  Example:
+
+   type Exp τ :=
+       [..blabla..]
+     | Esubsumption {_ : τ' < τ} (e : Exp τ')
+
+Maybe the code wants to do something useful with Esubsumption, in which case
+it shouldn't be erased, but if the code only introduced Esubsumption so as
+to lift objects of type "Exp τ'" to type "Exp τ", then Esubsumption is not
+really desired, and we'd rather have a "cast" to turn "Exp τ'" into "Exp τ"
+without having to add branches for Esubsumption.
+
+IOW, we want to be able to construct "Esubsumption" as a Swiss Coercion
+with a rule like:
+
+   (e : Exp τ') -> (_ : τ' < τ) -> ∃e' : Exp τ. e = e'
+
+which generalizes to
+
+   (e : F τ') -> (_ : P τ' τ) -> ∃e' : F τ. e = e'
+
+Of course, we have the problem that this "=" predicate is heterogeneous.
+
+* Implicit and irrelevant args
+
+Werner's IJCAR06 seems to say that we can make the "eq_cast" rule take an
+erasable proof "a = b": rather than check that the proof is "refl" (which
+can't be" done once the arg is erased), the reduction rule of eq_cast can
+check that "a ≡ b".  This way, the reduction rule can commute with the
+erasure rule, so that subject reduction and strong normalization
+is preserved.
+
+Problem is: now "a" and "b" can't be erasable arguments any more, so we've
+just moved the problem!
+
+But really, they're working in a different context where erasability is part
+of the type of the object, rather than its use.  Still, we need to solve the
+following problem: "case <eqproof> | refl => <blabla>" uses <eqproof>, so
+<eqproof> can't be erased :-(
+Of course, we can provide a special "cast_eq <eqproof> <blabla>" where the
+<eqproof> arg is marked as erasable, but: is it sound?
+
+Here's a sample problem:
+
+  let p : Int = 56
+  let x = lambda (P: Int = String) ≡>
+            let p' : String = cast P p
+	    string-ref p' 0
+
+after erasure we'd get:
+
+  let p = 56
+  let x = let p' = p
+          string-ref p' 0
+
+now `x' will be dead because we can't provide the proof "Int = String", but
+the code will be executed anyway.  We can delay/avoid the execution by
+imposing a value restriction, such that the above becomes:
+
+  let p = 56
+  let x = lambda _ ->
+          let p' = p
+          string-ref p' 0
+
+This way CBV won't execute the dangerous code.
+BUT: normalization will still execute it, so we still have a problem!
+
+** The core language need to have "irrelevant/erasable" arguments
+so that type-equality can be defined modulo erasure
+** It would be nice to push implicit arguments outside of the core language
+and have them be implemented by a "define" macro.
+E.g. "define f {a} b c = toto" could be expanded into:
+
+    def f' a b c = toto; defmacro f = v <- newmetavar; return `(f' ,v)
+
+but this is problematic in several ways:
+- if we want to provide ML-style implicit formal type arguments which are
+  automatically inserted by the type inference.
+- how can we provide a syntax that lets the programmer supply explicitly
+  implicit arguments?
+- what about implicit args that do not come first:
+  "define f a {b} c = toto"
+  =>
+  "def f' a b c = toto; defmacro f a = v <- newmetavar; return `(f' ,a ,v)"
+  but would this work well?
+** Can't conflate implicit and irrelevant?
+Type-class arguments(dictionaries) need to be implicit but aren't erasable.
+** Inference of irrelevant args
+If implicit formal args can be inferred (by "free var generalization"), then
+we need/want some way to automatically infer which of those args are
+irrelevant.
+We can do that based on the arg's use: if it only shows up in irrelevant
+places, then it's marked irrelevant.  Or we can do that based on the arg's
+type, with some types marked as "irrelevant if implicit".
+** Having both irrelevant and implicit args
+*** Should we make implicitness visible in the type?
+*** declare all irrelevant args to be implicit => one less case
+*** Should irrelevance be a property of the type?
+**** We don't want to do it flat out
+because Nat may sometimes be irrelevant and sometimes not.
+**** We can mark types as "irrelevant when implicit",
+so that we can control whether they're irrelevant by making them
+implicit/explicit.
+**** This would generally imply that all proof args should be implicit.
+**** It doesn't offer any way to explicitly make a specific arg irrelevant.
+**** Implicit args only used in irrelevant args need to become irrelevant.
+E.g. an irrelevant (e.g. proof) arg may cause a new implicit arg (e.g. an
+Int) to be added because it appears in the proof type, in which case this
+Int arg needs to be irrelevant even if Int is not "irrelevant if implicit".
+**** So, can we still infer irrelevance from the type?
+In the previous example, in order to know that the Int arg is irrelevant,
+we may need an explicit annotation on the type of the function.
+We can't assume a convention like "irrelevant args come first", I think,
+since often (irrelevant) proof args will have to depend on
+relevant args.  Maybe we can arrange to have all implicit (relevant)
+args come after the (implicit) irrelevant args?
+**** There's a tension between making most types "irrelevant when implicit"
+since it's often a good idea, and only doing it when it's really known to be
+needed since it otherwise forces too many args to be explicit (which can be
+cumbersome).  The rule that makes implicit args irrelevant
+when they're only used in irrelevant args might relieve the tension.
+
+* Unification
+** How to unify   ((λx . Cons _ []) 1)  =  Cons foo [] ?
+** How 'bout  (λx.B) = A y  =>  B = A y x  =>  A = λy.λx.B
+** A(args) = t  =>  A'[args/formals] = t
+** Papers
+*** occurrence checks: [Reed, LFMTP 2009; Abel & Pientka, TLCA 2011]
+*** pruning: [Pientka, PhD, Sec. 3.1.2; Abel & Pientka, TLCA 2011]
+
+* Universes
+** PTS versions
+
+*** universes with baked in ~subsumption
+
+Level = Nat
+S = { Type l | l ∈ Level }
+A = { (Type l₁ : Type l₂) | l₁ < l₂ }
+R = { (Type l₁, Type l₂, Type l₃) | l₃ ≥ max(l₁, l₂) }
+
+*** universes with subsumption rule
+
+Level = Nat
+S = { Type l | l ∈ Level }
+A = { (Type l : Type (S l)) | l ∈ Level }
+R = { (Type l, Type l, Type l) | l ∈ Level }
+
++ subsumption rule!
+
+*** universe polymorphism, with explicit lifts
+
+S = { TypeL, Typeω } ∪ { Type l | l : Level }
+A = { Level : TypeL,
+      0 : Level, S : Level → Level,
+      Type : Πl:Level. Type (S l),
+      max : Level → Level → Level,
+      lift1 : Πl₁,l₂:Level. Type l₁ → Type (max l₁ l₂),
+      lift2 : Πl₁,l₂:Level,t: Type l₁. t → (lift1 l₁ l₂ t)
+    }
+R = { (TypeL, Type l, Typeω), (TypeL, Typeω, Typeω), (Type l, Typeω, Typeω), }
+    ∪ { (Type l₁, Type l₂, Type (max l₁ l₂)) }
+
+Those lift1 and lift2 could surely get really ugly (tho they'd be folded
+into `cast').  Better would be to tweak the App rule, adding maybe an
+"App&Lift", where the application takes an extra arg describing the lift.
+
+OTOH an HM-style inference would make "everything" polymorphic, so maybe
+lift1/2 wouldn't be needed very often.
+
+** Predicativity
+
+Πx:τ₁.τ₂ : Type (max l₁ l₂)
+  where τ₁ : Type l₁
+        τ₂ : Type l₂
+
+type t : Πx:τ₁.Type l
+   | C1 : Πx:τ₁₁.τ₂
+   | Cn : Πx:τₙ₁.τ₂
+
+Additional constraint: l ≥ (S (max l1₁ lₙ))
+  where τ₁₁ : Type l₁
+        τₙ₁ : Type lₙ
+
+tho this constraint is only needed for those τᵢ₁ which are really carried by
+the constructor (not parameters of t).
+
+** Inductive types and equality constraints
+
+We can either allow inductive types of the form
+
+  type Vec1 a n = Null1 : Vec1 a 0 | Cons1 : a -> Vec1 a n -> Vec1 a (S n)
+or
+  type Vec2 a n = Null2 (n = 0) | Cons2 a (Vec2 a n') (n = S n')
+
+To some extent we can even automatically convert from one to the other.
+So we could restrict the internal representation to only accept the second
+form, and then provide special-support for equality, which we pretty much
+need to do anyway.
+
+Does it come with a cost?  That depends on the universe-level of the
+equality type.
+
+*** E.g. if (=) is in Type 0:
+
+type (=) (t:Type l) (a:t) : t -> Type 0
+  refl: a = a
+
+Vec1  : Type l -> Nat -> Type l : Type l+1
+Vec2  : Type l -> Nat -> Type l : Type l+1
+Null1 : ∀a:Type l. Vec a 0 : Type l+1
+(=)   : ∀t:Type l. t -> t -> Type 0 : Type l+1
+Nat   : Type 0
+n = 0 : Type 0
+Null2 : ∀a:Type l. ∀n:Nat. ∀P:(n = 0). Vec a n : Type l+1
+
+In general, a constructor of the form:
+
+    C : <args> -> T <indices>
+
+can be replaced by
+
+    C : <args> {index₀ = x₀} ... {indexₙ = xₙ} -> T <xs>
+
+this should not affect typing very much since
+
+    (index = x) : Type₀
+
+so the level of T is not affected.
+
+*** E.g. if (=) is in Type l:
+
+type (=) (t:Type l) (a:t) : t -> Type l
+  refl: a = a
+
+Vec1  : Type l -> Nat -> Type l : Type l+1
+Vec2  : Type l -> Nat -> Type l : Type l+1
+Null1 : ∀a:Type l. Vec a 0 : Type l+1
+(=)   : ∀t:Type l. t -> t -> Type l : Type l+1
+Nat   : Type 0
+n = 0 : Type 0
+Null2 : ∀a:Type l. ∀n:Nat. ∀P:(n = 0). Vec a n : Type l+1
+
+In general, a constructor of the form:
+
+    C : <args> -> T <indices>
+
+can be replaced by
+
+    C : <args> {index₀ = x₀} ... {indexₙ = xₙ} -> T <xs>
+
+And we have
+
+    indexᵢ : Aᵢ : Type i  =>  (indexᵢ = x) : Type i
+
+so the level of T can be affected!
+
+** Impredicativity of erasable arguments
+
+Could it be that erasable parameters could be handled impredicatively?
+
+I'd guess not, since someone would have done it by now!!
+
+Coq's Prop is "erasable and impredicative" but that means Πx:τ₁.τ₂ can be
+impredicative if τ₂:Prop, i.e. if the result is erasable, so that only works
+if something will always be used in an erasable position.  I guess we could
+add "erase-only" types and then allow them to be impredicative.
+
+OTOH, in "Carnap's remarks on impredicative definitions and the genericity
+theorem", they make a case for the fact that impredicativity might indeed
+make sense for "erasable" terms.
+
+Also, by marking "large" elements of inductive definitions as erasable, we'd
+get something similar to preventing strong elimination for them.
+
+** Universe level of equality
+
+In current Coq, homogenous equality is:
+
+   type (=) (t:Type l) (a:t) : t -> Type 0
+     refl: a = a
+
+But supposedly, this is not compatible with the univalence axiom, so it is
+out of fashion.
+[ https://github.com/vladimirias/Foundations/blob/master/Coq_patches/README ]
+
+To be compatible we need:
+
+   type (=) (t:Type l) (a:t) : t -> Type l
+     refl: a = a
+
+which implies (instatiating t as "Type l") a type equality of the form
+
+   type (t=) (t:Type l) : Type l -> Type (l + 1)
+     refl: t = t
+
+But apparently, the univalence theorem itself implies that type equality
+lives one level lower:
+
+   type (t=) (t:Type l) : Type l -> Type l
+     refl: t = t
+
+What does it mean for equality of type constructors, like:
+
+   type (t=) (t:Type l -> Type l) : (Type l -> Type l) -> Type ¿?
+     refl: t = t
+
+The same univalence axiom seems to require heterogeneous equality to be
+
+   type (~=) (t1:Type l) (a1:t1) : (t2:Type l) -> t2 -> Type (l+1)
+     refl: a1 ~= a1
+
+But apparently we can bring it down to "Type l" in the following way:
+
+   (~=) : (t1:Type l) -> (t2:Type l) -> t1 -> t2 -> Type l
+   (~=) t1 t2 a1 a2 = ((Q : t1 = t2) -> coerce Q a1 = a2)
+
+Which I guess is comparable to:
+
+   type (~=) (t1:Type l) (a1:t1) (t2:Type l) (Q:t1 = t2) : t2 -> Type l
+     refl: a1 ~= (coerce Q a1)
+
+
+** Inference
+
+We'd want inference of universes to go somewhere between Coq's approach and
+HM's approach: Coq doesn't use polymorphism, which sometimes leads to
+unnecessary restrictions, but HM inference introduces too much polymorphism.
+
+So we want to only add polymorphism when useful, by cleverly considering
+whether subsumption would do the trick anyway.
+
+- If the unconstrained level types a return value, then
+  set it as low as possible without polymorphism.
+- If it types an argument, OTOH it should be "as high as possible", which is
+  where we need polymorphism.
+- If several levels are needed, merge them into their max: instead of
+
+    type Pair1 : ∀l₁,l₂. Type l₁ → Type l₂ → Type (max l₁ l₂)
+    mkpair1: ∀l₁:Level,t₁:Type l₁. t₁ → ∀l₂:Level,t₂:Type l₂. t₂ → Pair1 t₁ t₂
+
+  use
+
+    type Pair2 : ∀l. Type l → Type l -> Type l
+    mkpair2: ∀l,t₁:Type l,t₂:Type l. t₁ -> t₂ -> Pair2 t₁ t₂
+
+  this does force us to know l₂ before passing any argument but,
+  modulo a bit of η-expansion, it's just as good:
+
+    mkpair1 = λl₁,t₁,x₁,l₂. mkpair2 (max l₁ l₂) t₁ x₁
+
+* Classical logic
+** Paper: Classical Mathematics for a Constructive World, Russell O'Connor
+Defines classical as:
+
+    A ∨ B    = ¬(A × B)
+    ∃x . P x = ¬(Πx . P x)
+
+Defines "stable types":
+
+    stable A  =  ¬¬A => A
+
+And notes that for any function that returns a stable type, any "classical"
+argument can be assumed to be constructive.  E.g.:
+
+              A + B
+                ⋮
+      A ∨ B     C    stable C
+      ———————————————————————
+                C
+
+He then defines notations and principles for how to use such classical
+definitions in a constructive logic without too much pain.
+
+Look ma!  No axioms!
+
+Or almost: with these classical definitions we cannot prove the classical
+axiom of choice as a theorem, so if you need it, you have to add it as an axiom.
+
+* Papers
+** On Irrelevance and Algorithmic Equality in Predicative Type Theory,
+Andreas Abel & Gabriel Scherer, FOSSACS 2011.
+** "A few constructions on constructors"
+** How to Make Ad Hoc Proof Automation Less Ad Hoc, Beta Ziliani
+** http://homotopytypetheory.org/book/
+** CMU's 2013 Fall: 15-819 Advanced Topics in Programming Languages
+http://scs.hosted.panopto.com/Panopto/Pages/Sessions/List.aspx#folderID=%2207756bb0-b872-4a4a-95b1-b77ad206dab3%22
+** Propositions as Sessions, Philip Wadler
+** A few constructions on constructors, by Conor et al.
+** Constructive selection principle (Markov's principle)
+http://www.encyclopediaofmath.org/index.php/Constructive_selection_principle
+https://en.wikipedia.org/wiki/Markov%27s_principle
+** size-change termination, Lee, Jones and Ben-Amram, doi:10.1145/360204.360210
+** A Predicative Analysis of Structural Recursion, Andreas Abel and Thorsten Altenkirch, http://www.cs.nott.ac.uk/~txa/publ/jfp02.pdf
+** A New Look at Generalized Rewriting in Type Theory, Matthieu Sozeau
+** http://moca.inria.fr/ On the implementation of construction functions for non-free concrete
+data types. F. Blanqui, T. Hardin and P. Weis. ESOP'07.
+** The Nemerle language
+** "A Theory of Typed Hygienic Macros" de David Herman
+http://www.ccs.neu.edu/home/dherman/research/papers/dissertation.pdf
+** http://www.mpi-sws.org/~beta/mtac/
+** Non-strictly positive and elimination
+"Inductively defined types", by Thierry Coquand and
+Christine Paulin, COLOG'88, LNCS 417
+** Dependently Typed Programming based on Automated Theorem Proving, Alasdair Armstrong, Simon Foster, and Georg Struth.
+http://arxiv.org/pdf/1112.3833v1
+
+** Strong Normalization for Coq (CiC).
+http://www.cs.rice.edu/~emw4/uniform-lr.pdf
+** Irrelevant/erasable args
+
+*** The Implicit Calculus of Constructions as a Programming Language with Dependent Types, Bruno Barras and Bruno Bernardo, fossacs08.
+
+In this paper, we show how Miquel's Implicit Calculus of Constructions
+(ICC) can be used as a programming language featuring dependent types.
+Since this system has an undecidable type-checking, we introduce a more
+verbose variant, called ICC which fixes this issue. Datatypes and program
+specifications are enriched with logical assertions (such as preconditions,
+postconditions, invariants) and programs are decorated with proofs of
+those assertions. The point of using ICC rather than the Calculus of
+Constructions (the core formalism of the Coq proof assistant) is that all of
+the static information (types and proof objects) is transparent, in the
+sense that it does not affect the computational behavior.  This is
+concretized by a built-in extraction procedure that removes this static in-
+formation. We also illustrate the main features of ICC on classical examples
+of dependently typed programs.
+
+*** Erasure and polymorphism in pure type systems, Nathan Mishra-Linger and Tim Sheard
+
+*** On the strength of proof-irrelevant type theories, Benjamin Werner, IJCAR06.
+
+We present a type theory with some proof-irrelevance built into the
+conversion rule.  We argue that this feature is particularly useful when
+type theory is used as the logical formalism underlying a theorem prover. We
+also show a close relation with the subset types of the theory of PVS.
+Finally we show that in these theories, because of the additional
+extentionality, the axiom of choice implies the decidability of equality,
+that is, almost classical logic.
+
+** Parametricity and variants of Girard's J operator, Robert Harper and John C. Mitchell,  Journal Information Processing Letters archive, Volume 70 Issue 1, April 01, 1999
+The Girard-Reynolds polymorphic λ-calculus is generally regarded
+as a calculus of parametric polymorphism in which all well-formed terms are
+strongly normalizing with respect to β-reductions.  Girard demonstrated that
+the addition of a simple "non-parametric" operation, J, to the calculus
+allows the definition of a non-normalizing term.  Since the type of J is not
+inhabited by any closed term, one might suspect that this may play a role in
+defining a non-normalizing term using it.  We demonstrate that this is not
+the case by giving a simple variant, J', of J whose type is otherwise
+inhabited and which causes normalization to fail.  It appears that
+impredicativity is essential to the argument; predicative variants of the
+polymorphic λ-calculus admit non-parametric operations without
+sacrificing normalization.
+
+** Idris (Edwin Brady)
+** Idris's Effects http://eb.host.cs.st-andrews.ac.uk/drafts/dep-eff.pdf
+** Read
+*** Inductive Families Need Not Store Their Indices, Edwin Brady, Conor McBride and James McKinna.
+http://www.cs.st-andrews.ac.uk/~eb/writings/types2003.pdf
+*** A Simplified Suspension Calculus and its Relationship to Other Explicit Substitution Calculi, Andrew Gacek and Gopalan Nadathur
+*** How OCaml type checker works, http://okmij.org/ftp/ML/generalization.html
+* Skip lists
+
+SkipList a
+ | Empty
+ | Cons (val : a) (next : SkipList a) (skip : Nat) (dest : SkipList a)
+
+At position 2^n, we want skip=2^(n-1)
+At position 2^n+2^(n-1) we want two contradictory things:
+- skip=2^(n-1) to get to the pivotal 2^n (for when we start before
+  2^n+2^(n-1) and need to go past 2^n).
+- skip=2^(n-2) to do the binary search between 2^n+2^(n-1) and 2^n (for when
+  we don't want to go past 2^n, e.g. because we started from before
+  2^(n+1)).

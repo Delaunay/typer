@@ -1,0 +1,76 @@
+%% FIXME: adjust to the new top-level made of decls instead of exps.
+
+%% Issues:
+%% - syntax of "telescopes", especially the implicit and erasable args.
+%%
+%%   test {t} [dict : t -> t -> Bool] (x : t) (y : t) : Int = ...def...
+%%
+%% - syntax of Inductives.
+%% 
+%%   type List t
+%%     | nil
+%%     | cons [dict : Ord t] (head : t) (tail : List t)
+%%
+%% - syntax of funcalls
+%%
+%%   test {t = Int} [dict = int_eq] 3 4
+%%
+%% Notes:
+%% - by analogy to the ->/=>/≡> distinctions, we could potentially use
+%%   "a :/::/:::/ b", but that wouldn't work for the case where we don't
+%%   want to specify the type explicitly.
+%% - in telescopes (i.e. definitions), we could use the same syntax for
+%%   implicit and erasable, and distinguish based on the use of the variable
+%%   (e.g. in function definitions, see if it can be erasable), tho it's not
+%%   clear how to do it for Inductive definitions.
+%% - in funcalls, we could use the same syntax for implicit and erasable,
+%%   and distinguish based on the type of the function being called.
+
+a = 3;
+
+Nat = inductive_ Type (zero : Nat) (succ : Nat -> Nat);
+zero = cons_ Nat zero;
+succ = cons_ Nat succ;
+toZero = lambda z -> case_ z
+                           (zero => zero)
+                           (succ x => toZero x);
+x = 1;
+
+id = lambda typ ≡> (lambda (x : typ) -> x);
+
+identity = lambda x -> x;
+
+x : a -> a;
+x = lambda y ≡> lambda z -> z;
+
+plus = lambda x -> lambda y ->
+                       case_ x
+                             (zero => y)
+                             (succ x => succ (plus x y));
+
+List = inductive_ (Type -> Type)
+                  %% FIXME: generalize over these free vars.
+                  %% (nil : List α)
+                  %% (cons : α -> List α -> List α);
+                  (nil : (α : Type) ≡> List α)
+                  (cons : (α : Type) ≡> α -> List α -> List α);
+nil = cons_ List nil;
+cons = cons_ List cons;
+length : List α -> Nat;
+length = lambda α ≡> lambda (xs : List α) ->
+                         case_ xs
+                               (nil => zero)
+                               (cons x xs => succ (length xs));
+
+length2 : List α -> Nat;
+length2 = lambda xs ->
+              case_ xs
+                    (nil => zero)
+                    (cons x xs => succ (length2 xs));
+
+False = inductive_ Type;
+Unit = inductive_ Type (unit : Unit);
+unit = cons_ Unit unit;
+Bool = inductive_ Type (true : Bool) (false : Bool);
+false = cons_ Bool false;
+true = cons_ Bool true;

@@ -1,0 +1,138 @@
+\input texinfo   @c -*-texinfo-*-
+@c %**start of header
+@setfilename typer.info
+@settitle The Typer Language
+@c %**end of header
+@copying
+.
+
+Copyright @copyright{} 2012-2014  Free Software Foundation, Inc.
+
+@quotation
+Permission is granted to copy, distribute and/or modify this document
+under the terms of the GNU Free Documentation License, Version 1.3
+or any later version published by the Free Software Foundation;
+with no Invariant Sections, no Front-Cover Texts, and no Back-Cover Texts.
+A copy of the license is included in the section entitled ``GNU
+Free Documentation License''.
+
+A copy of the license is also available from the Free Software
+Foundation Web site at @url{http://www.gnu.org/licenses/fdl.html}.
+
+@end quotation
+
+The document was typeset with
+@uref{http://www.texinfo.org/, GNU Texinfo}.
+
+@end copying
+
+@titlepage
+@title The Typer Language
+@subtitle 
+@author Stefan Monnier @c @code{<monnier@iro.umontreal.ca>}
+@page
+@vskip 0pt plus 1filll
+@insertcopying
+@end titlepage
+
+@c Output the table of the contents at the beginning.
+@contents
+
+@ifnottex
+@node Top
+@top The Typer Language
+
+@insertcopying
+@end ifnottex
+
+@c Generate the nodes for this menu with `C-c C-u C-m'.
+@menu
+* Syntax::
+* Index::
+@end menu
+
+@c Update all node entries with `C-c C-u C-n'.
+@c Insert new nodes with `C-c C-c n'.
+@node Syntax
+@chapter Syntax
+
+The syntax of Typer is divided into several layers.
+
+@menu
+* Lexing::
+* Sexp parsing::
+* Parsing code::
+@end menu
+
+@node Lexing
+@section Lexing
+
+The source text is a byte-sequence, although it is usually assumed to
+be written in @code{utf-8} for purposes of counting error positions.
+
+This sequence of bytes is divided into @emph{tokens}.  This process
+recognizes strings, identifiers, numbers, comments, whitespace, and
+matched braces.  Identifiers are generally defined as any sequence of
+non-special characters and hence need to be separated by spaces.
+
+Special characters are: @code{%}, @code{"}, @code{@{}, @code{@}},
+whitespace characters, plus a configurable list of extra special
+characters, which by default is comprised of @code{,}, @code{;},
+@code{(}, and @code{)}.
+
+@itemize
+@item
+Comments start with a @code{%} (byte 37) and end with a @code{LF}
+(byte 10).
+@item
+Strings start and end with a @code{"} (byte 34) and use @code{\} (byte
+92) for escape sequences.
+@item
+Whitespace is defined as any sequence of bytes smaller than @code{SPC}
+(bytes <= 32).
+@item
+Integers are composed of any non-empty sequence of decimal digits
+(bytes between 48 and 57 included).
+@item
+Floating point numbers: FIXME
+@end itemize
+
+@node Sexp parsing
+@section Parsing Sexp
+
+After lexing, the Sexp parsing code turns the sequence of tokens
+into a kind of syntax tree according to an @emph{operator precedence
+grammar}.
+
+Macros receive their arguments in this Sexp form.
+
+@node Parsing code
+@section Parsing code
+
+When an Sexp is to be treated as a chunk of code, it gets parsed
+into a Pexp.
+
+@node Core Syntax
+@section Core Syntax
+
+The core syntax of the language is as follows:
+
+
+@c @node Copying This Manual
+@c @appendix Copying This Manual
+
+@c @menu
+@c * GNU Free Documentation License::  License for copying this manual.
+@c @end menu
+
+@c @c Get fdl.texi from http://www.gnu.org/licenses/fdl.html
+@c @include fdl.texi
+
+@node Index
+@unnumbered Index
+
+@printindex cp
+
+@bye
+
+@c typer.texi ends here
