@@ -1616,6 +1616,15 @@ Or almost: with these classical definitions we cannot prove the classical
 axiom of choice as a theorem, so if you need it, you have to add it as an axiom.
 
 * Papers
+** Dependently typed Racket
+** Dependently typed Haskell
+"My dissertation (github.com/goldfirere/thesis) is about adding dependent
+types to GHC. I believe I've solved the first problem, basically by copying
+Adam Gundry's approach (http://adam.gundry.co.uk/pub/thesis/). Still working
+on that practical problem, though. Expect some changes in time for 7.12
+though. (See https://ghc.haskell.org/trac/ghc/wiki/DependentHaskell/Phase1
+for some discussion here.)"
+
 ** On Irrelevance and Algorithmic Equality in Predicative Type Theory,
 Andreas Abel & Gabriel Scherer, FOSSACS 2011.
 ** "A few constructions on constructors"
@@ -1690,6 +1699,7 @@ polymorphic λ-calculus admit non-parametric operations without
 sacrificing normalization.
 
 ** Idris (Edwin Brady)
+** http://albatross-lang.sourceforge.net
 ** Idris's Effects http://eb.host.cs.st-andrews.ac.uk/drafts/dep-eff.pdf
 ** Read
 *** Inductive Families Need Not Store Their Indices, Edwin Brady, Conor McBride and James McKinna.
