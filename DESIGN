@@ -549,6 +549,26 @@ probably also econg.
 
 *** What about recursion/induction?
 
+* Useful macros
+** Syntax extensions
+*** case, with non-trivial patterns
+*** re2c
+*** Yacc maybe?
+*** would "generalized variables" work well for Typer?
+** Automatic proof generators
+*** Omega
+*** Contradiction (e.g. if we have "1=2" in the context)
+** Automatic program generators
+*** coerce: automatically find the coercion from one type to another
+*** type-class: build goal from available dictionaries
+*** Herbie: take a numeric expression and rewrite it so as to avoid
+overflows/underflows (https://github.com/mikeizbicki/HerbiePlugin)
+*** Automatically find the sequence of calls to turn a <Foo> into a <Bar>
+More general case of coercions, where the Foo could be, say, a string,
+and Bar be a socket descriptor, so it would figure out that it needs to
+create a socket, then open a connection to the host described by the string.
+Not sure how useful that could be, but I remember reading a paper some years
+ago about such a tool for Java.
 * Inudction-induction or induction-recursion
 
 ** email
