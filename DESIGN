@@ -1,5 +1,73 @@
 -*- outline -*-
 
+* Categories of arguments
+We want different categories of arguments.  I'm thinking here of the
+following categories, which are not necessarily mutually-exclusive:
+
+** Implicit
+in the sense that when calling the function, the actual argument will be
+automatically inferred from context (at compile-time, by the elaboration
+phase).  This is typically what happens in Haskell for type arguments as
+well as for type-class dictionaries.
+
+** Partial
+in the sense of this being an argument to a partial function.  IOW, the
+function may fail to terminate, or it may have other side-effects.
+The short-term plan is to use Haskell-style monads for that, but we could
+imagine extending the "core" notion of function to accommodate a notion of
+partial function (especially one which only adds non-termination but not
+other kinds of side-effects).
+
+** Erasable
+in the sense that the argument is only needed at compile-time.
+There are different slightly different notions of "erasability", which I'll
+classify in 2 sub-categories:
+
+- Type arguments
+  These are arguments which are only used in type-annotations.  IOW after
+  erasing all type annotations, those arguments are either unreferenced, or
+  will be become unreferenced after we get rid of all the other
+  unreferenced arguments.
+
+  One interesting aspect of these is that, according to Werner's IJCAR06, we
+  can erase those arguments *before* checking convertibility.
+
+  Also, there's a chance that we can allow such type arguments to be
+  impredicative without breaking consistency and without having to introduce
+  notions like "strong elimination of large inductive types".
+
+- Hollow arguments
+  These are arguments whose actual value is not used during evaluation.
+  Here's an example:
+  
+    let p : Int = 56
+    let x = lambda (P: Int = String) ≡>
+              let p' : String = cast P p
+  	    string-ref p' 0
+
+  Here "P" is a hollow argument in that "cast" will be compiled to a no-op so
+  it won't use it.  Yet we can't just throw away this "P" before checking
+  convertibility, since if we do that, we end up with
+
+    let p = 56
+    let x = lambda () ≡>
+              let p' = p
+  	    string-ref p' 0
+
+  and if we try to normalize this term, we end up doing "string-ref 56 0" :-(
+
+  There are also various ways to define "hollow".  E.g.
+  - Values of this type carry no information.
+    E.g. this is the case for the equality type: there's only one
+    constructor and it carries no information, so arguments of this type are
+    always hollow.
+  - The argument is never "really used".
+    E.g. whenever we do case-analysis on it, there's only one possible
+    branch, and the values we extract are themselves hollow.
+
+But for Typer, we'd rather not introduce 2 notions of erasability, so we
+need to choose one.
+
 * Syntax
 
 FIXME:
@@ -447,6 +515,52 @@ We can even provide a non-None default value.  Just define
 type Default (T : Type) (b : T) =
    | Actual :: T -> Default T b
 and associate `Default' with a macro that returns `b' if no arg is provided.
+* case statement
+Typing of case statements is a tricky issue:
+- we want it to be "as simple as possible" (i.e. try and avoid the
+  kind of complexity of Coq's "match <e> as <v> in <pat> return <t> with <bs>")
+- but we don't want this simplicity to make some things impossible.
+
+** design ideas:
+*** All constructors in an "inductive" definition return the same type.
+  More specifically, instead of
+
+    Inductive VList a : nat -> Type
+      | VNil : VList a 0
+      | VCons : a -> VList a n -> VList a (S n)
+
+  We have to use something like
+
+    Inductive VList a n
+      | VNil (n = 0)
+      | VCons (n = S n1) a (VList a n1)
+
+  The upside being that we don't need Coq's "in <pat>".
+
+*** Instead of "as <v>" we can provide equality proof in each branch
+  I.e. each branch would get an implicit extra argument of type
+  "<e> = <something>".
+  This gets us rid of Coq's "as <v>".
+
+*** Since we don't have "as" and "in" any more, we can drop "return"
+  Since "return" can't refer to special local variables any longer, we can
+  move it out, so we don't actually need it since we can use a normal type
+  annotation like "(case <e> <bs>): <t>" instead.
+
+*** More precise typing of default branch
+Usually, in the default branch, we don't get any extra "refining" type
+information, because it's a branch that covers several different cases.
+But it'd be good to get rid of this limitation.  E.g.
+
+   case x
+   | VCons x xs => ...something...
+   | _ => ...else...
+
+here in the ...else... branch we actually know that "x = VNil".  So Typer
+should provide here an implicit proof that "x = VNil".
+More generally, the default branch should get an implicit proof of something
+like "<e> = <caseA> ∨ <e> = <caseB> ∨ ...".
+
 * IF
 `if' should accept more than booleans.  E.g. it should accept Agda's
 "decidable", which is nothing more than a boolean annotated with
