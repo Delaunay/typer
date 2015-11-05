@@ -30,7 +30,8 @@ classify in 2 sub-categories:
   unreferenced arguments.
 
   One interesting aspect of these is that, according to Werner's IJCAR06, we
-  can erase those arguments *before* checking convertibility.
+  can erase those arguments *before* checking convertibility, thus
+  strengthening the logic by equating more terms.
 
   Also, there's a chance that we can allow such type arguments to be
   impredicative without breaking consistency and without having to introduce
@@ -66,8 +67,27 @@ classify in 2 sub-categories:
     E.g. whenever we do case-analysis on it, there's only one possible
     branch, and the values we extract are themselves hollow.
 
-But for Typer, we'd rather not introduce 2 notions of erasability, so we
-need to choose one.
+"Hollow" corresponds more or less to the constraints imposed on Coq's Prop
+so that extraction can erase it.
+
+All "type" arguments are also "hollow" arguments.
+
+One possible choice for Typer is to only use "type" arguments, so that
+arguments which are "hollow" but not "type" need to be declared as "normal"
+or "implicit".  This has 2 downsides:
+- Efficiency
+  We can hope that the optimizer will still end up eliminating those
+  arguments, but there will necessarily be cases where it will fail to do so.
+- Value restriction
+  Since the language is pure, erasable arguments do not need to obey the
+  value restriction (note that adding call/cc would break this).
+  Arguably the same holds for all implicit arguments, but in practice we
+  want to have a value restriction on implicit-but-non-hollow arguments
+  because we do not want to have costly operations to happen implicitly, IOW
+  an "implicit call" should be operationally cheap.
+  OTOH, we may decide to impose the value restriction on both implicit
+  and erasable arguments anyway, just to be on the safe side, and because in
+  practice it very rarely gets in the way.
 
 * Syntax
 
