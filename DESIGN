@@ -38,6 +38,7 @@ classify in 2 sub-categories:
 
 - Hollow arguments
   These are arguments whose actual value is not used during evaluation.
+  This corresponds to Coq's Prop (i.e. erasable because of proof-irrelevance).
   Here's an example:
   
     let p : Int = 56
@@ -70,214 +71,54 @@ need to choose one.
 
 * Syntax
 
-FIXME:
-- Not only are -> => and ≡> réquisitionés for the language, but also :=
-  and :- and :≡.  That's a lot of attractive infix ops to  take away from
-  the programmer.
-  • Note: And only one of := :- :≡ is really needed since the nature of an
-    arg can be taken from the type.
-- Because our sexp reader strips parentheses we can't distinguish
-
-       inductive T
-         | C1 (x : Footype) => T1 T2
-  from
-       inductive T
-         | C1 (x : Footype) => (T1 T2)
-
-  hence forcing the user to use
-
-       inductive T
-         | C1 (x : Footype) => (y : T1 T2)
-
-- I can't think of any reason why the parameter of a type constructor would
-  need to be implicit but not erasable, nor why it would be erasable but
-  can't be introduced by the "generalize" step, so "inductive" could
-  probably be limited to "INDUCTIVE id args ('|' id telescope)*".
-
 arw   ::= '≡>' | '=>' | '->'
 assign::= ':≡' | ':=' | ':-'
-exp   ::= '(' id ':' exp ')' arw exp | exp arw exp     # Function Types
-        | LET decls IN exp
-	| exp exp                                      # normal actual arg
-	| exp '(' id assign exp ')'                    # explicit/named actual
-	| exp ':' exp				       # type annotation
-	| LAMBDA args arw exp
-	| CASE exp ('|' pattern '->' exp)*
-	| INDUCTIVE id args ('|' id telescope)*        # Kinda like a μ
+colon ::= ':::' | '::' | ':'
+exp   ::= '(' id ':' exp ')' arw exp | exp arw exp      #Function Types
+        | 'let' decls 'in' exp
+	| exp actual_arg*                               #Funcall
+	| exp ':' exp				        #Type annotation
+	| 'lambda' simple_arg* arw exp
+	| 'case' exp ('|' pattern '->' exp)*
+	| 'inductive' id formal_arg* ('|' id ind_arg*)*   #Kinda like a μ
+pattern ::= id pat_arg*
 decls ::= ε | decl ';' decls
 decl  ::= id ':' exp
-	| id telescope '=' exp
-args  ::= (id | '('id ':' exp')')*
-telescope_elem ::= '(' id ':' exp ')' | exp
-telescope ::= (telescope_elem+ '≡>')? (telescope_elem+ '=>')? telescope_elem*
-pattern ::= id | id args
+	| id formal_arg* '=' exp
+simple_arg  ::= id  | '('id ':' exp')'
+formal_arg  ::= id  | '(' id colon exp ')'
+ind_arg     ::= exp | '(' id colon exp ')'
+pat_arg     ::= id  | '(' id assign pattern ')'
+actual_arg  ::= exp | '(' id assign exp ')'
 
-* Infix
+An identifier which starts with a question mark is one meant to be
+generalized as an implicit/erasable argument.  E.g.
 
-We should try to use ≤ constraints in the process of turning a bnf
-to a precedence table, and we should then automatically map something like
+   identity : ?a -> ?a
+   identity (x : ?a) = x
 
-   (lambda (-> args body))
+should be generalized to
 
-to a (lambda_-> args body)
+   identity : (a : _) ≡> a -> a
+   identity (a ::: _) (x : a) = x
 
-* Syntax trials
-** Types
+* Compilation efficiency
+** Laziness and sharing
+Use hash-consing of all terms during elaboration, so as to maximize sharing
+and reuse previous computations.
+** Handle large inductive types
+Don't expand "default branches" in "case" statements too eagerly.
+Use binary trees for case statements.
 
-*** ≡> | => | ->
-    Types: (e:t₁) ≡> (i:t₂) => (x:t₃) -> t₄
-    Types: t₁ ≡> t₂ => t₃ -> t₄
-*** {},[],()
-    Types: {e:t₁} -> [i:t₂] -> (x:t₃) -> t₄
-    Types: {t₁} -> [t₂] -> t₃ -> t₄
+Typical example could be for something like
 
-** Telescopes:
+   case (a,b)
+   | (Foo,Foo) => ...
+   | (Bar,Bar) => ...
+   ...
 
-For Datatypes, we'd like to be able to drop the arg name:
-
-      Foo {e:t₁} [i:t₂] (x:t₃) {_:t₂ = t₄}
-vs
-      Foo {e:t₁} [i:t₂] t₃ {t₂ = t₄}
-
-whereas for functions, it's generally the reverse:
-
-      lambda {e:t₁} [i:t₂] (x:t₃) -> body
-vs
-      lambda {e} [i] x -> body
-
-since "body" should make it possible to infer the types of these args.
-
-So even if the syntax is superficially similar, it's likely to be different
-in meaning.
-
-Also, this means there is an underlying similarity between the Datatypes
-case and the Types case, that is not present between the Lambdas case and
-the Types case.
-
-The "common" case should be to only have either the type or the id:
-
-    Datatypes:  Foo [Eq t] (List t) {t₂ = List t}
-    Lambdas:    lambda {t} [dict] x {eq:t₂ = List t} -> body
-
-The exact placement of erasable/implicit args is not important: they just
-need to obey the dependencies.  So they could be specified separately and
-then placed automatically.
-
-    Datatypes:  Foo [Eq t] (List t)  with  (t₂ = List t)
-    Lambdas:    lambda [dict] x with (eq:t₂ = List t) -> body
-    Types:      [Eq t] -> (List t) -> t₂  with  (t₂ = List t)
-
-*** {},[],()
-   Datatypes: Foo {e:t₁} [i:t₂] (x:t₃) {t₂ = t₁}
-   Lambda:    lambda {e:t₁} [i:t₂] (x:t₃) -> body
-
-   Downsides:
-   - I'd prefer not to use {...} here, so as to keep it for "lexical quoting"
-
-*** [],[::],()
-    Datatypes:  Foo [Eq t] (List t)  where  t₂ = List t
-    Lambdas:    lambda [dict] x [eq:t₂ = List t] -> body
-
-    [id] or [exp]  means "implicit"
-    [id:exp]       means "erasable"
-    [id::exp]      means "implicit"
-
-    Trailing [_:exp]s can be replaced by "where exp1 exp2"
-
-    Upside:
-    - mostly works and keeps the common code concise
-    Downside:
-    - Irregular
-
-*** [[]], [], ()
-
-    Datatypes:  Foo [Eq t] (List t) [[t₂ = List t]]
-    Lambdas:    lambda [[t]] [dict] x [[eq:t₂ = List t]] -> body
-
-
-*** ??, ?, ()
-
-    Datatypes:  Foo (? Eq t) (List t) (?? t₂ = List t)
-    Lambdas:    lambda (?? t) (? dict) x (??eq:t₂ = List t) -> body
-
-*** .., ., ()
-
-    Datatypes:  Foo (. Eq t) (List t) (.. t₂ = List t)
-    Lambdas:    lambda ..t .dict x (.. eq : t₂ = List t) -> body
-
-*** =>, ≡>
-   Datatypes: Foo t₁ (t₂ = t₄) ≡> (i:t₂) => (x:t₃)
-   Lambda:    lambda (e:t₁) ≡> (i:t₂) (i₂:t₂) => (x:t₃) -> body
-
-The erasable/implicit args will automatically be re-ordered to satisfy
-dependencies, so there's never any need to interleave implicit/erasable
-and normal args!
-
-   Upsides:
-   - Consistency with Types
-   - Similarity with Haskell
-   Downsides:
-   - Makes the Datatypes case look like it returns the last field.
-   - The syntax below has a grammar conflict for -> because the "FUN
-     telescope -> exp" rule implies that "a => b -> c" needs to be parsed as
-     "(a => b) -> c", whereas it should be parsed as "a => (b -> c)" if
-   - Collision for "lambda t₁ => t₂ -> t₃" since that could mean "lambda (t₁
-     => t₂) -> t₃" or "lambda t₁ => (t₂ -> t₃)".  Unless we only use
-     "lambda" for single-arg cases, and then use "fun" only with telescopes
-     that end in "->"!
-
-Maybe we could use
-
-   LAMBDA telescope  
-
-*** [], =>
-   Datatypes: Foo [e:t₁] (i:t₂) => (x:t₃) [_:t₂ = t₁]
-   Lambda:    lambda [e:t₁] (i:t₂) => (x:t₃) -> body
-
-   Upside:
-   - keeps the similarity with Haskell's type class notation
-   Downsides:
-   - Different kind of syntax for implicit and erasable
-   - Can't have implicit fields after explicit fields
-   - Weird "Foo (x:t) =>" for implicit field without explicit fields
-
-** Funcalls
-*** {}, [], ()
-  Funcalls:  f {e=foo} [i=bar] x
-
-  Upsides:
-  - Nice syntactic consistency except for Types.
-  Downsides:
-  - Prevents using [...] and {...} as normal argument values.
-  - Syntax for Types is different from everything else.
-
-*** (:=)
-   Funcalls:  f (e:=foo) (i:=bar) x
-
-  Upsides:
-  - The (f:=a) syntax can also be used for normal args.
-  Downsides:
-  - Need types to know which arg is erasable.
-  - No syntactic consistency between lambda and funcall.
-
-*** (:≡), (:=)
-   Funcalls:  f (e:≡foo) (i:=bar) x
-
-  Upsides:
-  - The (f:=a) syntax could also be used for normal args.
-  - Some consistency between the Types and Funcall syntax.
-  Downsides:
-  - No syntactic consistency between lambda and funcall.
-
-*** (<≡), (<=), (<-)
-   Funcalls:  f (e<≡foo) (i<=bar) x
-
-  Upsides:
-  - The (f<-a) syntax could also be used for normal args.
-  - Nice consistency between the Types and Funcall syntax.
-  Downsides:
-  - No syntactic consistency between lambda and funcall.
-  - Conflicts with the standard <= as ASCII for ≤
+where the type of a (and b) has 100 branches: we shouldn't generate a tree
+with 10K branches!
 
 * TODO
 ** Mention Minamide&Garrigue's "on the runtime complexity of type-directed unboxing" for "threesomes, with and without blame" by Jeremy Siek and Philip Wadler
@@ -515,6 +356,11 @@ We can even provide a non-None default value.  Just define
 type Default (T : Type) (b : T) =
    | Actual :: T -> Default T b
 and associate `Default' with a macro that returns `b' if no arg is provided.
+** Implicit existentials
+Just like we can pass a "∀α.α→α" where a "Int→Int" is expected, maybe we
+should be able to directly use an ∃α.τ as if it were τ and have the "open"
+happen implicitly.
+
 * case statement
 Typing of case statements is a tricky issue:
 - we want it to be "as simple as possible" (i.e. try and avoid the
@@ -564,7 +410,7 @@ like "<e> = <caseA> ∨ <e> = <caseB> ∨ ...".
 * IF
 `if' should accept more than booleans.  E.g. it should accept Agda's
 "decidable", which is nothing more than a boolean annotated with
-erase proofs (and the erasable proofs should implicitly be available in the
+erasable proofs (and the erasable proofs should implicitly be available in the
 respective branches).
 
 To be more Lispy (tho not Schemey) maybe it should also accept most other
@@ -1853,3 +1699,9 @@ At position 2^n+2^(n-1) we want two contradictory things:
 - skip=2^(n-2) to do the binary search between 2^n+2^(n-1) and 2^n (for when
   we don't want to go past 2^n, e.g. because we started from before
   2^(n+1)).
+* Related languages
+** Idris
+** F-star (https://www.fstar-lang.org)
+** Less closely related
+*** Dependently typed Racket
+*** Dependently typed Haskell
