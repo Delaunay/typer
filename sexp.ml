@@ -1,6 +1,6 @@
 (* sexp.ml --- The Lisp-style Sexp abstract syntax tree.
 
-Copyright (C) 2011-2014  Free Software Foundation, Inc.
+Copyright (C) 2011-2015  Free Software Foundation, Inc.
 
 Author: Stefan Monnier <monnier@iro.umontreal.ca>
 Keywords: languages, lisp, dependent types.
@@ -19,6 +19,15 @@ more details.
 
 You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.  *)
+
+(* FIXME/TODO:
+ * - Give more control over the way we strip parentheses.
+ *   E.g. allow some infix operators to keep track whether their args where
+ *   parenthesized or not.  Some uses may also want to "not-strip" parentheses
+ *   so as to distinguish "((a b))" from "(a b)".
+ * - Add another level of tokenizing/parsing: on the first level "M.a"
+ *   can be parsed as one token, and then on the second level, it would
+ *   turn into a call to "." with two arguments.  *)
 
 open Util
 open Prelexer
@@ -123,6 +132,11 @@ let rec sexp_parse (g : grammar) (rest : sexp list)
                             | e::es -> Node (e, es))
       | ss -> let headname = compose_symbol ss in
              match (headname, args) with
+             (* FIXME: While it's uaulyl good to strip away parens,
+              * this makes assumptions about the grammar (i.e. there's
+              * a rule « exp ::= '(' exp ')' » ), and this is sometimes
+              * not desired (e.g. to distinguish "a b ⊢ c d" from
+              * "(a b) ⊢ (c d)").  *)
              | ((_,"(_)"), [arg]) -> arg (* Strip away parens.  *)
              | _ -> Node (hSymbol (headname), args) in
 

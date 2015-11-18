@@ -139,7 +139,22 @@ pat_arg     ::= id  | '(' id assign pattern ')'
 actual_arg  ::= exp | '(' id assign exp ')'
 @end example
 
+The three different kinds of arrows, assign symbols and colons are
+used respectively for @emph{erasable} arguments, @emph{implicit}
+argument, and @emph{mandatory} arguments.  @emph{mandatory} arguments
+are the normal kind of arguments we're all familiar with.
+@emph{implicit} arguments are like Haskell's type class dictionaries:
+you do not need to provide them explicitly, they are provided
+automatically by inference (or by some macro).  @emph{erasable}
+arguments are like the type arguments of Haskell and ML: they are not
+only implicit but they can additionally be thrown away after
+type checking.
 
+@code{exp1 arw exp2} is a non-dependent function type, like the ones
+used in traditional functional programming.  @code{'(' id ':' exp1 ')'
+arw exp2} is the dependent function type.  @code{exp1 arw exp2} is just
+syntactic sugar for @code{'(' id ':' exp1 ')' arw exp2} where @code{id}
+is a fresh new identifier which does not occur within @code{exp2}.
 
 @c @node Copying This Manual
 @c @appendix Copying This Manual
