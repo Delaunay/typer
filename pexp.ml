@@ -1,6 +1,6 @@
 (* pexp.ml --- Proto lambda-expressions, half-way between Sexp and Lexp.
 
-Copyright (C) 2011-2012  Free Software Foundation, Inc.
+Copyright (C) 2011-2012, 2015  Free Software Foundation, Inc.
 
 Author: Stefan Monnier <monnier@iro.umontreal.ca>
 Keywords: languages, lisp, dependent types.
@@ -29,7 +29,16 @@ type arg_kind = Aexplicit | Aimplicit | Aerasable (* eraseable ⇒ implicit.  *)
 type pvar = symbol
 (* type sort = Type | Ext *)
 (* type tag = string *)
-                         
+
+type ppat =
+  (* This data type allows nested patterns, but in reality we don't
+   * support them.  I.e. we don't want Ppatcons within Ppatcons.  *)
+  | Ppatany of location
+  | Ppatvar of pvar
+  (* FIXME: For modules and such, we'll want to generalize this
+   * `pvar' to a pexp.  *)
+  | Ppatcons of pvar * ((arg_kind * symbol) option * ppat) list
+
 type pexp =
   (* | Psort of location * sort *)
   | Pimm of sexp                       (* Used for strings, ...  *)
@@ -40,13 +49,12 @@ type pexp =
   | Parrow of arg_kind * pvar option * pexp * location * pexp
   | Plambda of arg_kind * pvar * pexp option * pexp
   | Pcall of pexp * sexp list           (* Curried call.  *)
-  | Pinductive of pexp * (symbol * pexp) list
+  (* The symbols are only used so that we can distinguish two
+   * otherwise isomorphic types.  *)
+  | Pinductive of symbol * pexp list
+                  * (symbol * (arg_kind * pvar option * pexp) list) list
   | Pcons of pvar * symbol
-  | Pcase of location * pexp
-             (* FIXME: For modules and such, we'll want to generalize this
-              * `symbol' to a pexp.  *)
-             * (symbol * (arg_kind * pvar) list * pexp) list
-             * pexp option              (* Default.  *)
+  | Pcase of location * pexp * (ppat * pexp) list
 
 let rec pexp_location e =
   match e with
@@ -59,10 +67,18 @@ let rec pexp_location e =
   | Parrow (_, _, _, l, _) -> l
   | Plambda (_,(l,_), _, _) -> l
   | Pcall (f, _) -> pexp_location f
-  | Pinductive (t, _) -> pexp_location t
+  | Pinductive ((l,_), _, _) -> l
   | Pcons ((l,_),_) -> l
-  | Pcase (l, _, _, _) -> l
-                           
+  | Pcase (l, _, _) -> l
+
+let rec pexp_pat_location e = match e with
+  | Ppatany l -> l
+  | Ppatvar (l,_) -> l
+  | Ppatcons ((l, _), _) -> l
+  
+(* In the following "pexp_p" the prefix for "parse a sexp, returning a pexp"
+ * and "pexp_u" is the prefix for "unparse a pexp, returning a sexp".  *)
+                       
 let rec pexp_parse (s : sexp) : pexp =
   match s with
   (* This is an internal error because Epsilon does not have any location
@@ -92,30 +108,39 @@ let rec pexp_parse (s : sexp) : pexp =
   (* lambda *)
   | Node (Symbol (start,(("lambda_->_" | "lambda_=>_" | "lambda_≡>_") as arw)),
           [arg; body])
-    -> let (v,t) = match arg with
-        | Symbol v -> (v, None)
-        | Node (Symbol (_, "_:_"), [Symbol v; t])
-          -> (v, Some (pexp_parse t))
-        | _ -> msg_error start "Unrecognized lambda argument";
-              ((dummy_location, "unrecognized_arg"), None)
-      in Plambda ((match arw with
-                   | "lambda_->_" -> Aexplicit | "lambda_=>_" -> Aimplicit
-                   | _ -> Aerasable),
-                  v, t, pexp_parse body)
+    -> let kind = match arw with
+        | "lambda_->_" -> Aexplicit | "lambda_=>_" -> Aimplicit
+        | _ -> Aerasable in
+      List.fold_right
+        (fun arg pbody
+         -> let (v, t) = match arg with
+             | Symbol v -> (v, None)
+             | Node (Symbol (_, "_:_"), [Symbol v; t])
+               -> (v, Some (pexp_parse t))
+             | _ -> msg_error start "Unrecognized lambda argument";
+                   ((dummy_location, "unrecognized_arg"), None)
+           in Plambda (kind, v, t, pbody))
+        (sexp_p_list arg ["_:_"])
+        (pexp_parse body)
   | Node (Symbol (start, "lambda_"), _)
     -> msg_error start "Unrecognized lambda expression"; Pmetavar (start, "_")
   (* inductive type *)
   | Node (Symbol (start, "inductive_"), t :: cases)
-    -> let pcases
-        = List.fold_right
-            (fun case pcases
-             -> match case with
-               | Node (Symbol (_, "_:_"), [Symbol s; case])
-                 -> (s, pexp_parse case)::pcases
-               | _ -> msg_error (sexp_location case)
-                               "Unrecognized constructor declaration"; pcases)
-            cases [] in
-      Pinductive (pexp_parse t, pcases)
+    -> let (name, args) = match t with
+        | Node (Symbol s, args) -> (s, args)
+        | Symbol s -> (s, [])
+        | _ -> msg_error start "Unrecognized inductive type name";
+              ((dummy_location, ""), []) in
+      let pcases =
+        List.fold_right
+          (fun case pcases
+           -> match case with
+             | Node (Symbol s, cases)
+               -> (s, List.map pexp_p_ind_arg cases)::pcases
+             | _ -> msg_error (sexp_location case)
+                             "Unrecognized constructor declaration"; pcases)
+          cases [] in
+      Pinductive (name, List.map pexp_parse args, pcases)
   | Node (Symbol (start, "inductive_"), _)
     -> msg_error start "Unrecognized inductive type"; Pmetavar (start, "_")
   (* constructor *)
@@ -124,34 +149,84 @@ let rec pexp_parse (s : sexp) : pexp =
   | Node (Symbol (start, "cons_"), _)
     -> msg_error start "Unrecognized constructor call"; Pmetavar (start, "_")
   (* cases analysis *)
-  | Node (Symbol (start, "case_"), e :: cases)
-    -> let parse_case c branches =
-        match c with
-        | Node (Symbol (_, "_=>_"), [Symbol tag; branch])
-          -> (tag, [], pexp_parse branch) :: branches
-        | Node (Symbol (_, "_=>_"), [Node (Symbol tag, args); branch])
-          -> (tag,
-             List.map (fun arg -> match arg with
-                               | Symbol arg -> (Aexplicit, arg)
-                               | _ -> let loc = sexp_location arg in
-                                     msg_error loc "Non-trivial pattern arg";
-                                     (Aexplicit, (loc, "_")))
-                      args,
-             pexp_parse branch) :: branches
-        | _ -> msg_error (sexp_location c) "Unrecognized simple case branch";
-              branches
-      in (match List.rev cases with
-          | (Node (Symbol (_, "_=>_"), [Symbol (_, "_"); default])) :: revcases
-            -> Pcase (start, pexp_parse e,
-                     List.fold_right parse_case (List.rev revcases) [],
-                     Some (pexp_parse default))
-          | _ -> Pcase (start, pexp_parse e,
-                       List.fold_right parse_case cases [], None))
+  | Node (Symbol (start, "case_"),
+          [Node (Symbol (_, "_|_"), e :: cases)])
+    -> let parse_case branch = match branch with
+        | Node (Symbol (_, "_=>_"), [pat; code])
+          -> (pexp_p_pat pat, pexp_parse code)
+        | _ -> let l = (sexp_location branch) in
+              msg_error l "Unrecognized simple case branch";
+              (Ppatany l, Pmetavar (l, "_"))
+      in Pcase (start, pexp_parse e, List.map parse_case cases)
+  | Node (Symbol (start, "case_"), [e]) -> Pcase (start, pexp_parse e, [])
   | Node (Symbol (start, "case_"), _)
     -> msg_error start "Unrecognized case expression"; Pmetavar (start, "_")
   (* | Node (Symbol (_, "(_)"), [e]) -> pexp_parse e *)
   | Node (f, []) -> pexp_parse f
   | Node (f, args) -> Pcall (pexp_parse f, args)
+
+and pexp_p_id (x : location * string) : (location * string) option =
+  match x with
+  | (_, "_") -> None
+  | _ -> Some x
+                     
+and pexp_u_id (x : (location * string) option) : (location * string) =
+  match x with
+  | None -> (dummy_location, "_")
+  | Some x -> x
+                     
+and pexp_p_ind_arg s = match s with
+  | Node (Symbol (_,"_:_"), [Symbol s; t])
+    -> (Aexplicit, pexp_p_id s, pexp_parse t)
+  | Node (Symbol (_,"_::_"), [Symbol s; t])
+    -> (Aimplicit, pexp_p_id s, pexp_parse t)
+  | Node (Symbol (_,"_:::_"), [Symbol s; t])
+    -> (Aerasable, pexp_p_id s, pexp_parse t)
+  | _ -> (Aexplicit, None, pexp_parse s)
+
+and pexp_u_ind_arg arg = match arg with
+  | (Aexplicit, None, t) -> pexp_unparse t
+  | (k, s, t)
+    -> let (l,_) as id = pexp_u_id s in
+      Node (Symbol (l, match k with Aexplicit -> "_:_"
+                                  | Aimplicit -> "_::_"
+                                  | Aerasable -> "_:::_"),
+            [Symbol id; pexp_unparse t])
+
+and pexp_p_pat_arg (s : sexp) = match s with
+  | Symbol _ -> (None, pexp_p_pat s)
+  | Node (Symbol (_, "_:-_"), [Symbol f; Symbol s])
+    -> (Some (Aexplicit, f), Ppatvar s)
+  | Node (Symbol (_, "_:=_"), [Symbol f; Symbol s])
+    -> (Some (Aimplicit, f), Ppatvar s)
+  | Node (Symbol (_, "_:≡_"), [Symbol f; Symbol s])
+    -> (Some (Aerasable, f), Ppatvar s)
+  | _ -> let loc = sexp_location s in
+        msg_error loc "Unknown pattern arg";
+        (None, Ppatany loc)
+
+and pexp_u_pat_arg (arg : (arg_kind * symbol) option * ppat) : sexp =
+  match arg with
+  | (None, p) -> pexp_u_pat p
+  | (Some (k, ((l,_) as n)), p) ->
+     Node (Symbol (l, match k with Aexplicit -> "_:-_"
+                                 | Aimplicit -> "_:=_"
+                                 | Aerasable -> "_:≡_"),
+           (* FIXME: the label is wrong!  *)
+           [Symbol (pexp_u_id (Some n)); pexp_u_pat p])
+
+and pexp_p_pat (s : sexp) : ppat = match s with
+  | Symbol (l, "_") -> Ppatany l
+  | Symbol s -> Ppatvar s
+  | Node (Symbol c, args)
+    -> Ppatcons (c, List.map pexp_p_pat_arg args)
+  | _ -> let l = sexp_location s in
+        msg_error l "Unknown pattern"; Ppatany l
+
+and pexp_u_pat (p : ppat) : sexp = match p with
+  | Ppatany l -> Symbol (l, "_")
+  | Ppatvar s -> Symbol s
+  | Ppatcons (c, args) -> Node (Symbol c, List.map pexp_u_pat_arg args)
 
 and pexp_decls e =
   match e with
@@ -171,7 +246,7 @@ and pexp_decls e =
    *   in [(s, mkfun args, false)] *)
   | _ -> msg_error (sexp_location e) ("Unknown declaration"); []
 
-let rec pexp_unparse (e : pexp) : sexp =
+and pexp_unparse (e : pexp) : sexp =
   match e with
   (* | Psort (l,Ext) -> Symbol (l, "%Ext%") *)
   (* | Psort (l,Type) -> Symbol (l, "%Type%") *)
@@ -182,7 +257,7 @@ let rec pexp_unparse (e : pexp) : sexp =
     -> Node (Symbol (l, "_:_"), [pexp_unparse e; pexp_unparse t])
   | Plet (start, decls, body) ->
     Node (Symbol (start, "let_in_"),
-          [pexp_undecls decls; pexp_unparse body])
+          [pexp_u_decls decls; pexp_unparse body])
   | Parrow (kind, arg, t1, l, t2) ->
     let ut1 = pexp_unparse t1 in
     Node (Symbol (l, match kind with Aexplicit -> "_->_"
@@ -201,44 +276,34 @@ let rec pexp_unparse (e : pexp) : sexp =
                                          [Symbol v; pexp_unparse t]));
            pexp_unparse body])
   | Pcall (f, args) -> Node (pexp_unparse f, args)
-  | Pinductive (t, branches) ->
+  | Pinductive (_, t, branches) ->
     Node (Symbol (dummy_location, "inductive_"),
-          pexp_unparse t :: List.map (fun ((l,name) as s,case)
-                                      -> Node (Symbol (l,"_:_"),
-                                              [Symbol s; (pexp_unparse case)]))
-                                     branches)
+          sexp_u_list (List.map pexp_unparse t)
+          :: List.map (fun ((l,name) as s, types)
+                       -> Node (Symbol s,
+                               List.map pexp_u_ind_arg types))
+                      branches)
   | Pcons (tname, ((l,_) as tag)) ->
     Node (Symbol (l, "cons_"),
           [Symbol tname; Symbol tag])
-  | Pcase (start, e, branches, default) ->
+  | Pcase (start, e, branches) ->
     Node (Symbol (start, "case_"),
           pexp_unparse e
-          :: List.append
-               (List.map (fun (((l,_) as tag), args, branch) ->
-                          Node (Symbol (l, "_=>_"),
-                                [(match args with
-                                  | [] -> Symbol tag
-                                  | _ -> Node (Symbol tag,
-                                              List.map (fun (Aexplicit, a)
-                                                        -> Symbol a)
-                                                       args));
-                                 pexp_unparse branch]))
-                         branches)
-               (match default with
-                | None -> []
-                | Some e ->
-                  [Node (Symbol (dummy_location, "_=>_"),
-                         [Symbol (dummy_location, "_");
-                          pexp_unparse e])]))
-and pexp_undecl (s, v, declp) =
+          :: List.map
+               (fun (pat, branch) ->
+                 Node (Symbol (pexp_pat_location pat, "_=>_"),
+                       [pexp_u_pat pat;
+                        pexp_unparse branch]))
+               branches)
+and pexp_u_decl (s, v, declp) =
   Node (Symbol (dummy_location, if declp then "_:_" else "_=_"),
         [Symbol s; pexp_unparse v])
-and pexp_undecls ds =
+and pexp_u_decls ds =
   match ds with
   | [] -> Epsilon
-  | [d] -> pexp_undecl d
+  | [d] -> pexp_u_decl d
   | _ -> Node (Symbol (dummy_location, "_;_"),
-              List.map pexp_undecl ds)
+              List.map pexp_u_decl ds)
 
 let pexp_print e = sexp_print (pexp_unparse e)
 

@@ -208,3 +208,19 @@ let sexp_parse_all grm tokens limit =
      | [] -> (se,rest)
      | Symbol (_,t) :: rest when Some t = limit -> (se,rest)
      | _ -> (internal_error "Stopped parsing before the end!")
+
+(* "sexp_p" is for "parsing" and "sexp_u" is for "unparsing".  *)
+
+let sexp_p_list (s : sexp) (exceptions : string list) : sexp list =
+  match s with
+  | Epsilon -> []
+  | Node (Symbol (_, head), tail) when List.mem head exceptions -> [s]
+  | Node (head, tail)  -> head :: tail
+  | _ -> [s]
+
+let sexp_u_list (ss : sexp list) : sexp =
+  match ss with
+  | [] -> Epsilon
+  | [s] -> s
+  | (s :: ss) -> Node (s, ss)
+

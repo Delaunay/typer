@@ -121,27 +121,30 @@ The core syntax of the language is as follows:
 arw   ::= '≡>' | '=>' | '->'
 assign::= ':≡' | ':=' | ':-'
 colon ::= ':::' | '::' | ':'
-exp   ::= '(' id ':' exp ')' arw exp | exp arw exp
+exp   ::= id
+        | '(' id ':' exp ')' arw exp
         | 'let' decls 'in' exp
-        | exp actual_arg*
+        | exp actual_arg
         | exp ':' exp
-        | 'lambda' simple_arg* arw exp
+        | 'lambda' simple_arg arw exp
         | 'case' exp ('|' pattern '->' exp)*
-        | 'inductive' id formal_arg* ('|' id ind_arg*)*
+        | 'inductive_' (id formal_arg*) (id ind_arg*)*
+        | 'inductive-cons' id label
 pattern ::= id pat_arg*
 decls ::= ε | decl ';' decls
 decl  ::= id ':' exp
-        | id formal_arg* '=' exp
+        | id '=' exp
 simple_arg  ::= id  | '('id ':' exp')'
 formal_arg  ::= id  | '(' id colon exp ')'
 ind_arg     ::= exp | '(' id colon exp ')'
-pat_arg     ::= id  | '(' id assign pattern ')'
+pat_arg     ::= id  | '(' id assign id ' )'
 actual_arg  ::= exp | '(' id assign exp ')'
+label       ::= id
 @end example
 
 The three different kinds of arrows, assign symbols and colons are
 used respectively for @emph{erasable} arguments, @emph{implicit}
-argument, and @emph{mandatory} arguments.  @emph{mandatory} arguments
+argument, and @emph{explicit} arguments.  @emph{explicit} arguments
 are the normal kind of arguments we're all familiar with.
 @emph{implicit} arguments are like Haskell's type class dictionaries:
 you do not need to provide them explicitly, they are provided
@@ -149,6 +152,16 @@ automatically by inference (or by some macro).  @emph{erasable}
 arguments are like the type arguments of Haskell and ML: they are not
 only implicit but they can additionally be thrown away after
 type checking.
+
+The basic language additionally accepts the following syntactic sugar:
+
+@example
+exp   ::= ... | exp arw exp
+        | exp actual_arg+
+        | 'lambda' simple_arg+ arw exp
+decl  ::= ... | inductive id formal_arg* ('|' id ind_arg*)
+        | id formal_arg* '=' exp
+@end example
 
 @code{exp1 arw exp2} is a non-dependent function type, like the ones
 used in traditional functional programming.  @code{'(' id ':' exp1 ')'
