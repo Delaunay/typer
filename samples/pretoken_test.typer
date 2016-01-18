@@ -1,0 +1,15 @@
+%% This file check if typer recognize correctly pretokens
+
+%% Preblock
+%% --> hum, hum
+
+
+%% Prestring
+%% --> String variable
+b = "The answer is 42";
+
+
+%% Pretoken
+%% --> Everything else
+
+a = 3;

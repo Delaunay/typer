@@ -10,3 +10,5 @@ typer
 *.aux
 manual.??
 *.info
+_build/
+*~
