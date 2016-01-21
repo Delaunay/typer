@@ -62,8 +62,11 @@ let rec debug_pretokens_print pretokens =
             pretokens
 
 let main () = 
+    let file = Sys.argv.(1) in
+    print_string file;
+    print_string "\n";
     
-    let arr = prelex_file "./samples/pretoken_test.typer" in
+    let arr = prelex_file file in
     debug_pretokens_print arr
 ;;
 

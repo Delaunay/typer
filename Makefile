@@ -18,7 +18,7 @@ debug:
 # and another one doing all the tests
 tests: 
 	ocamlbuild tests/prelexer_debug.byte -I src  # debug print
-	ocamlbuild tests/lexer_debug.byte -I src	   # debug print
+	ocamlbuild tests/lexer_debug.byte -I src	 # debug print
 
 # Make language doc    
 doc-tex:

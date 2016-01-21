@@ -51,7 +51,7 @@ let rec debug_sexp_print sexp =
     | Epsilon 
         -> print_string "Epsilon()\n"  (* "ε" *)
         
-    | Block(loc,pts,_) 
+    | Block(loc, pts, _) 
         -> print_string "Block: \t{"; 
             print_string "["; print_loc loc; print_string "]\t";
             pretokens_print pts; 
@@ -85,7 +85,7 @@ let rec debug_sexp_print sexp =
             print_string ")"
 ;;
                        
-let rec debug_tokens_print tokens =
+let debug_sexp_print_all tokens =
   List.iter (fun pt ->
          print_string " ";
          debug_sexp_print pt;
@@ -95,17 +95,37 @@ let rec debug_tokens_print tokens =
 ;;
 
 let main () = 
+    (*
+     *  print tokens/sexp of the file given as first arg
+     *
+     ********************************************************)
+    
+    let file = Sys.argv.(1) in
+    print_string file;
+    print_string "\n";
     
     (* Todo read file from prog args *)
     (* get pretokens*)
-    let pretoks = prelex_file "./samples/token_test.typer" in
+    let pretoks = prelex_file file in
     
     (* get tokens *)
     let toks = lex default_stt pretoks in
     
     (* print tokens *)
-    debug_tokens_print toks
+    debug_sexp_print_all toks
 ;;
 
-main ()
-    
+main ();;
+
+(* Command Line * )
+let command =
+  Command.basic
+    ~summary:"Print Compiler Debug Info"
+    ~readme:(fun () -> "More detailed information")
+    Command.Spec.(empty +> anon ("filename" %: string))
+    main
+
+let () =
+  Command.run ~version:"1.0" ~build_info:"RWO" command * *)
+
+(*(main Sys.argv.(1));;*)

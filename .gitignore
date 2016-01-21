@@ -12,3 +12,4 @@ manual.??
 *.info
 _build/
 *~
+#*#
