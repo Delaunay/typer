@@ -1,6 +1,6 @@
 (* main.ml --- Toplevel file for Typer.
 
-Copyright (C) 2011-2014  Free Software Foundation, Inc.
+Copyright (C) 2011-2016  Free Software Foundation, Inc.
 
 Author: Stefan Monnier <monnier@iro.umontreal.ca>
 Keywords: languages, lisp, dependent types.
@@ -81,7 +81,7 @@ open Pexp
 (*************** The Top Level *********************)
 
 let default_stt =
-  let stt = Array.create 256 false
+  let stt = Array.make 256 false
   in stt.(Char.code ';') <- true;
      stt.(Char.code ',') <- true;
      stt.(Char.code '(') <- true;
@@ -152,14 +152,14 @@ let process_typer_file sourcename choppable_suffix venv =
     let (sexp, rest) = sexp_parse_all grm tokens (Some ";") in
     (* sexp_print e; print_newline(); *)
     sexp_print sexp; print_newline();
-    let pdecls = pexp_decls sexp in
-    sexp_print (pexp_undecls pdecls); print_newline();
+    let pdecls = pexp_p_decls sexp in
+    sexp_print (pexp_u_decls pdecls); print_newline();
     let (decls',pnames',delayed',senv',venv')
       = List.fold_left (elaborate_decl (ScopeLevel 0) (default_stt, grm))
                        ([], pnames, delayed, senv, venv)
                        pdecls in
     let pdecls = lexp_unparse_decls decls' in
-    sexp_print (pexp_undecls pdecls); print_newline();
+    sexp_print (pexp_u_decls pdecls); print_newline();
     (* print_string ": ";
      * sexp_print (pexp_unparse (lexp_unparse t)); print_newline(); *)
     print_newline();

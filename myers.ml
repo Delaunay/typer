@@ -1,6 +1,6 @@
 (* myers.ml --- Myers's stacks, a.k.a random-access singly-linked lists
 
-Copyright (C) 2014  Free Software Foundation, Inc.
+Copyright (C) 2014-2016  Free Software Foundation, Inc.
 
 Author: Stefan Monnier <monnier@iro.umontreal.ca>
 Keywords: list, containers
@@ -20,7 +20,7 @@ more details.
 You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.  *)
 
-(* This package implement Eugene W. Myers's "stacks" which are like
+(* This package implements Eugene W. Myers's "stacks" which are like
  * standard singly-linked lists, except that they also provide efficient
  * lookup.  More specifically:
  *
@@ -36,7 +36,7 @@ type 'a myers =
   | Mcons of 'a * 'a myers * int * 'a myers
 
 (* Contrary to Myers's presentation, we index from the top of the stack,
- * and we don't store the total length, but the "skip distance" instead.
+ * and we don't store the total length but the "skip distance" instead.
  * This makes `cons' slightly faster, and better matches our use for
  * debruijn environments.  *)
 
