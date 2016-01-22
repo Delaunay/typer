@@ -1,24 +1,26 @@
 
-
+TEST_FILES := $(wildcard ./tests/*_test.ml)
 
 
 all: typer debug tests
 
 typer: 
 	ocamlbuild src/main.byte
+	mv _build/src/main.byte _build/typer # move and rename executable
 
 debug: 
-	ocamlbuild src/debug.byte
-
-# how to change exec dir ??
-# tried  -install-bin-dir _build -build-dir _build
-
-# currently each tests has its own executable
-# Best would be one executable to print debug info
-# and another one doing all the tests
-tests: 
 	ocamlbuild tests/prelexer_debug.byte -I src  # debug print
-	ocamlbuild tests/lexer_debug.byte -I src	 # debug print
+	mv _build/tests/prelexer_debug.byte _build/prelexer_debug
+	ocamlbuild tests/lexer_debug.byte -I src     # debug print
+	mv _build/tests/lexer_debug.byte _build/lexer_debug
+
+tests: 
+	# Build tests
+	$(foreach test, $(TEST_FILES), ocamlbuild $(subst ./,,$(subst .ml,.byte,$(test))) -I src;)
+
+	# Run tests
+	ocamlbuild tests/utest_main.byte
+	./_build/tests/utest_main.byte
 
 # Make language doc    
 doc-tex:

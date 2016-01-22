@@ -12,9 +12,9 @@ Typer
 
 By default ocamlbuild creates a '_build' folder which holds all the compiled files.
 
-* make typer: build typer interpreter       'typer.byte'
-* make debug: build typer with debug info   'debug.byte'
-* make tests: run interpreter's tests       'test.byte'
+* make typer: build typer interpreter       'typer'
+* make debug: build typer with debug info   'debug'
+* make tests: run interpreter's tests       '/.tests/utest_main.byte'
 
 # Directory layout
 
