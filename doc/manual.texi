@@ -6,7 +6,7 @@
 @copying
 .
 
-Copyright @copyright{} 2012-2015  Free Software Foundation, Inc.
+Copyright @copyright{} 2012-2016  Free Software Foundation, Inc.
 
 @quotation
 Permission is granted to copy, distribute and/or modify this document
@@ -127,14 +127,14 @@ exp   ::= id
         | exp actual_arg
         | exp ':' exp
         | 'lambda' simple_arg arw exp
-        | 'case' exp ('|' pattern '->' exp)*
-        | 'inductive_' (id formal_arg*) (id ind_arg*)*
+        | 'case' exp ('|' pattern '=>' exp)*
+        | 'inductive_' '(' label formal_arg* ')' ('(' label ind_arg* ')')*
         | 'inductive-cons' id label
 pattern ::= id pat_arg*
 decls ::= ε | decl ';' decls
 decl  ::= id ':' exp
         | id '=' exp
-simple_arg  ::= id  | '('id ':' exp')'
+simple_arg  ::= id  | '(' id ':' exp ')'
 formal_arg  ::= id  | '(' id colon exp ')'
 ind_arg     ::= exp | '(' id colon exp ')'
 pat_arg     ::= id  | '(' id assign id ' )'
@@ -144,7 +144,7 @@ label       ::= id
 
 The three different kinds of arrows, assign symbols and colons are
 used respectively for @emph{erasable} arguments, @emph{implicit}
-argument, and @emph{explicit} arguments.  @emph{explicit} arguments
+arguments, and @emph{explicit} arguments.  @emph{explicit} arguments
 are the normal kind of arguments we're all familiar with.
 @emph{implicit} arguments are like Haskell's type class dictionaries:
 you do not need to provide them explicitly, they are provided
@@ -168,6 +168,12 @@ used in traditional functional programming.  @code{'(' id ':' exp1 ')'
 arw exp2} is the dependent function type.  @code{exp1 arw exp2} is just
 syntactic sugar for @code{'(' id ':' exp1 ')' arw exp2} where @code{id}
 is a fresh new identifier which does not occur within @code{exp2}.
+
+Note: while it would be desirable to allow @code{lambda x : type ->
+exp} instead of @code{lambda (x : type) -> exp}, this can't work,
+because that would imply parsing @code{exp : type1 -> type2} as
+@code{(exp : type1) -> type2} rather than as @code{exp : (type1 ->
+type2)}.
 
 @c @node Copying This Manual
 @c @appendix Copying This Manual

@@ -1,6 +1,6 @@
 ;;; typer-mode.el --- Typer major mode
 
-;; Copyright (C) 2011, 2012, 2013, 2015  Free Software Foundation, Inc.
+;; Copyright (C) 2011-2016  Free Software Foundation, Inc.
 
 ;; Author: Stefan Monnier <monnier@iro.umontreal.ca>
 ;; Keywords: 
@@ -53,6 +53,7 @@
 
 (defvar typer-font-lock-keywords
   '(("deftoken[ \t]+\\([^ \t\n]+\\)" (1 font-lock-function-name-face))
+    ("^\\([^() \t]+\\)[ \t]" (1 font-lock-function-name-face))
     )
   "Keyword highlighting specification for `typer-mode'.")
 
@@ -86,46 +87,68 @@
     (smie-bnf->prec2
      '((id)
        (exp ("(" exp ")")
-            ("[" exp "]")
+            (exp "->" exp) (exp "=>" exp) (exp "≡>" exp)
+            ("let" decls "in" exp)
+            (exp ":" exp)
+            ;; ("[" exp "]")
+            ("lambda" simple_arg "->" exp)
+            ("lambda" simple_arg "=>" exp)
+            ("lambda" simple_arg "≡>" exp)
             ("case" exp-branches)
-            ("lambda" pattern "->" exp)
-            ("lambda" pattern "=>" exp)
-            ("lambda" pattern "≡>" exp)
-            ("letrec" decl "in" exp)
-            ("let" decl "in" exp)
-            ("if" exp "then" exp "else" exp))
-       (telescope (??))
-       (arg ("(" explicit-arg ")") (exp))
+            ;; ("letrec" decl "in" exp)
+            ;; ("if" exp "then" exp "else" exp)
+            )
+       (simple_arg (id) ("(" typed_arg ")"))
+       (typed_arg (id ":" exp))
+       (formal_arg (id) ("(" typed_formal_arg ")"))
+       (typed_formal_arg (id ":" exp) (id "::" exp) (id ":::" exp))
+       (pattern (id) (id ":" exp))
+       (decls (decls ";" decls) (decl))
+       (decl (id ":" exp) (exp "=" exp) ("type" inductive_branches))
+       (inductive_branches (exp) (inductive_branches "|" inductive_branches))
        (explicit-arg (id ":=" exp) (id ":-" exp) (id ":≡" exp))
        (exp-branches (exp "|" branches))
-       (branches (branches "|" branches) (pattern "->" exp))
-       (pattern (id) (id ":" type))
-       (decl (pattern "=" exp) ("type" datatype) (decl ";" decl))
-       (datatype (pattern "|" datacases))
-       (datacases (datacases "|" datacases) (pattern))
-       (type (id) (type "->" type) (type "=>" type) (type "≡>" type)
-             (type "*" type)))
-     ;; '(":" > "->")			   ;; "lambda (x : int) -> e"
-     '(":" < "->")			   ;; "cons : (int -> list -> list)"
-     '(":" < "=>")			   ;; "cons : (int => list -> list)"
-     '(":" < "≡>")			   ;; "cons : (int ≡> list -> list)"
-     '("case" < "|")			   ;; "case (exp | branches)"
-     '((right "->" "=>" "≡>") (assoc "*")) ;; Type precedence rules.
-     '((assoc ";")) '((assoc "|"))
+       (branches (branches "|" branches) (pattern "=>" exp)))
+     '((assoc ";")
+       (nonassoc "in" "case")
+       (assoc "|")
+       ;; Precedence of ":" wrt "->" is not very clear:
+       ;; - I think we want "a : b -> c" to parse as "a : (b -> c)".
+       ;; - But it would be nice to allow "lambda x : t -> e" for
+       ;;   "lambda (x : t) -> e".
+       ;; - but what about "a : b : c".  Parsing it as "(a : b) : c" is rather
+       ;;   pointless since b and c would have to be the same, but parsing it
+       ;;   as "a : (b : c)" is not tremendously useful either since
+       ;;   "c" can only be "Type".
+       ;; - what about "a -> b : c"?  For both parses "c" can only be "Type".
+       ;; - what about "lambda x -> e : c"?  Here both alternatives make sense.
+       ;;   FWIW Coq gives lower precedence to ":", so "a -> b : c" is parsed
+       ;;   as "(a -> b) : c".
+       (assoc ":")                      ;Should this be left or right?
+       (right "->" "=>" "≡>")
+       )
      )
+    ;; Precedence of "=" is tricky as well.  Cases to consider:
+    ;; - "x : e1 = e2"
+    ;; - "nat = (A : Type) ≡> A -> (A -> A) -> A"
+    ;; - "f x = e : t"
     (smie-precs->prec2
      '((assoc ";")
        (assoc ",")
        (left "||")
        (left "&&")
-       (nonassoc "=" "<" ">" "<=" ">=" "!=")
+       (nonassoc "==" "<" ">" "<=" ">=" "!=")
        (left "+" "-")
-       (assoc "*") ;; Needs to be assoc (and hence alone) for tuples.
-       (left "/")
-       (right "^"))))))
+       ;; (assoc "*") ;; Needs to be assoc (and hence alone) for tuples.
+       (left "*" "/")
+       (right "^")))
+    )))
 
 (defun typer-smie-rules (kind token)
+  ;; FIXME: Improve indent after "lambda α ≡> lambda (xs : List α) ->"
+  ;; along the lines of what's done in Tuareg.
   (pcase (cons kind token)
+    (`(:before . "|") (smie-rule-parent))
     ))
 
 ;;;###autoload
