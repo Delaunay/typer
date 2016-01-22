@@ -1,7 +1,6 @@
 
 TEST_FILES := $(wildcard ./tests/*_test.ml)
 
-
 all: typer debug tests
 
 typer: 

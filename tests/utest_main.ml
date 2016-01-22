@@ -48,7 +48,7 @@ let main () =
     print_string  "              Running Unit Tests \n";
     print_string  "         \n";
     (*print_string ("[       ] Test folder: " ^ folder ^ "\n"); *)
-    
+
     (* get tests files *)
     let files = Sys.readdir folder in
     let files_n = Array.length files in
@@ -63,8 +63,7 @@ let main () =
         (if Filename.check_suffix files.(i) "_test.byte" then begin
             
             tests_n := !tests_n + 1;
-            
-            
+
             print_string "          " ;
             print_int !tests_n;
             print_endline (") " ^ (cut_name files.(i)));
