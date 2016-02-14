@@ -1,3 +1,4 @@
+RM=rm -f
 
 TEST_FILES := $(wildcard ./tests/*_test.ml)
 
