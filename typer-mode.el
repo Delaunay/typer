@@ -134,6 +134,7 @@
     ;; - "f x = e : t"
     (smie-precs->prec2
      '((assoc ";")
+       (nonassoc "=")
        (assoc ",")
        (left "||")
        (left "&&")

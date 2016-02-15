@@ -27,17 +27,18 @@ open Pexp
 open Myers
 (* open Unify *)
 
-(*************** Unique small integers for variables *********************)
+(*************** DeBruijn indices for variables *********************)
 
-type var = int
-module VMap
-  = Map.Make (struct type t = var let compare = compare end)
-type varo = location * var         (* Occurrence of a variable's symbol.  *)
+(* Occurrence of a variable's symbol: we use DeBruijn index, and for
+ * debugging purposes, we remember the name that was used in the source
+ * code.  *)
+type vdef = location * string
+type vref = vdef * int
+
+
+type label = symbol
 
 (*************** Elaboration to Lexp *********************)
-
-type scope_level = | ScopeLevel of int
-let next_scope (ScopeLevel sl) = ScopeLevel (1+sl)
 
 type builtin =
   | IntType
@@ -54,33 +55,34 @@ type ltype = lexp
    | SortLevel of sort_level
    | Sort of location * sort
    | Builtin of builtin * string * ltype
-   | Var of varo
-   | Let of location * (varo * lexp * ltype) list * lexp
-   | Arrow of arg_kind * varo option * ltype * location * lexp
-   | Lambda of arg_kind * varo * ltype * lexp
+   | Var of vref
+   (* This "Let" allows recursion.  *)
+   | Let of location * (vdef * lexp * ltype) list * lexp
+   | Arrow of arg_kind * vdef option * ltype * location * lexp
+   | Lambda of arg_kind * vdef * ltype * lexp
    | Call of lexp * (arg_kind * lexp) list (* Curried call.  *)
-   | Inductive of varo * ltype * lexp SMap.t
+   | Inductive of location * label * ((arg_kind * vdef * ltype) list)
+                  * ((arg_kind * ltype) list) SMap.t
    | Cons of ltype * symbol
-   (* FIXME: how 'bout return type, type refinement, ...? *)
    | Case of location * lexp
              * ltype (* The base inductive type over which we switch.  *)
-             * (location * (arg_kind * varo) list * lexp) SMap.t
+             * (location * (arg_kind * vdef) list * lexp) SMap.t
              * lexp option               (* Default.  *)
-   | Susp of subst * lexp
-   (* For logical metavars, there's no substitution.  *)
-   | Metavar of (location * string) * metakind * metavar ref
- and metavar =
-   (* An uninstantiated var, along with a venv (stipulating over which vars
-    * it should be closed), and its type.
-    * If its type is not given, it implies its type should be a sort.  *)
-   | MetaUnset of (lexp option * lexp) VMap.t * ltype option * scope_level
-   | MetaSet of lexp
- and metakind =
-   | MetaGraft of subst
-   (* Forward reference or Free var: Not known yet, but not instantiable by
-    * unification.  *)
-   | MetaFoF
- and subst = lexp VMap.t
+ (*   | Susp of subst * lexp
+  *   (\* For logical metavars, there's no substitution.  *\)
+  *   | Metavar of (location * string) * metakind * metavar ref
+  * and metavar =
+  *   (\* An uninstantiated var, along with a venv (stipulating over which vars
+  *    * it should be closed), and its type.
+  *    * If its type is not given, it implies its type should be a sort.  *\)
+  *   | MetaUnset of (lexp option * lexp) VMap.t * ltype option * scope_level
+  *   | MetaSet of lexp
+  * and metakind =
+  *   | MetaGraft of subst
+  *   (\* Forward reference or Free var: Not known yet, but not instantiable by
+  *    * unification.  *\)
+  *   | MetaFoF
+  * and subst = lexp VMap.t *)
  and sort =
    | Stype of lexp
    | StypeOmega
@@ -90,22 +92,9 @@ type ltype = lexp
   | SLsucc of lexp
                                             
 
-let mk_susp s e = if VMap.is_empty s then e else Susp (s, e)
-let mk_subst x v e = Susp (VMap.add x v VMap.empty, e)
+(* let mk_susp s e = if VMap.is_empty s then e else Susp (s, e)
+ * let mk_subst x v e = Susp (VMap.add x v VMap.empty, e) *)
                                                       
-(**** Make fresh new small ints, and keep track of their name  ****)
-    
-let varcounter = ref 0
-let varname_table = ref VMap.empty
-let varname var = VMap.find var !varname_table
-let mkvar name =
-  let v = !varcounter in
-  varcounter := 1 + !varcounter;
-  varname_table := VMap.add v name !varname_table;
-  v
-let copy_var v = mkvar (varname v)
-let print_var v = print_string (varname v); print_int v
-
 let opt_map f x = match x with None -> None | Some x -> Some (f x)
                                                       
 (**** The builtin elements ****)
@@ -123,12 +112,14 @@ let type_level = Builtin (LevelType, "TypeLevel", type_level)
 let type_eq
   = Builtin
       (EqType, "_₌_",
-       let lv = (dloc, mkvar "ℓ") in
-       let tv = (dloc, mkvar "t") in
+       let lv = (dloc, "ℓ") in
+       let tv = (dloc, "t") in
        Arrow (Aerasable, Some lv, type_level, dloc,
-              Arrow (Aerasable, Some tv, Sort (dloc, Stype (Var lv)), dloc,
-                     Arrow (Aexplicit, None, Var tv, dloc,
-                            Arrow (Aexplicit, None, Var tv, dloc, type0)))))
+              Arrow (Aerasable, Some tv,
+                     Sort (dloc, Stype (Var (lv, 0))), dloc,
+                     Arrow (Aexplicit, None, Var (tv, 0), dloc,
+                            Arrow (Aexplicit, None, Var (tv, 1), dloc,
+                                   type0)))))
 let iop_binary = Arrow (Aexplicit, None, type_int, dummy_location,
                         Arrow (Aexplicit, None, type_int, dummy_location,
                                type_int))
@@ -137,27 +128,27 @@ let builtins =
   (* let l = dloc in *)
   [ (* (0,"%type1%", Some (type1),	Lsort (l, 2)) *)
     ("Type",  Some (type0),	type1)
-  ; ("Type@", Some (let lv = (dloc, mkvar "ℓ") in
+  ; ("Type@", Some (let lv = (dloc, "ℓ") in
                     Lambda (Aexplicit, lv, type_level,
-                            Sort (dloc, Stype (Var lv)))),
-     let lv = (dloc, mkvar "ℓ") in
+                            Sort (dloc, Stype (Var (lv, 0))))),
+     let lv = (dloc, "ℓ") in
      Arrow (Aexplicit, Some lv, type_level, dloc,
-            Sort (dloc, Stype (SortLevel (SLsucc (Var lv))))))
-  (* ;(var_macro,  "%Macro%", None,		type0) *)
+            Sort (dloc, Stype (SortLevel (SLsucc (Var (lv,0)))))))
+    (* ;(var_macro,  "%Macro%", None,		type0) *)
   ] @
     List.map (fun bi -> match bi with
                      | Builtin (_, name, t) -> (name, Some bi, t)
                      | _ -> internal_error "Registering a non-builtin")
              [type_level; type_int; type_float; type_eq]
-let var_bottom = Var (dloc, -1)
+(* let var_bottom = Var (dloc, -1) *)
 
-let (senv_builtin,venv_builtin)
-  = List.fold_left (fun (senv,venv) (name,e,t) ->
-                    let v = mkvar name in
-                    (SMap.add name v senv,
-                     VMap.add v (e, t) venv))
-                   (SMap.empty, VMap.empty)
-                   builtins
+(* let (senv_builtin,venv_builtin)
+ *   = List.fold_left (fun (senv,venv) (name,e,t) ->
+ *                     let v = name in
+ *                     (SMap.add name v senv,
+ *                      VMap.add v (e, t) venv))
+ *                    (SMap.empty, VMap.empty)
+ *                    builtins *)
 
 (*****  SMap fold2 helper *****)
 
@@ -167,43 +158,44 @@ let smap_fold2 c f m1 m2 init
 
 (** Elaboration.  **)
 
-let mk_meta2 sl venv l
-  = let mk = MetaGraft VMap.empty in
-    let t = Metavar ((l, "_"), mk, ref (MetaUnset (venv, None, sl)))
-    in (Metavar ((l, "_"), mk, ref (MetaUnset (venv, Some t, sl))), t)
-let mk_meta sl venv l
-  = let mk = MetaGraft VMap.empty in
-    let t = Metavar ((l, "_"), mk, ref (MetaUnset (venv, None, sl)))
-    in Metavar ((l, "_"), mk, ref (MetaUnset (venv, Some t, sl)))
-let mk_meta_dummy = mk_meta (ScopeLevel(-1))
-let mk_metat sl venv l t
-  = let mk = MetaGraft VMap.empty in
-    Metavar ((l, "_"), mk, ref (MetaUnset (venv, Some t, sl)))
+(* let mk_meta2 sl venv l
+ *   = let mk = MetaGraft VMap.empty in
+ *     let t = Metavar ((l, "_"), mk, ref (MetaUnset (venv, None, sl)))
+ *     in (Metavar ((l, "_"), mk, ref (MetaUnset (venv, Some t, sl))), t)
+ * let mk_meta sl venv l
+ *   = let mk = MetaGraft VMap.empty in
+ *     let t = Metavar ((l, "_"), mk, ref (MetaUnset (venv, None, sl)))
+ *     in Metavar ((l, "_"), mk, ref (MetaUnset (venv, Some t, sl)))
+ * let mk_meta_dummy = mk_meta (ScopeLevel(-1))
+ * let mk_metat sl venv l t
+ *   = let mk = MetaGraft VMap.empty in
+ *     Metavar ((l, "_"), mk, ref (MetaUnset (venv, Some t, sl))) *)
 type value = lexp
 
-type fvars = lexp SMap.t (* Free vars (with type) we need to generalize.  *)
+(* Free vars (with type) we need to generalize.  *)
+(* type fvars = lexp SMap.t *)
 (* Each element of a unification constraint is a pair of expresions that
  * need to be unified together with a boolean indicating whether this might be
  * algorithmically unifiable.  I.e. if the boolean is false, then there's no
  * point calling lexp_unify on it because we know it will just re-add the same
  * constraint.  *)
-type unify_cond =
-  | UnifyNever                      (* Can't be resolved by unification.  *)
-  | UnifyWhenInst of metavar ref    (* Needs ref to be instantiated.  *)
-  | UnifyMaybe                      (* Not clear when.  *)
-type unify_csts = (lexp * lexp * unify_cond) list
-type constraints = unify_csts
-
-type pending = constraints
+(* type unify_cond =
+ *   | UnifyNever                      (\* Can't be resolved by unification.  *\)
+ *   | UnifyWhenInst of metavar ref    (\* Needs ref to be instantiated.  *\)
+ *   | UnifyMaybe                      (\* Not clear when.  *\)
+ * type unify_csts = (lexp * lexp * unify_cond) list
+ * type constraints = unify_csts
+ * 
+ * type pending = constraints *)
 let id x = x
 
 (* Combine two substitutions.  I.e. e = s(s'(e))).  *)
-let lexp_subst_subst s s' =
-  let s' = VMap.map (fun e -> mk_susp s e) s' in
-  VMap.fold (fun v e s -> if VMap.mem v s
-                       then (internal_error "Overlapping substs")
-                       else VMap.add v e s)
-            s s'
+(* let lexp_subst_subst s s' =
+ *   let s' = VMap.map (fun e -> mk_susp s e) s' in
+ *   VMap.fold (fun v e s -> if VMap.mem v s
+ *                        then (internal_error "Overlapping substs")
+ *                        else VMap.add v e s)
+ *             s s' *)
 
 let lexp_max_sort (k1, k2) =
   match k1,k2 with
@@ -212,18 +204,18 @@ let lexp_max_sort (k1, k2) =
 
 (* Invert a substitution.  I.e. return s' such that s'(s(e))=e.
  * It is allowed to presume that e is closed in `venv'.  *)
-exception Lexp_subst_inv
-let lexp_subst_inv venv s =
-  VMap.fold (fun v e s ->
-             try let _ = VMap.find v venv in
-                 match e with
-                 (* | Var _ when e = var_bottom -> s *)
-                 | Var (l,v') -> if VMap.mem v' s then raise Lexp_subst_inv
-                                else VMap.add v' (Var (l,v)) s
-                 | _ -> raise Lexp_subst_inv
-             (* `v' is not in `venv' so it won't appear in `e'.  *)
-             with Not_found -> s)
-            s VMap.empty
+(* exception Lexp_subst_inv
+ * let lexp_subst_inv venv s =
+ *   VMap.fold (fun v e s ->
+ *              try let _ = VMap.find v venv in
+ *                  match e with
+ *                  (\* | Var _ when e = var_bottom -> s *\)
+ *                  | Var (l,v') -> if VMap.mem v' s then raise Lexp_subst_inv
+ *                                 else VMap.add v' (Var (l,v)) s
+ *                  | _ -> raise Lexp_subst_inv
+ *              (\* `v' is not in `venv' so it won't appear in `e'.  *\)
+ *              with Not_found -> s)
+ *             s VMap.empty *)
 
 let rec lexp_location e =
   match e with
@@ -231,80 +223,17 @@ let rec lexp_location e =
   | SortLevel (SLsucc e) -> lexp_location e
   | SortLevel (SLn _) -> dummy_location
   | Imm s -> sexp_location s
-  | Var (l,_) -> l
+  | Var ((l,_),_) -> l
   | Builtin _ -> dummy_location
   | Let (l,_,_) -> l
   | Arrow (_,_,_,l,_) -> l
   | Lambda (_,(l,_),_,_) -> l
   | Call (f,_) -> lexp_location f
-  | Inductive ((l,_),_,_) -> l
+  | Inductive (l,_,_,_) -> l
   | Cons (_,(l,_)) -> l
   | Case (l,_,_,_,_) -> l
-  | Susp (_, e) -> lexp_location e
-  | Metavar ((l,_),_,_) -> l
-
-(* Apply alpha-renaming to all variables in `e'.  *)
-let rec lexp_alpha s e =
-  match e with
-  | (Sort (_, (StypeLevel | StypeOmega | Stype (SortLevel (SLn _))))
-    | Imm _ | Builtin _ | SortLevel (SLn _)) -> e
-  | Sort (l, Stype e) -> Sort (l, Stype (lexp_alpha s e))
-  | SortLevel (SLsucc e) -> SortLevel (SLsucc (lexp_alpha s e))
-  | Var (l,v) -> (try Var (l, VMap.find v s) with Not_found -> e)
-  | Let (l,decls,body)
-    -> let (decls',s') = List.fold_left (fun (d,s) ((l,v), e, t) ->
-                                        let v' = copy_var v in
-                                        (((l,v'), e, t) :: d, VMap.add v v' s))
-                                       ([], s)
-                                       decls in
-      Let (l, List.map (fun (v, e, t) -> (v, lexp_alpha s' e, lexp_alpha s' t))
-                       decls, lexp_alpha s' body)
-  | Arrow (ak, None, t1, l, t2)
-    -> Arrow (ak, None, lexp_alpha s t1, l, lexp_alpha s t2)
-  | Arrow (ak, Some (l',v), t1, l, t2)
-    -> let v' = copy_var v in
-      Arrow (ak, Some (l',v'), lexp_alpha s t1, l,
-             lexp_alpha (VMap.add v v' s) t2)
-  | Lambda (ak, (l,v), t, e)
-    -> let v' = copy_var v in
-      Lambda (ak, (l,v'), lexp_alpha s t,
-              lexp_alpha (VMap.add v v' s) e)
-  | Call (f,args)
-    -> Call (lexp_alpha s f, List.map (fun (ak,e) -> (ak, lexp_alpha s e)) args)
-  | Inductive (id, t, branches)
-    -> Inductive (id, lexp_alpha s t,
-                 SMap.map (lexp_alpha s) branches)
-  | Cons (e,tag) -> Cons (lexp_alpha s e, tag)
-  | Case (l,e,t,branches,default)
-    -> Case (l, lexp_alpha s e, lexp_alpha s t,
-            SMap.map (fun (l, args, branch) ->
-                      let args' = List.map (fun (ak,(l,a))
-                                            -> (ak, (l, copy_var a)))
-                                           args in
-                      (l, args',
-                       lexp_alpha (List.fold_left2 (fun s (_,(_,v)) (_,(_,v'))
-                                                    -> VMap.add v v' s)
-                                                   s args args')
-                                  branch))
-                     branches,
-            match default with Some e -> Some (lexp_alpha s e) | None -> None)
-  | Susp (env, e) ->
-    VMap.iter (fun v _ ->
-               if VMap.mem v s
-               then (internal_error "overlapping alpha and subst!!")
-               else ())
-              env;
-    Susp (VMap.map (lexp_alpha s) env, lexp_alpha s e)
-  | Metavar (_, MetaFoF, _) -> e
-  | Metavar ((l,_), MetaGraft subst, r)
-    -> match !r with
-      | MetaSet e -> lexp_alpha s (mk_susp subst e)
-      (* FIXME: filter out vars not in `venv'.  *)
-      (* FIXME: Signal a warning if not all the vars are filtered out,
-       * because I really wonder when that might happen.  *)
-      | _ -> mk_susp (VMap.map (fun v -> Var (dummy_location, v)) s) e
-
-let lexp_copy e = lexp_alpha VMap.empty e
+  (* | Susp (_, e) -> lexp_location e
+   * | Metavar ((l,_),_,_) -> l *)
 
 let builtin_reduce b args arg =
   match b,args,arg with

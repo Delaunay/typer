@@ -1,5 +1,3 @@
-%% FIXME: adjust to the new top-level made of decls instead of exps.
-
 %% Issues:
 %% - syntax of "telescopes", especially the implicit and erasable args.
 %%
