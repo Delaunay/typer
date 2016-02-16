@@ -1,6 +1,6 @@
 (* pexp.ml --- Proto lambda-expressions, half-way between Sexp and Lexp.
 
-Copyright (C) 2011-2012, 2015  Free Software Foundation, Inc.
+Copyright (C) 2011-2012, 2015, 2016  Free Software Foundation, Inc.
 
 Author: Stefan Monnier <monnier@iro.umontreal.ca>
 Keywords: languages, lisp, dependent types.
@@ -51,7 +51,7 @@ type pexp =
   | Pcall of pexp * sexp list           (* Curried call.  *)
   (* The symbols are only used so that we can distinguish two
    * otherwise isomorphic types.  *)
-  | Pinductive of symbol * pexp list
+  | Pinductive of symbol * (arg_kind * pvar * pexp option) list
                   * (symbol * (arg_kind * pvar option * pexp) list) list
   | Pcons of pvar * symbol
   | Pcase of location * pexp * (ppat * pexp) list
@@ -144,7 +144,7 @@ let rec pexp_parse (s : sexp) : pexp =
   | Node (Symbol (start, "inductive_"), _)
     -> msg_error start "Unrecognized inductive type"; Pmetavar (start, "_")
   (* constructor *)
-  | Node (Symbol (start, "cons_"), [Symbol tname; Symbol tag])
+  | Node (Symbol (start, "inductive-cons"), [Symbol tname; Symbol tag])
     -> Pcons (tname, tag)
   | Node (Symbol (start, "cons_"), _)
     -> msg_error start "Unrecognized constructor call"; Pmetavar (start, "_")
