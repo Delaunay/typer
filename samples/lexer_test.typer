@@ -4,36 +4,30 @@
 %% ----------------
 
 %% String
-a = "The answer is 42";
+a => "The answer is 42";
 
 %% Integer
-b = 11;
+b => 11;
 
 %% Float
-c = 3.14;
+c => 3.14;
 
 %% Something
-C = 3.14.14;
+C => 3.14.14;
 
 
 %% Case
 
 case (a,b)
-   | (Foo,Foo) => 3.14
-   | (Bar,Bar) => 3.15
+   | (Foo, Foo) => 3.14
+   | (Bar, Bar) => 3.15
 ;;
    
 
 %% Stuff
 %% ----------------
 
-%% Epsilon
-
 %% Block
-
-
-%% Node
-%% -> Composed expression
-
-%% Symbol
-%% --> Everything else
+{
+    a => "This is a Block";
+}

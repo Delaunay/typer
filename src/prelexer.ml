@@ -137,6 +137,9 @@ let rec prelex (file : string) (fin : in_channel) ln ctx acc
 let prelex_file file =
   let fin = open_in file
   in prelex file fin 1 [] []  (* Traditionally, line numbers start at 1 :-(  *)
+  
+let prelex_string str = 
+    prelex "string" str 1 [] []
 
 let rec pretokens_print pretokens =
   List.iter (fun pt ->

@@ -31,6 +31,7 @@ this program.  If not, see <http://www.gnu.org/licenses/>.  *)
 
 open Util
 open Prelexer
+open Grammar
 
 type integer = (* Num.num  *) int
 type symbol = location * string
@@ -86,13 +87,6 @@ let rec sexp_location s =
 
 (*************** The Sexp Parser *********************)
 
-(* FIXME: it should be possible to make something like "." bind tighter than
-   function application.  *)
-(* FIXME: what about sections, as in "if_then e1 else_"?  *)
-
-module SMap
-  = Map.Make (struct type t = string let compare = String.compare end)
-type grammar = (int option * int option) SMap.t
 
 (* If true, infix symbols like "_;_" will be turned into ";_" or "_;"
  *    if they had no right or left argument.
@@ -223,4 +217,15 @@ let sexp_u_list (ss : sexp list) : sexp =
   | [] -> Epsilon
   | [s] -> s
   | (s :: ss) -> Node (s, ss)
-
+  
+(*  Parse all the Sexp *)
+let sexp_parse_all_to_list grm tokens limit =
+    let rec sexp_parse_impl grm tokens limit acc =
+        match tokens with
+            (* We are done parsing *)
+            | [] -> List.rev acc    (* What does list rev do ? *)
+            (* Keep going *)
+            | _ -> let (sxp, rest) = sexp_parse_all grm tokens limit in
+                    sexp_parse_impl grm rest limit (sxp :: acc) in
+    sexp_parse_impl grm tokens limit []
+;;

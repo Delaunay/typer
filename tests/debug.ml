@@ -27,113 +27,106 @@
  *  
  *      Description:
  *          Provide helper functions to print out 
- *                  extracted token
- *                  extracted expression
+ *                  extracted Pretoken
+ *                  extracted Sexp 
  *
  * --------------------------------------------------------------------------- *)
 
 (* removes some warnings *) 
 open Util
+open Prelexer
+open Lexer
+open Sexp
  
 (* print debug info *)
 let print_loc (loc : Util.location) = 
-    print_string loc.file; 
-    print_string ": ln "; 
+    (*print_string loc.file; *) (* Printing the file is too much*)
+    print_string "ln "; 
     Fmt.ralign_print_int loc.line 3;
     print_string ", cl ";
     Fmt.ralign_print_int loc.column 3;
 ;;
 
 
-(*open Token 
-open Token
-
-(* Print token with debug info *)
-let print_token tok = 
-    (* Shortcut *)
-    let lalign str = Fmt.lalign_print_string str 20 in
-    
-    (* When we need to print only the name *)
-    let quick_print name loc = 
-        lalign name;
-        print_string "["; print_loc loc; print_string "]  ";
-        print_string "\n" in
-        
-    let long_print name loc elem =
-        lalign name;
-        print_string "["; print_loc loc; print_string "]  ";
-        print_string "'";
-        print_string elem;
-        print_string "'\n" in
-        
-    let print_kwd name loc ch = 
-        lalign name;
-        print_string "["; print_loc loc; print_string "]  ";
-        print_char ch;
-        print_string "\n" in
-        
-    let print_float name loc ch = 
-        lalign name;
-        print_string "["; print_loc loc; print_string "]  ";
-        print_float ch;
-        print_string "\n" in
-        
-    let print_integer name loc ch =
-        lalign name;
-        print_string "["; print_loc loc; print_string "]  ";
-        print_int ch;
-        print_string "\n" in
-        
-    (* Print tokens *)
-    match tok with
-        | Token.Arw(loc, str)     -> long_print "Arw"    loc str;
-        | Token.Assign(loc, str)  -> long_print "Assign" loc str;
-        | Token.Colon(loc, str)   -> long_print "Colon"  loc str;
-        | Token.Lambda(loc)       -> quick_print "Lambda"    loc;
-        | Token.Case(loc)         -> quick_print "Case"      loc;
-        | Token.Inductive(loc)    -> quick_print "Inductive" loc;
-        | Token.Let(loc)          -> quick_print "Let" loc;
-        | Token.In(loc)           -> quick_print "In"  loc;
-        | Token.Ident(loc, str)   -> long_print "Identifier" loc str;
-        | Token.Kwd(loc, ch)      -> print_kwd "Kwd" loc ch;
-        | Token.Float(loc, value) -> print_float "Float" loc value;
-        | Token.Integer(loc, value) -> print_integer "Integer" loc value;
-        | Token.String(loc, str)  -> long_print "String" loc str;
-;;
- 
-(*  Lexer print
- *--------------------------------------------------*)
-
-(* Print the list of token *)
-let debug_lex file_name  =
-
-  let file_stream = open_in file_name in
-
-    (* Create a stream of tokens *)
-    let lex_stream = Lexer.lex file_name (Stream.of_channel file_stream) in
-    
-        (* Print each tokens *)
-        Stream.iter (fun tok -> print_token tok) lex_stream;
+(* Print aPretokens *)
+let rec debug_pretokens_print pretoken =
+    print_string " ";
+    match pretoken with
+        | Preblock(loc, pts,_)
+         -> print_string "Preblock:\t"; 
+            print_string "["; print_loc loc; print_string "]\t";
+            print_string "{"; 
+                pretokens_print pts; 
+            print_string " }"
+            
+        | Pretoken(loc, str) 
+         -> print_string "Pretoken:\t"; 
+            print_string "["; print_loc loc; print_string "]\t"; 
+                print_string str; 
+            print_string "\n"
+            
+        | Prestring(loc, str)
+         -> print_string "Prestring:\t"; 
+            print_string "["; print_loc loc; print_string "]\t";
+            print_string "\""; 
+                print_string str; 
+            print_string "\"\n";
 ;;
 
-(*  Parser print
- *--------------------------------------------------(**)
-let debug_parser file_name = 
-
-  let file_stream = open_in file_name in
-
-    (* Create a stream of tokens *)
-    let lex_stream = Lexer.lex file_name (Stream.of_channel file_stream) in
-    
-    (* Parse token's stream *)
-    Toplevel.main_loop lex_stream
-;; **)
-
-
-let main () = 
-    debug_lex "./typer_test/lexer_test.typer"; (**)
-    
-    (*debug_parser "kiwi_code/lexer_test.kwi";**)
+(* Print a List of Pretokens *)
+let rec debug_pretokens_print_all pretokens =
+  List.iter (fun pt -> debug_pretokens_print pt) pretokens
+;;
+  
+(* Sexp Print *)
+let rec debug_sexp_print sexp =
+  let print_loc = print_loc in
+  match sexp with
+    | Epsilon 
+        -> print_string "Epsilon "  (* "ε" *)
+        
+    | Block(loc, pts, _) 
+        -> print_string "Block:  "; 
+            print_string "["; print_loc loc; print_string "]\t{ ";
+            pretokens_print pts; 
+           print_string " }"
+            
+    | Symbol(loc, name) 
+        -> print_string "Symbol: "; 
+            print_string "["; print_loc loc; print_string "]\t";
+            print_string name
+            
+    | String(loc, str)
+        -> print_string "String: "; 
+            print_string "["; print_loc loc; print_string "]\t";
+            print_string "\""; print_string str; print_string "\""
+            
+    | Integer(loc, n) 
+        -> print_string "Integer:"; 
+            print_string "["; print_loc loc; print_string "]\t";
+            print_int n
+            
+    | Float(loc, x) 
+        -> print_string "Float:  ";
+            print_string "["; print_loc loc; print_string "]\t";
+            print_float x
+            
+    | Node(f, args) 
+        -> print_string "Node:   ";
+            print_string "["; print_loc (sexp_location f); print_string "]\t";
+            sexp_print f; print_string " \t "; 
+                List.iter (fun sexp -> sexp_print sexp; print_string " @ ")
+                                 args;
+            print_string " "
+;;
+  
+(* Print a list of sexp *)  
+let debug_sexp_print_all tokens =
+  List.iter (fun pt ->
+         print_string " ";
+         debug_sexp_print pt;
+         print_string "\n";
+        )
+        tokens
 ;;
 
-main ();*)
