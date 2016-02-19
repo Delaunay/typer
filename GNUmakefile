@@ -13,11 +13,6 @@ typer:
 	mv _build/src/main.byte _build/typer # move and rename executable
 
 debug: 
-	ocamlbuild tests/prelexer_debug.native -I src  # debug print
-	mv _build/tests/prelexer_debug.native _build/prelexer_debug
-	ocamlbuild tests/lexer_debug.byte -I src     # debug print
-	mv _build/tests/lexer_debug.byte _build/lexer_debug
-	#  Debug Print
 	ocamlbuild tests/full_debug.native -I src
 	mv _build/tests/full_debug.native _build/full_debug
 

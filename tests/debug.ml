@@ -37,6 +37,7 @@ open Util
 open Prelexer
 open Lexer
 open Sexp
+open Pexp
  
 (* print debug info *)
 let print_loc (loc : Util.location) = 
@@ -51,23 +52,23 @@ let print_loc (loc : Util.location) =
 (* Print aPretokens *)
 let rec debug_pretokens_print pretoken =
     print_string " ";
+    let print_info msg loc =
+        print_string msg; 
+        print_string "["; print_loc loc; print_string "]\t" in
     match pretoken with
         | Preblock(loc, pts,_)
-         -> print_string "Preblock:\t"; 
-            print_string "["; print_loc loc; print_string "]\t";
+         -> print_info "Preblock:  " loc;
             print_string "{"; 
                 pretokens_print pts; 
             print_string " }"
             
         | Pretoken(loc, str) 
-         -> print_string "Pretoken:\t"; 
-            print_string "["; print_loc loc; print_string "]\t"; 
+         -> print_info "Pretoken:  " loc;
                 print_string str; 
             print_string "\n"
             
         | Prestring(loc, str)
-         -> print_string "Prestring:\t"; 
-            print_string "["; print_loc loc; print_string "]\t";
+         -> print_info "Prestring: " loc;
             print_string "\""; 
                 print_string str; 
             print_string "\"\n";
@@ -80,40 +81,32 @@ let rec debug_pretokens_print_all pretokens =
   
 (* Sexp Print *)
 let rec debug_sexp_print sexp =
-  let print_loc = print_loc in
+  let print_info msg loc =
+    print_string msg; 
+    print_string "["; print_loc loc; print_string "]\t" in
   match sexp with
     | Epsilon 
         -> print_string "Epsilon "  (* "ε" *)
         
     | Block(loc, pts, _) 
-        -> print_string "Block:  "; 
-            print_string "["; print_loc loc; print_string "]\t{ ";
-            pretokens_print pts; 
-           print_string " }"
+        -> print_info "Block:  " loc; 
+           print_string " {"; pretokens_print pts; print_string " }"
             
     | Symbol(loc, name) 
-        -> print_string "Symbol: "; 
-            print_string "["; print_loc loc; print_string "]\t";
-            print_string name
+        -> print_info "Symbol: " loc; print_string name
             
     | String(loc, str)
-        -> print_string "String: "; 
-            print_string "["; print_loc loc; print_string "]\t";
-            print_string "\""; print_string str; print_string "\""
+        -> print_info "String: " loc;
+           print_string "\""; print_string str; print_string "\""
             
     | Integer(loc, n) 
-        -> print_string "Integer:"; 
-            print_string "["; print_loc loc; print_string "]\t";
-            print_int n
+        -> print_info "Integer:" loc;   print_int n
             
     | Float(loc, x) 
-        -> print_string "Float:  ";
-            print_string "["; print_loc loc; print_string "]\t";
-            print_float x
+        -> print_info "Float:  " loc;   print_float x
             
     | Node(f, args) 
-        -> print_string "Node:   ";
-            print_string "["; print_loc (sexp_location f); print_string "]\t";
+        -> print_info "Node:   " (sexp_location f);
             sexp_print f; print_string " \t "; 
                 List.iter (fun sexp -> sexp_print sexp; print_string " @ ")
                                  args;
@@ -129,4 +122,40 @@ let debug_sexp_print_all tokens =
         )
         tokens
 ;;
+
+
+(* Print a Pexp with debug info *)
+let debug_pexp_print pexp =
+    print_string " ";
+    let l = pexp_location pexp in
+    let print_info msg loc pex = 
+        print_string msg; print_string "["; 
+        print_loc loc; 
+        print_string "]\t";
+        pexp_print pexp in
+    match pexp with
+        | Pimm _                 -> print_info "Pimm       " l pexp
+        | Pvar (_,_)             -> print_info "Pvar       " l pexp
+        | Phastype (_,_,_)       -> print_info "Phastype   " l pexp
+        | Pmetavar (_, _)        -> print_info "Pmetavar   " l pexp
+        | Plet (_, _, _)         -> print_info "Plet       " l pexp
+        | Parrow (_, _, _, _, _) -> print_info "Parrow     " l pexp
+        | Plambda (_,_, _, _)    -> print_info "Plambda    " l pexp
+        | Pcall (_, _)           -> print_info "Pcall      " l pexp
+        | Pinductive (_, _, _)   -> print_info "Pinductive " l pexp
+        | Pcons (_,_)            -> print_info "Pcons      " l pexp
+        | Pcase (_, _, _)        -> print_info "Pcase      " l pexp
+        (* Do Nothing *)
+        | _ -> pexp_print pexp
+;;
+
+(* Print a list of pexp *)
+let debug_pexp_print_all pexps =
+    List.iter 
+        (fun px -> 
+            debug_pexp_print px; 
+            print_string "\n") 
+        pexps
+;;
+
 

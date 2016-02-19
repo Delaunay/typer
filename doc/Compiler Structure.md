@@ -1,3 +1,4 @@
+Stream.of_string
 
 Typer Compiler Structure
 ========================
@@ -38,6 +39,7 @@ Read tests/full_debug.ml for ocaml usage
 * Sexp -> sexp_parse: Sexp
     
     Group Sexp into Nodes according to the specified grammar.
+    Create the program tree. 
     
     Code: "a => 3;"
         
@@ -46,7 +48,7 @@ Read tests/full_debug.ml for ocaml usage
     Lexer ['a', '=>', '3;'] => ['a', '=>', '3', ';'] (Sexp)
     
     sexp_parse ['a', '=>', '3', ';']
-        => [Node('=>', ['a', '3']), ';'] (Sexp)
+        => Node('_=>_', ['a', '3'])
         
     Function:
         sexp_parse sexp
