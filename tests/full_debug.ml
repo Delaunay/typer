@@ -54,7 +54,7 @@ let main () =
     begin
         let filename = Sys.argv.(1) in
         
-        (*  Read additional Args if any*)
+        (* Read additional Args if any *)
         
         (* Print Pretokens *)
         print_string "\n\t====\n";
@@ -100,8 +100,11 @@ let main () =
         print_string "\t  Lexp\n";
         print_string "\t=======================\n";
         
+        (** )
+        let lexps = lexp_parse_all pexps in
         
-        
+        debug_lexp_print_all lexps; ( **)
+
     end
 ;;
 

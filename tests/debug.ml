@@ -48,7 +48,6 @@ let print_loc (loc : Util.location) =
     Fmt.ralign_print_int loc.column 3;
 ;;
 
-
 (* Print aPretokens *)
 let rec debug_pretokens_print pretoken =
     print_string " ";
@@ -90,7 +89,7 @@ let rec debug_sexp_print sexp =
         
     | Block(loc, pts, _) 
         -> print_info "Block:  " loc; 
-           print_string " {"; pretokens_print pts; print_string " }"
+           print_string "{"; pretokens_print pts; print_string " }"
             
     | Symbol(loc, name) 
         -> print_info "Symbol: " loc; print_string name
@@ -120,7 +119,7 @@ let debug_sexp_print_all tokens =
          debug_sexp_print pt;
          print_string "\n";
         )
-        tokens
+    tokens
 ;;
 
 
@@ -145,8 +144,7 @@ let debug_pexp_print pexp =
         | Pinductive (_, _, _)   -> print_info "Pinductive " l pexp
         | Pcons (_,_)            -> print_info "Pcons      " l pexp
         | Pcase (_, _, _)        -> print_info "Pcase      " l pexp
-        (* Do Nothing *)
-        | _ -> pexp_print pexp
+        | _                      -> print_info "Not Impl   " l pexp
 ;;
 
 (* Print a list of pexp *)
@@ -157,5 +155,9 @@ let debug_pexp_print_all pexps =
             print_string "\n") 
         pexps
 ;;
+
+(* Print lexp with debug info *)
+
+(* Print a list of lexp *)
 
 
