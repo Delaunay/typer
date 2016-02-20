@@ -33,7 +33,10 @@ open Myers
  * debugging purposes, we remember the name that was used in the source
  * code.  *)
 type vdef = location * string
-type vref = vdef * int
+type db_index = int             (* DeBruijn index.  *)
+type db_offset = int            (* DeBruijn index offset.  *)
+type db_revindex = int          (* DeBruijn index counting from the root.  *)
+type vref = vdef * db_index
 
 
 type label = symbol
@@ -56,6 +59,10 @@ type ltype = lexp
    | Sort of location * sort
    | Builtin of builtin * string * ltype
    | Var of vref
+   (* This just means that all non-local Var bindings in the lexp should
+    * have their debuijn index incremented by i.  IOW it guarantees that
+    * the lexp does not refer to the topmost i elements of the context.  *)
+   | Shift of db_offset * lexp
    (* This "Let" allows recursion.  *)
    | Let of location * (vdef * lexp * ltype) list * lexp
    | Arrow of arg_kind * vdef option * ltype * location * lexp
@@ -149,6 +156,48 @@ let builtins =
  *                      VMap.add v (e, t) venv))
  *                    (SMap.empty, VMap.empty)
  *                    builtins *)
+
+(* Handling scoping/bindings is always tricky.  So it's always important
+ * to keep in mind for *every* expression which is its context.
+ *
+ * In particular, this holds true as well for those expressions that appear
+ * in the context.  Traditionally for dependently typed languages we expect
+ * the context's rules to say something like:
+ *
+ *      ⊢ Γ    Γ ⊢ τ:Type
+ *      —————————————————
+ *          ⊢ Γ,x:τ
+ *
+ * Which means that we expect (τ) expressions in the context to be typed
+ * within the *rest* of that context.
+ *
+ * This also means that when we look up a binding in the context, we need to
+ * adjust the result, since we need to use it in the context where we looked
+ * it up, which is different from the context where it was defined.
+ *
+ * More concretely, this means that lookup(Γ, i) should return an expression
+ * where debruijn indices have been shifted by "i".
+ *
+ * This is nice for "normal bindings", but there's a complication in the
+ * case of recursive definitions.  Typically, this is handled by using
+ * something like a μx.e construct, which works OK for the theory but tends
+ * to become rather inconvenient in practice for mutually recursive
+ * definitions.  So instead, we annotate the recursive binding with
+ * a "recursion_offset" to say that rather than being defined in "the rest
+ * of the context", they're defined in a slightly larger context that
+ * includes "younger" bindings.
+ *)
+
+type env_elem = (db_offset, vdef, lexp option, ltype)
+type env_type = env_elem myers
+let env_lookup_type (env : env_type) (v : vref) =
+  let ((_, rname), dbi) = v in
+  try let (recursion_offset, (_, dname), _, t) = Myers.nth dbi env in
+      if dname = rname then
+        Shift (dbi - recursion_offset, t)
+      else
+        internal_error "DeBruijn index refers to wrong name!"
+  with Not_found -> internal_error "DeBruijn index out of bounds!"
 
 (*****  SMap fold2 helper *****)
 
@@ -527,82 +576,32 @@ and lexp_unparse e : pexp =
     (* (internal_error "Can't print a Susp") *)
 
 let lexp_print e = sexp_print (pexp_unparse (lexp_unparse e))
-    
-(* let rec lexp_type (env: (lexp option * lexp) VMap.t) e : lexp =
- *   let rec follow e =
- *     match e with
- *     | Var (_,v) -> vmap_getval v
- *     | Metavar (_,_,r) -> (match !r with MetaSet e -> follow e | _ -> e)
- *     | _ -> e
- *   and vmap_getval (v : var) =
- *     match VMap.find v env with (Some e, _) -> follow e
- *                              | _ -> Var (dummy_location, v) in
- *   match e with
- *   | Sort (l, Stype e) -> Sort (l, Stype (SortLevel (SLsucc e)))
- *   | Sort (l, StypeOmega)
- *     -> msg_error l "TypeΩ doesn't have a type"; mk_meta_dummy env l
- *   | Sort (l, StypeLevel)
- *     -> msg_error l "TypeLevel doesn't have a type"; mk_meta_dummy env l
- *   | SortLevel _ -> Sort (lexp_location e, StypeLevel)
- *   | Imm (Integer _) -> type_int
- *   | Imm (Float _) -> type_float
- *   | Builtin (_,_,t) -> t
- *   (\* | Imm (String _) -> Var (dummy_location, var_string) *\)
- *   | Imm s -> let l = sexp_location s in
- *             msg_error l "Unrecognized sexp in lexp"; mk_meta_dummy env l
- *   | Var (_,name) -> snd (VMap.find name env)
- *   | Let (l, decls, body) ->
- *     lexp_type (List.fold_left (fun env ((_,v),e,t) ->
- *                                VMap.add v (Some (Let (l, decls, e)), t) env)
- *                               env decls)
- *               body
- *   | Arrow _ -> type0             (\* FIXME! *\)
- *   | Lambda (ak, ((l,v) as var),t,e) ->
- *     Arrow (ak, Some var, t, dummy_location,
- *            lexp_type (VMap.add v (None, t) env) e)
- *   | Call (f, args) ->
- *     let ft = lexp_type env f in
- *     let rec one_arg t (_,arg) =
- *       match lexp_whnf VMap.empty t with
- *       | Arrow (_, None, t1, _, t2) -> t2
- *       | Arrow (_, Some (_,v), t1, _, t2) ->
- *         Susp (VMap.add v arg VMap.empty, t2)
- *       | _ -> msg_error (lexp_location arg) "Too many arguments"; t
- *     in List.fold_left one_arg ft args
- *   | Inductive (_,t,_) -> t
- *   | Cons (e,(l,name)) ->
- *     (match lexp_whnf VMap.empty e with
- *      | Inductive (_,_,branches) ->
- *        (try SMap.find name branches
- *         with Not_found -> msg_error l ("No such constructor name `"^name^"'");
- *                          mk_meta_dummy env l)
- *      | _ -> msg_error l "The constructor refers to a non-inductive type";
- *            mk_meta_dummy env l)
- *   | Case (_,_,_,_,Some default) -> lexp_type env default
- *   (\* | Case (_,_,(_,i, args, branch) :: _,_) ->
- *    *   let ct = lexp_type env (vmap_getval cv) in
- *    *   let rec one_arg (t,env) argo =
- *    *     match t with
- *    *     | Arrow (_, None, t1, _, t2) ->
- *    *       (t2, VMap.add (snd argo) (None, t1) env)
- *    *     | Arrow (_, Some (l,v), t1, _, t2) ->
- *    *       (Susp (VMap.add v (mk_meta_dummy l) VMap.empty, t2),
- *    *        VMap.add (snd argo) (None, t1) env)
- *    *     | Susp (s, Arrow (ak,v,t1,l,t2)) ->
- *    *       one_arg (Arrow (ak, v, Susp (s, t1), l, Susp (s, t2)), env) argo
- *    *     | _ -> msg_error (fst argo) "Too many arguments";
- *    *           (t, VMap.add (snd argo)
- *    *                        (None, mk_meta_dummy (fst argo))
- *    *                        env)
- *    *   in let (_,env') = List.fold_left one_arg (ct,env) args
- *    *      in lexp_type env' branch *\)
- *   | Case (l,_,_,_,None) -> mk_meta_dummy env l (\* Dead code?  *\)
- *   | Susp (s, e) -> lexp_type env (lexp_whnf s e)
- *   | Metavar ((l,_),_,r)
- *     -> match !r with MetaSet e -> lexp_type env e
- *                   | MetaUnset (_, Some t, _) -> t
- *                   | _ -> msg_error l "Uninstantiated metavar of unknown type";
- *                         mk_meta_dummy env l *)
 
-let rec lexp_parse (p : pexp) (env : (vdef * lexp option * ltype) myers) =
-    
+type senv_type = (db_revindex SMap.t * db_index)
+let senv_lookup senv s : db_index =
+  let (m, i) = senv in
+  i - SMap.find s senv
+  
+(* Parsing a Pexp into an Lexp is really "elaboration", i.e. it needs to
+ * infer the types and perform macro-expansion.  For won't really
+ * do any of that, but we can already start structuring it accordingly.
+ *
+ * More specifically, we do it with 2 mutually recursive functions:
+ * one takes a Pexp along with its expected type and return an Lexp
+ * of that type (hopefully), whereas the other takes a Pexp and
+ * infers its type (which it returns along with the Lexp).
+ * This is the idea of "bidirectional type checking", which minimizes
+ * the amount of "guessing" and/or annotations.  Basically guessing/annotations
+ * is only needed at those few places where the code is not fully-normalized,
+ * which in normal programs is only in "let" definitions.
+ * So the rule of thumbs are:
+ * - use lexp_p_infer for destructors, and use lexp_p_check for constructors.
+ * - use lexp_p_check whenever you can.
+ *)
+let rec lexp_p_infer (env : env_type) (p : pexp) : lexp * ltype = ?
+and lexp_p_check (env : env_type) (p : pexp) (t : ltype) : lexp =
+  match p with
+  | _
+    -> let (e, inferred_t) = lexp_p_infer env p in
+      (* FIXME: check that inferred_t = t!  *)
+      e
