@@ -25,9 +25,9 @@ a => 2;
 a ≡> 1;
 
 % Lambda
-a = lambda x, y -> x + y;
-b = lambda x, y => x * y;
-c = lambda x, y ≡> x / y;
+a = lambda (x, y) -> x + y;
+b = lambda (x, y) => x * y;
+c = lambda (x, y) ≡> x / y;
 
 % case
 case (a, b)
@@ -36,3 +36,6 @@ case (a, b)
 ;
 
 % inductive
+% Nat : Type
+Type = inductive_ (Type_Label) (zero) (succ Type);
+inductive_ (Type_Label) (zero) (succ Type);

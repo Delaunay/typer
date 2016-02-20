@@ -54,28 +54,24 @@ let rec debug_pretokens_print pretoken =
     let print_info msg loc =
         print_string msg; 
         print_string "["; print_loc loc; print_string "]\t" in
+        
     match pretoken with
         | Preblock(loc, pts,_)
          -> print_info "Preblock:  " loc;
-            print_string "{"; 
-                pretokens_print pts; 
-            print_string " }"
+            print_string "{";   pretokens_print pts;    print_string " }"
             
         | Pretoken(loc, str) 
          -> print_info "Pretoken:  " loc;
-                print_string str; 
-            print_string "\n"
+                print_string ("'" ^ str ^ "'"); 
             
         | Prestring(loc, str)
          -> print_info "Prestring: " loc;
-            print_string "\""; 
-                print_string str; 
-            print_string "\"\n";
+            print_string ("\"" ^ str ^ "\"");
 ;;
 
 (* Print a List of Pretokens *)
 let rec debug_pretokens_print_all pretokens =
-  List.iter (fun pt -> debug_pretokens_print pt) pretokens
+  List.iter (fun pt -> debug_pretokens_print pt; print_string "\n") pretokens
 ;;
   
 (* Sexp Print *)
@@ -85,27 +81,27 @@ let rec debug_sexp_print sexp =
     print_string "["; print_loc loc; print_string "]\t" in
   match sexp with
     | Epsilon 
-        -> print_string "Epsilon "  (* "ε" *)
+        -> print_string "Epsilon  "  (* "ε" *)
         
     | Block(loc, pts, _) 
-        -> print_info "Block:  " loc; 
+        -> print_info "Block:   " loc; 
            print_string "{"; pretokens_print pts; print_string " }"
             
     | Symbol(loc, name) 
-        -> print_info "Symbol: " loc; print_string name
+        -> print_info "Symbol:  " loc; print_string name
             
     | String(loc, str)
-        -> print_info "String: " loc;
+        -> print_info "String:  " loc;
            print_string "\""; print_string str; print_string "\""
             
     | Integer(loc, n) 
-        -> print_info "Integer:" loc;   print_int n
+        -> print_info "Integer: " loc;   print_int n
             
     | Float(loc, x) 
-        -> print_info "Float:  " loc;   print_float x
+        -> print_info "Float:   " loc;   print_float x
             
     | Node(f, args) 
-        -> print_info "Node:   " (sexp_location f);
+        -> print_info "Node:    " (sexp_location f);
             sexp_print f; print_string " \t "; 
                 List.iter (fun sexp -> sexp_print sexp; print_string " @ ")
                                  args;
@@ -117,8 +113,7 @@ let debug_sexp_print_all tokens =
   List.iter (fun pt ->
          print_string " ";
          debug_sexp_print pt;
-         print_string "\n";
-        )
+         print_string "\n";)
     tokens
 ;;
 

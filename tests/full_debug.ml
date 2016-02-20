@@ -26,7 +26,7 @@
  * ---------------------------------------------------------------------------
  *  
  *      Description:
- *          print out each steps of the compilation
+ *          print out each compilation' steps
  *
  * --------------------------------------------------------------------------- *)
 
@@ -44,6 +44,11 @@ let main () =
     let usage = 
         "  Usage: \n    " ^ Sys.argv.(0) ^ " <file_name> [options] \n\n" in
     
+    let print_title msg = 
+        print_string "\n\t====\n";
+        print_string ("\t    " ^ msg ^ "\n");
+        print_string "\t=======================\n" in
+    
     (*  Print Usage *)
     if arg_n == 1 then
         begin
@@ -57,53 +62,42 @@ let main () =
         (* Read additional Args if any *)
         
         (* Print Pretokens *)
-        print_string "\n\t====\n";
-        print_string "\t  PreTokens\n";
-        print_string "\t=======================\n";
+        print_title "PreTokens";
         
         (* get pretokens*)
         let pretoks = prelex_file filename in
-        
         debug_pretokens_print_all pretoks;
         
         (* Print Sexp *)
-        print_string "\n\t====\n";
-        print_string "\t  Base Sexp\n";
-        print_string "\t=======================\n";
+        print_title "Base Sexp";
         
         (* get sexp/tokens *)
         let toks = lex default_stt pretoks in
-        
         debug_sexp_print_all toks;
         
         (* Print Node Sexp *)
-        print_string "\n\t====\n";
-        print_string "\t  Node Sexp\n";
-        print_string "\t=======================\n";
+        print_title "Node Sexp";
         
         (* get node sexp  *)
         let nodes = sexp_parse_all_to_list default_grammar toks (Some ";") in
-        
         debug_sexp_print_all nodes;
         
         (* Print pexp *)
-        print_string "\n\t====\n";
-        print_string "\t  Pexp\n";
-        print_string "\t=======================\n";
+        print_title "Pexp";
         
+        (* get pexp *)
         let pexps = pexp_parse_all nodes in
-        
         debug_pexp_print_all pexps;
         
         (* Print Lexp *)
-        print_string "\n\t====\n";
-        print_string "\t  Lexp\n";
-        print_string "\t=======================\n";
+        print_title "Lexp";
+       
+        (*let lexps = lexp_parse_all pexps in
+        debug_lexp_print_all lexps; *)
         
-        (** )
-        let lexps = lexp_parse_all pexps in
+        (* Eval *)
         
-        debug_lexp_print_all lexps; ( **)
+        
 
     end
 ;;
