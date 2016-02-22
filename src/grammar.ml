@@ -5,7 +5,7 @@
  *
  *      Copyright (C) 2011-2016  Free Software Foundation, Inc.
  *
- *   Author: Pierre Delaunay <pierre.delaunay@hec.ca>
+ *   Author: Stefan Monnier <monnier@iro.umontreal.ca>
  *   Keywords: languages, lisp, dependent types.
  *
  *   This file is part of Typer.

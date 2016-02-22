@@ -44,3 +44,12 @@ let string_implode chars = String.concat "" (List.map (String.make 1) chars)
 
 exception Internal_error of string
 let internal_error s = raise (Internal_error s)
+
+(* print debug info *)
+let print_loc (loc: location) = 
+    (*print_string loc.file; *) (* Printing the file is too much*)
+    print_string "ln "; 
+    Fmt.ralign_print_int loc.line 3;
+    print_string ", cl ";
+    Fmt.ralign_print_int loc.column 3;
+;;

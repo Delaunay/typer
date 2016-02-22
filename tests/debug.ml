@@ -38,15 +38,6 @@ open Prelexer
 open Lexer
 open Sexp
 open Pexp
- 
-(* print debug info *)
-let print_loc (loc : Util.location) = 
-    (*print_string loc.file; *) (* Printing the file is too much*)
-    print_string "ln "; 
-    Fmt.ralign_print_int loc.line 3;
-    print_string ", cl ";
-    Fmt.ralign_print_int loc.column 3;
-;;
 
 (* Print aPretokens *)
 let rec debug_pretokens_print pretoken =

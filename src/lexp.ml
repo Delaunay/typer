@@ -51,23 +51,24 @@ type builtin =
 
 type ltype = lexp
  and lexp =
-   | Imm of sexp                        (* Used for strings, ...  *)
-   | SortLevel of sort_level
-   | Sort of location * sort
-   | Builtin of builtin * string * ltype
-   | Var of vref
-   (* This "Let" allows recursion.  *)
-   | Let of location * (vdef * lexp * ltype) list * lexp
-   | Arrow of arg_kind * vdef option * ltype * location * lexp
-   | Lambda of arg_kind * vdef * ltype * lexp
-   | Call of lexp * (arg_kind * lexp) list (* Curried call.  *)
-   | Inductive of location * label * ((arg_kind * vdef * ltype) list)
-                  * ((arg_kind * ltype) list) SMap.t
-   | Cons of vref * symbol
-   | Case of location * lexp
+    | Imm of sexp                        (* Used for strings, ...  *)
+    | SortLevel of sort_level
+    | Sort of location * sort
+    | Builtin of builtin * string * ltype
+    | Var of vref
+    (* This "Let" allows recursion.  *)
+    | Let of location * (vdef * lexp * ltype) list * lexp
+    | Arrow of arg_kind * vdef option * ltype * location * lexp
+    | Lambda of arg_kind * vdef * ltype * lexp
+    | Call of lexp * (arg_kind * lexp) list (* Curried call.  *)
+    | Inductive of location * label * ((arg_kind * vdef * ltype) list)
+                            * ((arg_kind * ltype) list) SMap.t
+    | Cons of vref * symbol
+    | Case of location * lexp
              * ltype (* The base inductive type over which we switch.  *)
              * (location * (arg_kind * vdef) option list * lexp) SMap.t
              * lexp option               (* Default.  *)
+    | UnknownType (* This is easy to handle *)
  (*   | Susp of subst * lexp
   *   (\* For logical metavars, there's no substitution.  *\)
   *   | Metavar of (location * string) * metakind * metavar ref

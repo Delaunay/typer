@@ -60,7 +60,7 @@ let main () =
     
     for i = 0 to files_n - 1 do
         (* Check if file is a test => if it is run it *)
-        (if (Filename.check_suffix files.(i) "_test.byte") or
+        (if (Filename.check_suffix files.(i) "_test.byte") ||
             (Filename.check_suffix files.(i) "_test.native") then 
         begin
             

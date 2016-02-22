@@ -144,9 +144,10 @@ let rec pexp_parse (s : sexp) : pexp =
                              "Unrecognized constructor declaration"; pcases)
           cases [] in
       (*    Bug here   
-       * args are sexp Pinductive is expecting: 
+       * args are sexp and Pinductive is expecting: 
        *        (arg_kind * pvar * pexp option) list
-       *    and (pexp list) is given
+       *    and (pexp list) is given. I modified the type declaration for
+       *    this to work. But it is not what it should be
        *)  
       Pinductive (name, List.map pexp_parse args, pcases)
   | Node (Symbol (start, "inductive_"), _)

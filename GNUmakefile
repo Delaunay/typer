@@ -9,16 +9,16 @@ endif
 all: typer debug tests
 
 typer: 
-	ocamlbuild src/main.byte
+	ocamlbuild src/main.byte -cflag -rectypes
 	mv _build/src/main.byte _build/typer # move and rename executable
 
 debug: 
-	ocamlbuild tests/full_debug.native -I src
+	ocamlbuild tests/full_debug.native -I src -cflag -rectypes
 	mv _build/tests/full_debug.native _build/full_debug
 
 tests: 
 	# Build tests
-	$(foreach test, $(TEST_FILES), ocamlbuild $(subst ./,,$(subst .ml,.byte,$(test))) -I src;)
+	$(foreach test, $(TEST_FILES), ocamlbuild $(subst ./,,$(subst .ml,.native,$(test))) -I src -cflag -rectypes;)
 
 	# Run tests
 	ocamlbuild tests/utest_main.native
