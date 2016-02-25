@@ -158,6 +158,7 @@ let debug_lexp_print lxp =
         | Let(loc, _, _)    -> print_info "Let         " loc lxp
         | Arrow(_, _, _, loc, _)    -> print_info "Arrow       " loc lxp
         | Lambda(_, (loc, _), _, _) -> print_info "Lambda      " loc lxp
+        | Call(_, _)        -> print_info "Call        " dummy_location lxp
         | UnknownType(loc)  -> print_info "UnknownType " loc lxp
         | _ -> print_string "Nothing";
 ;;

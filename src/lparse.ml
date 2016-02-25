@@ -69,10 +69,10 @@ let rec lexp_parse (p: pexp) (ctx: lexp_context): (lexp * lexp_context) =
         (*  Symbol i.e identifier *)
         | Pvar (loc, name) -> 
             let idx = get_var_index name ctx in
-           (* This should be an error but we currently accept it for debugging *)
-           if idx <= 0 then
+            (* This should be an error but we currently accept it for debugging *)
+            if idx <= 0 then
                 msg_warning ("Variable: '" ^ name ^ "' does not exist") tloc;
-           (make_var name idx loc), ctx; 
+            (make_var name idx loc), ctx; 
         
         (*  Let, Variable declaration + local scope *)
         | Plet(loc, decls, body) ->         (* /!\ HERE *)    
@@ -80,7 +80,7 @@ let rec lexp_parse (p: pexp) (ctx: lexp_context): (lexp * lexp_context) =
             let bdy, new_ctx = lexp_parse body nctx in
             Let(tloc, decl, bdy), nctx
             
-        (* Parse Type and expression *)
+        (* ->/=> *)
         | Parrow (kind, Some var, tp, loc, expr) ->
             let nvar = pvar_to_vdef var in  (* /!\ HERE *)
             let ltyp, ctx = lexp_parse tp ctx in
@@ -92,6 +92,7 @@ let rec lexp_parse (p: pexp) (ctx: lexp_context): (lexp * lexp_context) =
             let lxp, ctx = lexp_parse expr ctx in
             Arrow(kind, None, ltyp, tloc, lxp), ctx
             
+        (*  *)
         | Plambda (kind, var, Some ptype, body) ->
             let nvar = pvar_to_vdef var in  (* /!\ HERE *)
             let ltyp, ctx = lexp_parse ptype ctx in
@@ -102,6 +103,11 @@ let rec lexp_parse (p: pexp) (ctx: lexp_context): (lexp * lexp_context) =
             let nvar = pvar_to_vdef var in  (* /!\ HERE *)
             let lbody, ctx = lexp_parse body ctx in
             Lambda(kind, nvar, UnknownType(tloc), lbody), ctx (* /!\ Missing Type *)
+            
+        (* Function Call *)
+        | Pcall (fname, args) ->
+            let fname, ctx = lexp_parse fname ctx in
+            Call(fname, (Aexplicit, UnknownType(tloc))::[]), ctx
             
         | _ 
             -> UnknownType(tloc), ctx
@@ -138,6 +144,7 @@ and lexp_parse_let decls ctx =
                         let new_decl = ((loc, name), new_inst, UnknownType(loc)) in
                         let new_map = SMap.add name new_decl merged in
                         (loop tl new_map nctx) end in
+                        
     (* use the function *)
     loop decls SMap.empty ctx
 ;;
@@ -162,6 +169,10 @@ let rec lexp_print exp =
         | Lambda(kind, (loc, name), ltype, lbody) ->
             print_string "lambda ("; print_string (name ^ ": "); 
             lexp_print ltype; print_string ") -> "; lexp_print lbody;
+            
+        | Call(fname, args) ->
+            print_string "("; lexp_print fname; (* /!\ Partial Print *)
+            print_string ")";
 
         (* debug catch all *)
         | UnknownType (loc)      -> print_string "unkwn";
@@ -170,133 +181,11 @@ let rec lexp_print exp =
 and lexp_print_decls decls = 
     List.iter (fun g -> match g with
         | ((loc, name), expr, ltyp) ->
-            print_string (name ^ ": "); lexp_print ltyp;
-            print_string " = "; lexp_print expr; print_string "; ")
+            print_string (name ^  ": "); lexp_print ltyp; print_string "; ";
+            print_string (name ^ " = "); lexp_print expr; print_string "; ")
         decls
 ;;
             
-    
-
-        
-       (* 
-        | Plet (loc, decl, body)      
-            ->  let (decls, letctx) = parse_decls decl (add_scope ctx) in
-                let (lbody, _) = lexp_parse body letctx in
-                Let(tloc, decls, lbody), ctx
-            
-        (*  Function Types *)
-        | Parrow (kind, _, type1, loc, type2) 
-            -> Arrow(kind, var, type1, tloc, type2), ctx
-            
-        (* *)
-        | Plambda (kind , var, args, body)
-            -> Lambda(Kind, vdef, ltype, body), ctx
-            
-        (* Function Call *)
-        | Pcall (fname, args)
-            -> Call(lex_parse fname ctx, parse_args args), ctx
-            
-        | Pinductive (label, args, ctors)
-            -> Inductive(tloc, label, args, ctors_map), ctx
-            
-        | Pcons (name, sym)
-            -> let new_ctx = add_variable name ctx in
-               Cons(make_var name 0 tloc, sym), new_ctx
-            
-        (* Case Force default case to throw an error ? *)
-        | Pcase (loc, target, patterns)
-            -> Case(loc, lexp_parse target, ttype, patterns_map, def), ctx
-            
-        (* Default *)
-        | _ -> internal_error "Forbidden Pexp"
-        (*
-            | Phastype (l,_,_) -> l
-            | Pmetavar (l, _) -> l
-         *)
-         
-(*
- *  DeBruijn indices for variables
- *      All new variable are named v0
- 
-  Example:
-      b = 2;
-      d = 3;
-
-      let a = b, c = d in
-          let g = a + c
-
-  Example:
-      b = 2;
-      d = 3;
-
-      let (a, c): a = v4, c = v3 in
-          let (g): g = v3 + v2
-          
- *  Order Matters
- *
- *)
- 
- (*                       name   expr  type? 
- * - Plet of location * (pvar * pexp * bool) list * pexp
- *                              TO
- *  - Let of location * (vdef * lexp * ltype) list * lexp 
- *
- *  First we combine definition, then we determine debruijn indexing 
- *  because we need to know the number of parameter the let holds 
- 
-let a::Nat,
-    a = b in
-
- *)
- 
-and parse_let loc decls body ctx =
-    Let(loc, (Vdef(dummy_location, "??"), UnkownType , UnkownType), (UnkownType))
-    
-    (*
-    (*  1. We merge declaration and type info *)
-    let merge declist = (* ((str, loc, pexp, pexp), list) *)
-        let first = List.hd decls in
-        let sec = List.hd (List.hd decls) in
-        
-        match (first, sec) with
-            | ((Pvar(loc, name1), type_info, true), 
-               (Pvar(loc, name2), inst, false)) 
-                ->  if name1 == name2 then
-                        ((name1, loc, inst, Some type_info),
-                         (List.tl (List.tl decls)), new_ctx)
-                    else
-                        ((name1, loc, inst, None), (List.tl decls))
-                        
-            | ((Pvar(loc, name1), inst, false), _)    
-                -> ((name1, loc, inst, None), (List.tl decls)) in
-        
-    (*  2. make Plet decl *)
-    let make_decl decls ctx = 
-        let dec, declist = merge decls in
-            match dec with
-                | (name, loc, inst, None) 
-                    -> let nctx = (add_variable ctx) in
-                       (Vdef(loc, name), 
-                          lexp_parse inst nctx, UnkownType), declist, nctx
-                
-                | (name, loc, inst, Some tp) 
-                    ->  let nctx = (add_variable ctx) in
-                        (Vdef(loc, name), 
-                          lexp_parse inst nctx, lexp_parse tp), declist, nctx in
-                        
-    (*  3. make let *)
-    let make_let decls body ctx = 
-        let decl, declist, new_ctx = make_decl decls, ctx in
-            match declist with
-                | [] -> Let(loc, decl, body)
-                | _ -> Let(loc, decl, parse_let loc declist body new_ctx) in
-                
-    make_let decls body ctx*)
-        
-and parse_args (args) = 
-    (Aexplicit, UnkownType)
-;;*)
-
 let lexp_parse_all (p: pexp list) (ctx: lexp_context): 
                                         (lexp list * lexp_context) =
     let rec loop (plst: pexp list) ctx (acc: lexp list) = 
