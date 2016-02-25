@@ -4,24 +4,34 @@ ab;
 lambda (a : Type) => lambda x : a -> x;
 
 % How typer is supposed to read this
-% int:p -> int;
+p:int -> int;
 
+% this is a call to _=_
 odd  n = case n | 0 => false | S n' => even (n');
 
-let Nat:a; Nat:b;
+let a:Nat; b:Nat;
     a = b;
     b = a; 
   in a + b
 ;
     
-let odd: int -> int;
-    even: int -> int;
+let odd: (int -> int);
+    even: (int -> int);
   in a + b
 ;
 
-let odd: int -> int;
-    even: int -> int;
+odd n; % this is a call to odd
+
+% For some reason the (decls list) in Plet is empty
+let odd: (int -> int);
+    even: (int -> int);
     odd  n = case n | 0 => false | S n' => even (n');
     even n = case n | 0 => true | S n' => odd (n');
   in a + b;
+  
+
+% Do I consider functions as variable ?? Yes
+
+  
+  
     

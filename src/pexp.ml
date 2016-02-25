@@ -248,15 +248,15 @@ and pexp_decls e =
     -> List.concat (List.map pexp_decls decls)
   | Node (Symbol (_, "_:_"), [Symbol s; t]) -> [(s, pexp_parse t, true)]
   | Node (Symbol (_, "_=_"), [Symbol s; t]) -> [(s, pexp_parse t, false)]
-  (* | Node (Symbol (_, "_=_"), [Node (Symbol s, args); t]) ->
-   *   let rec mkfun args =
-   *     match args with
-   *     | [] -> pexp_parse t
-   *     | (Symbol s :: args) -> Plambda (s, None, mkfun args)
-   *     | (arg :: args) -> msg_error (sexp_location arg)
-   *                                 "Unknown argument format";
-   *                       mkfun args
-   *   in [(s, mkfun args, false)] *)
+  | Node (Symbol (_, "_=_"), [Node (Symbol s, args); t]) ->
+      let rec mkfun args =
+        match args with
+        | [] -> pexp_parse t  (* Plambda of arg_kind * pvar * pexp option * pexp *)
+        | (Symbol s :: args) -> Plambda(Aexplicit, s, None, mkfun args)
+        | (arg :: args) -> msg_error (sexp_location arg)
+                                    "Unknown argument format";
+                          mkfun args
+      in [(s, mkfun args, false)] 
   | _ -> msg_error (sexp_location e) ("Unknown declaration"); []
 
 and pexp_unparse (e : pexp) : sexp =

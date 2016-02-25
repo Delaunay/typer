@@ -66,7 +66,7 @@ let rec lexp_parse (p: pexp) (ctx: lexp_context): (lexp * lexp_context) =
         (*  Block/String/Integer/Float *)
         | Pimm value -> Imm(value), ctx
             
-        (*  Symbol i.e identifier *)
+        (*  Symbol i.e identifier /!\ A lot of Pvar are not variables /!\ *)
         | Pvar (loc, name) -> 
             let idx = get_var_index name ctx in
             (* This should be an error but we currently accept it for debugging *)
@@ -119,6 +119,7 @@ and lexp_parse_let decls ctx =
     let rec loop (decls: (pvar * pexp * bool) list) (merged: declarations) ctx: 
                 ((vdef * lexp * ltype) list * lexp_context) =
                 
+        print_int (List.length decls); print_string "\n";
         match decls with
             | [] -> (SMap.fold (fun k d acc -> d::acc) merged []), ctx
             | hd::tl ->
@@ -134,7 +135,9 @@ and lexp_parse_let decls ctx =
                         let new_map = (SMap.add name new_decl merged) in
                         (loop tl new_map nctx) end
                     
+                (* if we declared a function *)
                 | ((loc, name), inst, false) -> begin
+                    
                     let new_inst, nctx = lexp_parse inst ctx in
                     try
                         let (vd, inst, ltyp) = SMap.find name merged in
@@ -170,9 +173,19 @@ let rec lexp_print exp =
             print_string "lambda ("; print_string (name ^ ": "); 
             lexp_print ltype; print_string ") -> "; lexp_print lbody;
             
-        | Call(fname, args) ->
-            print_string "("; lexp_print fname; (* /!\ Partial Print *)
-            print_string ")";
+        | Call(fname, args) -> begin  (*  /!\ Partial Print *)
+            let str = match fname with
+                | Var((_, name), _) -> name
+                | _ -> "unkwn" in
+            match str with
+                (* Special Operator *)
+                | "_=_" -> print_string ("(lhs" ^ " = " ^ "rhs)")
+                | "_+_" -> print_string ("(lhs" ^ " + " ^ "rhs)")
+                | "_-_" -> print_string ("(lhs" ^ " - " ^ "rhs)")
+                | "_/_" -> print_string ("(lhs" ^ " / " ^ "rhs)")
+                | "_*_" -> print_string ("(lhs" ^ " * " ^ "rhs)")
+                (* not an operator *)
+                | _ -> print_string ("(" ^ str ^ ")") end
 
         (* debug catch all *)
         | UnknownType (loc)      -> print_string "unkwn";

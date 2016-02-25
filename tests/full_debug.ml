@@ -94,13 +94,12 @@ let main () =
         (* Print Lexp *)
         print_title "Lexp";
        
-        (*let lexps = lexp_parse_all pexps in
-        debug_lexp_print_all lexps; *)
-        
-        (* Eval *)
         let ctx = make_context in
         let lexps, new_ctx = lexp_parse_all pexps ctx in
         debug_lexp_print_all lexps;
+        
+        (* Eval Each Expression *)
+        
     
     end
 ;;
