@@ -25,6 +25,7 @@ open Lexer
 open Sexp
 open Pexp
 open Myers
+open Grammar
 (* open Unify *)
 
 (*************** DeBruijn indices for variables *********************)
@@ -49,6 +50,7 @@ type builtin =
   | EqType
   | LevelType
 
+
 type ltype = lexp
  and lexp =
     | Imm of sexp                        (* Used for strings, ...  *)
@@ -68,7 +70,7 @@ type ltype = lexp
              * ltype (* The base inductive type over which we switch.  *)
              * (location * (arg_kind * vdef) option list * lexp) SMap.t
              * lexp option               (* Default.  *)
-    | UnknownType (* This is easy to handle *)
+    | UnknownType of location (* This is easy to handle *)
  (*   | Susp of subst * lexp
   *   (\* For logical metavars, there's no substitution.  *\)
   *   | Metavar of (location * string) * metakind * metavar ref
@@ -462,6 +464,7 @@ let conv_erase = true              (* If true, conv ignores erased terms. *)
  *                              decls1 decls2
  *     | (_, _) -> false *)
 
+(*
 (* In non-recursion calls, `s' is always empty.  *)
 let lexp_conv_p env = lexp_conv_p env VMap.empty
     
@@ -605,5 +608,6 @@ let lexp_print e = sexp_print (pexp_unparse (lexp_unparse e))
  *                   | _ -> msg_error l "Uninstantiated metavar of unknown type";
  *                         mk_meta_dummy env l *)
 
-let rec lexp_parse (p : pexp) (env : (vdef * lexp option * ltype) myers) =
-    
+(*
+let rec lexp_parse (p : pexp) (env : (vdef * lexp option * ltype) myers) = *)
+*)

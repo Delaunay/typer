@@ -1,0 +1,12 @@
+ab;
+
+lambda (a : Type) => lambda x : a -> x;
+
+int:p -> int;
+
+let odd: int -> int;
+    even: int -> int;
+    odd  = n = case n | 0 => false | S n' => even (n');
+    even = n = case n | 0 => true | S n' => odd (n');
+  in a + b
+    

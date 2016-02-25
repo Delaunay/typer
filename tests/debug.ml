@@ -38,6 +38,8 @@ open Prelexer
 open Lexer
 open Sexp
 open Pexp
+open Lexp
+open Lparse
 
 (* Print aPretokens *)
 let rec debug_pretokens_print pretoken =
@@ -143,7 +145,30 @@ let debug_pexp_print_all pexps =
 ;;
 
 (* Print lexp with debug info *)
+let debug_lexp_print lxp = 
+    print_string " ";
+    let print_info msg loc expr= 
+        print_string msg; print_string "["; 
+        print_loc loc; 
+        print_string "]\t";
+        lexp_print lxp in
+    match lxp with
+        | Var((loc, _), _)  -> print_info "Var         " loc lxp
+        | Imm(s)            -> print_info "Imm         " dummy_location lxp
+        | Let(loc, _, _)    -> print_info "Let         " loc lxp
+        | Arrow(_, _, _, loc, _)    -> print_info "Arrow       " loc lxp
+        | Lambda(_, (loc, _), _, _) -> print_info "Lambda      " loc lxp
+        | UnknownType(loc)  -> print_info "UnknownType " loc lxp
+        | _ -> print_string "Nothing";
+;;
 
 (* Print a list of lexp *)
+let debug_lexp_print_all lexps =
+    List.iter 
+        (fun px -> 
+            debug_lexp_print px; 
+            print_string "\n") 
+        lexps
+;;
 
 

@@ -1,7 +1,7 @@
 RM=rm -f
 
 TEST_FILES := $(wildcard ./tests/*_test.ml)
-# This is for windows
+# This is for windows: Make windows version is old
 ifeq ($(OS),Windows_NT)
 SHELL=C:/Windows/System32/cmd.exe
 endif

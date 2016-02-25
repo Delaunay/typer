@@ -36,6 +36,8 @@ open Lexer
 open Sexp
 open Grammar
 open Pexp
+open Debruijn
+open Lparse
 
 
 let main () = 
@@ -96,9 +98,10 @@ let main () =
         debug_lexp_print_all lexps; *)
         
         (* Eval *)
-        
-        
-
+        let ctx = make_context in
+        let lexps, new_ctx = lexp_parse_all pexps ctx in
+        debug_lexp_print_all lexps;
+    
     end
 ;;
 

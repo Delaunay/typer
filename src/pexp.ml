@@ -26,6 +26,8 @@ open Sexp
 (*************** The Pexp Parser *********************)
 
 type arg_kind = Aexplicit | Aimplicit | Aerasable (* eraseable ⇒ implicit.  *)
+
+(*  This is Dangerously misleading since pvar is NOT pexp but Pvar is *)
 type pvar = symbol
 (* type sort = Type | Ext *)
 (* type tag = string *)
@@ -126,7 +128,6 @@ let rec pexp_parse (s : sexp) : pexp =
   | Node (Symbol (start, "lambda_"), _)
     -> msg_error start "Unrecognized lambda expression"; Pmetavar (start, "_")
   (* inductive type *)
-
   | Node (Symbol (start, "inductive_"), t :: cases)
     -> let (name, args) = match t with
         | Node (Symbol s, args) -> (s, args)    (* This a constructor *)
@@ -142,14 +143,8 @@ let rec pexp_parse (s : sexp) : pexp =
                -> (s, List.map pexp_p_ind_arg cases)::pcases
              | _ -> msg_error (sexp_location case)
                              "Unrecognized constructor declaration"; pcases)
-          cases [] in
-      (*    Bug here   
-       * args are sexp and Pinductive is expecting: 
-       *        (arg_kind * pvar * pexp option) list
-       *    and (pexp list) is given. I modified the type declaration for
-       *    this to work. But it is not what it should be
-       *)  
-      Pinductive (name, List.map pexp_parse args, pcases)
+          cases [] in 
+      Pinductive (name, pexp_inductive_args args, pcases)
   | Node (Symbol (start, "inductive_"), _)
     -> msg_error start "Unrecognized inductive type"; Pmetavar (start, "_")
   (* constructor *)
@@ -174,6 +169,15 @@ let rec pexp_parse (s : sexp) : pexp =
   | Node (f, []) -> pexp_parse f
   | Node (f, args) -> Pcall (pexp_parse f, args)
 
+(*    Bug here   
+ * args are sexp and Pinductive is expecting: 
+ *        (arg_kind * pvar * pexp option) list
+ *    and (pexp list) is given. I modified the type declaration for
+ *    this to work. But it is not what it should be 
+ *  Turn a (sexp) list into (arg_kind * pvar * pexp option) list *)  
+and pexp_inductive_args sexp = 
+    List.map pexp_parse sexp
+  
 and pexp_p_id (x : location * string) : (location * string) option =
   match x with
   | (_, "_") -> None

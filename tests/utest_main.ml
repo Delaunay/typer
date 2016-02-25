@@ -32,7 +32,7 @@
  
  
 let cut_name str =
-    String.sub str 0 (String.length str - 10)
+    String.sub str 0 (String.length str - 12)
 ;;
  
 (* search *_test.byte executable en run them 

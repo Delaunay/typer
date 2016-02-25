@@ -39,7 +39,7 @@
  * ---------------------------------------------------------------------------*)
 
 open Util
- 
+
 let msg_warning msg loc =
     print_string "/!\\ [";  print_loc loc; print_string "]\t";
     print_string (msg ^ "\n")
@@ -50,7 +50,7 @@ let msg_warning msg loc =
 
 (* This exist because I don't want that file to depend on anything *)
 module StringMap
-  = Map.Make (struct type t = string let compare = String.compare end)
+    = Map.Make (struct type t = string let compare = String.compare end)
 ;;
 
 (*  Map matching variable name and its distance in the current scope *)        
