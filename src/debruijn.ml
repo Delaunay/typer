@@ -40,10 +40,8 @@
 
 open Util
 
-let msg_warning msg loc =
-    print_string "/!\\ [";  print_loc loc; print_string "]\t";
-    print_string (msg ^ "\n")
-;;
+let debruijn_error = msg_error "DEBRUIJN"
+let debruijn_warning = msg_warning "DEBRUIJN"
 
 (*  Type definitions
  * ---------------------------------- *)
@@ -140,11 +138,11 @@ let add_variable name loc ctx =
     (*  I think this should be illegal *)
     let local_index = find_local name ctx in
     if  local_index >= 0 then  (* This is the index not the number of element *)
-        msg_warning ("Variable Redefinition: " ^ name) loc;
+        debruijn_warning loc ("Variable Redefinition: " ^ name);
         
     let outer_index = _find_outer name ctx in
     if  outer_index >= 0 then
-        msg_warning ("Variable Shadowing: " ^ name) loc;
+        debruijn_warning loc ("Variable Shadowing: " ^ name);
 
     (*  Increase distance *)
     let scope = StringMap.map (fun value -> value + 1) (_get_inner_scope ctx) in

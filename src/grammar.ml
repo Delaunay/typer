@@ -48,40 +48,40 @@ let default_stt =
      stt.(Char.code ')') <- true;
      stt
      
-let default_grammar : grammar
-  = List.fold_left (fun g (n, ll, rl) -> SMap.add n (ll, rl) g)
-                   SMap.empty
-                   [("^", Some 171, Some 159);
-                    ("/", Some 148, Some 160);
-                    ("-", Some 92, Some 110);
-                    ("+", Some 93, Some 111);
-                    ("!=", Some 94, Some 75);
-                    (">=", Some 95, Some 76);
-                    ("<=", Some 96, Some 77);
-                    (">", Some 97, Some 78);
-                    ("<", Some 98, Some 79);
-                    ("&&", Some 64, Some 81);
-                    ("||", Some 39, Some 51);
-                    (",", Some 26, Some 26);
-                    ("then", Some 1, Some 0);
-                    ("=", Some 99, Some 80);
-                    ("type", None, Some 27);
-                    (";", Some 15, Some 15);
-                    ("*", Some 137, Some 137);
-                    (":", Some 173, Some 115);
-                    ("]", Some 3, None);
-                    ("->", Some 126, Some 114);
-                    ("=>", Some 126, Some 113);
-                    ("=>", Some 126, Some 112);
-                    ("in", Some 2, Some 53);
-                    ("else", Some 0, Some 52);
-                    ("|", Some 40, Some 40);
-                    (")", Some 4, None);
-                    ("[", None, Some 3);
-                    ("case", None, Some 28);
-                    ("lambda", None, Some 126);
-                    ("letrec", None, Some 2);
-                    ("let", None, Some 2);
-                    ("if", None, Some 1);
-                    ("(", None, Some 4);
-                   ]
+let default_grammar : grammar =
+    List.fold_left (fun g (n, ll, rl) -> SMap.add n (ll, rl) g)
+        SMap.empty
+        [("^", Some 171, Some 159);
+        ("/", Some 148, Some 160);
+        ("-", Some 92, Some 110);
+        ("+", Some 93, Some 111);
+        ("!=", Some 94, Some 75);
+        (">=", Some 95, Some 76);
+        ("<=", Some 96, Some 77);
+        (">", Some 97, Some 78);
+        ("<", Some 98, Some 79);
+        ("&&", Some 64, Some 81);
+        ("||", Some 39, Some 51);
+        (",", Some 26, Some 26);
+        ("then", Some 1, Some 0);
+        ("=", Some 99, Some 80);
+        ("type", None, Some 27);
+        (";", Some 15, Some 15);
+        ("*", Some 137, Some 137);
+        (":", Some 173, Some 115);
+        ("]", Some 3, None);
+        ("->", Some 126, Some 114);
+        ("=>", Some 126, Some 113);
+        ("=>", Some 126, Some 112);
+        ("in", Some 2, Some 53);
+        ("else", Some 0, Some 52);
+        ("|", Some 40, Some 40);
+        (")", Some 4, None);
+        ("[", None, Some 3);
+        ("case", None, Some 28);
+        ("lambda", None, Some 126);
+        ("letrec", None, Some 2);
+        ("let", None, Some 2);
+        ("if", None, Some 1);
+        ("(", None, Some 4);
+        ]

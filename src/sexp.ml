@@ -33,6 +33,8 @@ open Util
 open Prelexer
 open Grammar
 
+let sexp_error = msg_error "SEXP"
+
 type integer = (* Num.num  *) int
 type symbol = location * string
 
@@ -154,7 +156,7 @@ let rec sexp_parse (g : grammar) (rest : sexp list)
             * It might simply be a postfix symbol that binds very tightly.
             * We currently signal an error because it's more common for
             * it to be a closer with missing opener.  *)
-           -> msg_error l ("Lonely postfix/closer \""^name^"\"");
+           -> sexp_error l ("Lonely postfix/closer \""^name^"\"");
              sexp_parse rest' level op largs
                         [mk_node [(l,name);(l,"")] [] rargs true]
          | (Some ll, Some rl) when ll > level

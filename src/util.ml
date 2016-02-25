@@ -27,24 +27,6 @@ let dummy_location = {file=""; line=0; column=0}
 
 type bottom = | B_o_t_t_o_m_ of bottom
 
-let msg_message kind location msg =
-  prerr_string location.file;
-  prerr_char ':';
-  prerr_int location.line;
-  prerr_char ':';
-  prerr_int location.column;
-  prerr_string (":"^kind^": ");
-  prerr_string msg;
-  prerr_newline ()
-
-let msg_error = msg_message "Error"
-let msg_info = msg_message "Info"
-
-let string_implode chars = String.concat "" (List.map (String.make 1) chars)
-
-exception Internal_error of string
-let internal_error s = raise (Internal_error s)
-
 (* print debug info *)
 let print_loc (loc: location) = 
     (*print_string loc.file; *) (* Printing the file is too much*)
@@ -53,3 +35,33 @@ let print_loc (loc: location) =
     print_string ", cl ";
     Fmt.ralign_print_int loc.column 3;
 ;;
+
+(* print debug info *)
+let prerr_loc (loc: location) = 
+    (*print_string loc.file; *) (* Printing the file is too much*)
+    prerr_string "ln "; 
+    Fmt.ralign_prerr_int loc.line 3;
+    prerr_string ", cl ";
+    Fmt.ralign_prerr_int loc.column 3;
+;;
+
+(*  File is not printed because currently we parse only one file... *)
+(*  Section is the name of the compilation step for debugging       *)
+(*  'prerr' out_channel is ugly                                     *)
+let msg_message kind section (loc: location) msg =
+  print_string " ["; print_loc loc; print_string "]    ";
+  print_string section;
+  print_string ("   " ^ kind);
+  print_string msg;
+  print_newline ()
+  
+let msg_error = msg_message "[!] Error    "
+let msg_info = msg_message "[?] Info     "
+let msg_warning = msg_message "/!\\ Warning  "
+
+let string_implode chars = String.concat "" (List.map (String.make 1) chars)
+
+exception Internal_error of string
+let internal_error s = raise (Internal_error s)
+
+

@@ -62,41 +62,31 @@ let main () =
         let filename = Sys.argv.(1) in
         
         (* Read additional Args if any *)
-        
-        (* Print Pretokens *)
-        print_title "PreTokens";
-        
+
         (* get pretokens*)
         let pretoks = prelex_file filename in
-        debug_pretokens_print_all pretoks;
-        
-        (* Print Sexp *)
-        print_title "Base Sexp";
         
         (* get sexp/tokens *)
         let toks = lex default_stt pretoks in
-        debug_sexp_print_all toks;
-        
-        (* Print Node Sexp *)
-        print_title "Node Sexp";
         
         (* get node sexp  *)
         let nodes = sexp_parse_all_to_list default_grammar toks (Some ";") in
-        debug_sexp_print_all nodes;
-        
-        (* Print pexp *)
-        print_title "Pexp";
-        
+
         (* get pexp *)
         let pexps = pexp_parse_all nodes in
-        debug_pexp_print_all pexps;
-        
-        (* Print Lexp *)
-        print_title "Lexp";
-       
+
+        (* get lexp *)
         let ctx = make_context in
         let lexps, new_ctx = lexp_parse_all pexps ctx in
-        debug_lexp_print_all lexps;
+        
+
+        (* Printing *)(*
+        print_title "PreTokens";    debug_pretokens_print_all pretoks;
+        print_title "Base Sexp";    debug_sexp_print_all toks;  *)
+        print_title "Node Sexp";    debug_sexp_print_all nodes;
+        print_title "Pexp";         debug_pexp_print_all pexps;
+        print_title "Lexp";         debug_lexp_print_all lexps;
+        
         
         (* Eval Each Expression *)
         

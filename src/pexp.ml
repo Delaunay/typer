@@ -23,6 +23,8 @@ this program.  If not, see <http://www.gnu.org/licenses/>.  *)
 open Util
 open Sexp
 
+let pexp_error = msg_error "PEXP"
+
 (*************** The Pexp Parser *********************)
 
 type arg_kind = Aexplicit | Aimplicit | Aerasable (* eraseable ⇒ implicit.  *)
@@ -97,7 +99,7 @@ let rec pexp_parse (s : sexp) : pexp =
   | Node (Symbol (start, "let_in_"), [decls; body])
     -> Plet (start, pexp_decls decls, pexp_parse body)
   | Node (Symbol (start, ("let_in_" | "let" | "let_")), _)
-    -> msg_error start "Unrecognized let expression"; Pmetavar (start, "_")
+    -> pexp_error start "Unrecognized let expression"; Pmetavar (start, "_")
   (* arrow *)
   | Node (Symbol (start, (("_->_" | "_=>_" | "_≡>_") as arw)), [t1; t2])
     -> let kind = (match arw with
@@ -107,7 +109,7 @@ let rec pexp_parse (s : sexp) : pexp =
          -> Parrow (kind, Some v, pexp_parse t1, start, pexp_parse t2)
        | _ -> Parrow (kind, None, pexp_parse t1, start, pexp_parse t2))
   | Node (Symbol (start, ("_->_" | "_=>_" | "_≡>_")), _)
-    -> msg_error start "Unrecognized arrow expression"; Pmetavar (start, "_")
+    -> pexp_error start "Unrecognized arrow expression"; Pmetavar (start, "_")
   (* lambda *)
   | Node (Symbol (start,(("lambda_->_" | "lambda_=>_" | "lambda_≡>_") as arw)),
           [arg; body])
@@ -120,19 +122,19 @@ let rec pexp_parse (s : sexp) : pexp =
              | Symbol v -> (v, None)
              | Node (Symbol (_, "_:_"), [Symbol v; t])
                -> (v, Some (pexp_parse t))
-             | _ -> msg_error start "Unrecognized lambda argument";
+             | _ -> pexp_error start "Unrecognized lambda argument";
                    ((dummy_location, "unrecognized_arg"), None)
            in Plambda (kind, v, t, pbody))
         (sexp_p_list arg ["_:_"])
         (pexp_parse body)
   | Node (Symbol (start, "lambda_"), _)
-    -> msg_error start "Unrecognized lambda expression"; Pmetavar (start, "_")
+    -> pexp_error start "Unrecognized lambda expression"; Pmetavar (start, "_")
   (* inductive type *)
   | Node (Symbol (start, "inductive_"), t :: cases)
     -> let (name, args) = match t with
         | Node (Symbol s, args) -> (s, args)    (* This a constructor *)
         | Symbol s -> (s, [])                   (* This is a Label    *)
-        | _ -> msg_error start "Unrecognized inductive type name";
+        | _ -> pexp_error start "Unrecognized inductive type name";
               ((dummy_location, ""), []) in
       let pcases =
         List.fold_right
@@ -141,17 +143,17 @@ let rec pexp_parse (s : sexp) : pexp =
              (* read Constructor name + args => Type ((Symbol * args) list) *)
              | Node (Symbol s, cases)   
                -> (s, List.map pexp_p_ind_arg cases)::pcases
-             | _ -> msg_error (sexp_location case)
+             | _ -> pexp_error (sexp_location case)
                              "Unrecognized constructor declaration"; pcases)
           cases [] in 
       Pinductive (name, pexp_inductive_args args, pcases)
   | Node (Symbol (start, "inductive_"), _)
-    -> msg_error start "Unrecognized inductive type"; Pmetavar (start, "_")
+    -> pexp_error start "Unrecognized inductive type"; Pmetavar (start, "_")
   (* constructor *)
   | Node (Symbol (start, "inductive-cons"), [Symbol tname; Symbol tag])
     -> Pcons (tname, tag)
   | Node (Symbol (start, "cons_"), _)
-    -> msg_error start "Unrecognized constructor call"; Pmetavar (start, "_")
+    -> pexp_error start "Unrecognized constructor call"; Pmetavar (start, "_")
   (* cases analysis *)
   | Node (Symbol (start, "case_"),
           [Node (Symbol (_, "_|_"), e :: cases)])
@@ -159,12 +161,12 @@ let rec pexp_parse (s : sexp) : pexp =
         | Node (Symbol (_, "_=>_"), [pat; code])
           -> (pexp_p_pat pat, pexp_parse code)
         | _ -> let l = (sexp_location branch) in
-              msg_error l "Unrecognized simple case branch";
+              pexp_error l "Unrecognized simple case branch";
               (Ppatany l, Pmetavar (l, "_"))
       in Pcase (start, pexp_parse e, List.map parse_case cases)
   | Node (Symbol (start, "case_"), [e]) -> Pcase (start, pexp_parse e, [])
   | Node (Symbol (start, "case_"), _)
-    -> msg_error start "Unrecognized case expression"; Pmetavar (start, "_")
+    -> pexp_error start "Unrecognized case expression"; Pmetavar (start, "_")
   (* | Node (Symbol (_, "(_)"), [e]) -> pexp_parse e *)
   | Node (f, []) -> pexp_parse f
   | Node (f, args) -> Pcall (pexp_parse f, args)
@@ -215,7 +217,7 @@ and pexp_p_pat_arg (s : sexp) = match s with
   | Node (Symbol (_, "_:≡_"), [Symbol f; Symbol s])
     -> (Some (Aerasable, f), Ppatvar s)
   | _ -> let loc = sexp_location s in
-        msg_error loc "Unknown pattern arg";
+        pexp_error loc "Unknown pattern arg";
         (None, Ppatany loc)
 
 and pexp_u_pat_arg (arg : (arg_kind * symbol) option * ppat) : sexp =
@@ -234,7 +236,7 @@ and pexp_p_pat (s : sexp) : ppat = match s with
   | Node (Symbol c, args)
     -> Ppatcons (c, List.map pexp_p_pat_arg args)
   | _ -> let l = sexp_location s in
-        msg_error l "Unknown pattern"; Ppatany l
+        pexp_error l "Unknown pattern"; Ppatany l
 
 and pexp_u_pat (p : ppat) : sexp = match p with
   | Ppatany l -> Symbol (l, "_")
@@ -253,11 +255,11 @@ and pexp_decls e =
         match args with
         | [] -> pexp_parse t  (* Plambda of arg_kind * pvar * pexp option * pexp *)
         | (Symbol s :: args) -> Plambda(Aexplicit, s, None, mkfun args)
-        | (arg :: args) -> msg_error (sexp_location arg)
+        | (arg :: args) -> pexp_error (sexp_location arg)
                                     "Unknown argument format";
                           mkfun args
       in [(s, mkfun args, false)] 
-  | _ -> msg_error (sexp_location e) ("Unknown declaration"); []
+  | _ -> pexp_error (sexp_location e) ("Unknown declaration"); []
 
 and pexp_unparse (e : pexp) : sexp =
   match e with

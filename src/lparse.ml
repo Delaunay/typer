@@ -46,6 +46,9 @@ let not_implemented_error () =
     internal_error "not implemented"
 ;;
 
+let lexp_error = msg_error "LEXP"
+let lexp_warning = msg_warning "LEXP"
+
 (* Vdef is exactly similar to Pvar but need to modify our ctx *)
 let pvar_to_vdef p =
     p
@@ -71,7 +74,7 @@ let rec lexp_parse (p: pexp) (ctx: lexp_context): (lexp * lexp_context) =
             let idx = get_var_index name ctx in
             (* This should be an error but we currently accept it for debugging *)
             if idx <= 0 then
-                msg_warning ("Variable: '" ^ name ^ "' does not exist") tloc;
+                lexp_warning tloc ("Variable: '" ^ name ^ "' does not exist");
             (make_var name idx loc), ctx; 
         
         (*  Let, Variable declaration + local scope *)
@@ -119,7 +122,7 @@ and lexp_parse_let decls ctx =
     let rec loop (decls: (pvar * pexp * bool) list) (merged: declarations) ctx: 
                 ((vdef * lexp * ltype) list * lexp_context) =
                 
-        print_int (List.length decls); print_string "\n";
+        (* print_int (List.length decls); print_string "\n"; *)
         match decls with
             | [] -> (SMap.fold (fun k d acc -> d::acc) merged []), ctx
             | hd::tl ->

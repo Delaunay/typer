@@ -61,3 +61,30 @@ let lalign_print_string str nb =
     print_string str;
     make_line " " (nb - String.length str);
 ;;
+
+(* print n char 'c' *)
+let rec prerr_make_line c n = 
+    prerr_string c;
+    if n >= 1 then (make_line c (n - 1));
+;;
+     
+(* print an integer right-aligned *)
+let ralign_prerr_int value nb =
+    prerr_make_line " " (nb - (str_size_int value));
+    prerr_int value;
+;;
+
+let lalign_prerr_int value nb =
+    prerr_int value;
+    prerr_make_line " " (nb - (str_size_int value));
+;;
+
+let ralign_prerr_string str nb =
+    prerr_make_line " " (nb - String.length str);
+    prerr_string str;
+;;
+
+let lalign_prerr_string str nb =
+    prerr_string str;
+    prerr_make_line " " (nb - String.length str);
+;;

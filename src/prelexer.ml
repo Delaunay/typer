@@ -22,6 +22,8 @@ this program.  If not, see <http://www.gnu.org/licenses/>.  *)
 
 open Util
 
+let prelexer_error = msg_error "PRELEXER"
+
 type pretoken =
   | Pretoken of location * string
   | Prestring of location * string
@@ -66,7 +68,7 @@ let rec prelex (file : string) (fin : in_channel) ln ctx acc
           | '"' ->                       (* A string.  *)
             let rec prestring bp cp chars =
               if bp >= limit then
-                (msg_error {file=file; line=ln; column=cpos}
+                (prelexer_error {file=file; line=ln; column=cpos}
                            "Unterminated string";
                  nextline ctx
                           (Prestring ({file=file; line=ln; column=cpos}, "")
@@ -80,7 +82,7 @@ let rec prelex (file : string) (fin : in_channel) ln ctx acc
                              :: acc)
                   | '\\' ->
                     (if bpos + 1 >= limit then
-                       (msg_error {file=file; line=ln; column=cpos}
+                       (prelexer_error {file=file; line=ln; column=cpos}
                                   "Unterminated string";
                         nextline ctx
                                  (Prestring ({file=file; line=ln; column=cpos},
@@ -92,7 +94,7 @@ let rec prelex (file : string) (fin : in_channel) ln ctx acc
                          | 'n' -> prestring (bp+2) (cp+2) ('\n' :: chars)
                          | 'r' -> prestring (bp+2) (cp+2) ('\r' :: chars)
                          | ('u' | 'U') ->
-                           msg_error {file=file; line=ln; column=cp}
+                           prelexer_error {file=file; line=ln; column=cp}
                                      "Unimplemented unicode escape";
                            prestring (bp+2) (cp+2) chars
                          | char -> prestring (bp+2) (cp+2) (char :: chars))
@@ -107,7 +109,7 @@ let rec prelex (file : string) (fin : in_channel) ln ctx acc
                                     List.rev acc,
                                     {file=file; line=ln; column=(cpos + 1)})
                           :: sacc)
-               | _ -> (msg_error {file=file; line=ln; column=cpos}
+               | _ -> (prelexer_error {file=file; line=ln; column=cpos}
                                  "Unmatched closing brace";
                        prelex' ctx (bpos+1) (cpos+1) acc))
           | char ->                     (* A pretoken.  *)
@@ -130,7 +132,7 @@ let rec prelex (file : string) (fin : in_channel) ln ctx acc
        match ctx with
          | [] -> List.rev acc
          | ((ln, cpos, _, _) :: ctx) ->
-           (msg_error {file=file; line=ln; column=cpos}
+           (prelexer_error {file=file; line=ln; column=cpos}
                       "Unmatched opening brace"; List.rev acc)
          
          
