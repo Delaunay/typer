@@ -9,20 +9,45 @@ p:int -> int;
 % this is a call to _=_
 odd  n = case n | 0 => false | S n' => even (n');
 
+%
+%   Here we test that two declaration with different 
+%   name are EXACLTY equivalent in the eyes
+%   of the compiler
+%
+%   Declaration order STILL MATTER
+%
+
+% Recursive let
 let a:Nat; d:Nat; c:Nat; b:Nat;
     a = b;
-    b = a; 
+    d = a; 
     c = d;
-    d = c;
-  in a + b
-;
- 
-% This one does not work which is odd
-let odd: (int -> int);
-    even: (int -> int);
-  in a + b
+    b = c;
+  in a + b + c + d
 ;
 
+% Recursive let: Different naming
+let e:Nat; f:Nat; g:Nat; h:Nat;
+    e = h;
+    f = e; 
+    g = f;
+    h = g;
+  in e + h + g + f
+;
+
+% Recursive let: Different Ordering
+let b:Nat; c:Nat; d:Nat; a:Nat;
+    c = d;
+    d = a; 
+    b = c;
+    a = b;
+  in a + b + c + d
+;
+
+%
+%
+%
+ 
 odd n; % this is a call to odd
 
 % For some reason the (decls list) in Plet is empty

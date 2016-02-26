@@ -28,6 +28,11 @@
  *      Description:
  *          parse pexp expression into lexp
  *
+ *
+ *      NB:
+ *          I don't think we can check Debruijn index correctness without
+ *          printing the environment. 
+ *
  * --------------------------------------------------------------------------- *)
 
 open Util
@@ -54,10 +59,10 @@ let lexp_warning = msg_warning "LEXP"
 let pvar_to_vdef p =
     p
 ;;
-(*  PEXP is not giving SEXP types this is why types are unknown *)
+(*  PEXP is not giving SEXP types this is why types are always unknown *)
 
 (*
- *  The main job of lexp (currently) is determine variable name (index)
+ *  The main job of lexp (currently) is to determine variable name (index)
  *  and to regroup type specification with their variable 
  *)
  
@@ -71,7 +76,7 @@ let rec lexp_parse (p: pexp) (ctx: lexp_context): (lexp * lexp_context) =
         (*  Symbol i.e identifier /!\ A lot of Pvar are not variables /!\ *)
         | Pvar (loc, name) -> 
             let idx = get_var_index name ctx in
-            (* This should be an error but we currently accept it for debugging *)
+            (* This should be an error but we accept it for debugging *)
             if idx < 0 then
                 lexp_warning tloc ("Variable: '" ^ name ^ "' does not exist");
             (make_var name (idx + 1) loc), ctx; 
@@ -80,8 +85,8 @@ let rec lexp_parse (p: pexp) (ctx: lexp_context): (lexp * lexp_context) =
         | Plet(loc, decls, body) ->         (* /!\ HERE *)    
             let decl, nctx = lexp_parse_let decls (add_scope ctx) in
             let bdy, nctx = lexp_parse body nctx in
-            (* print_lexp_context nctx; *)
-            (*  Send back old context we exit the inner scope *)
+            print_lexp_context nctx;
+            (*  Send back old context as we exit the inner scope *)
             Let(tloc, decl, bdy), ctx
             
         (* ->/=> *)
@@ -104,28 +109,41 @@ let rec lexp_parse (p: pexp) (ctx: lexp_context): (lexp * lexp_context) =
             Lambda(kind, nvar, ltyp, lbody), ctx
             
         | Plambda (kind, var, None, body) ->
-            let nvar = pvar_to_vdef var in  (* /!\ HERE *)
+            let nvar = pvar_to_vdef var in  (* /!\ HERE *)(* /!\ Missing Type *)
             let lbody, ctx = lexp_parse body ctx in
-            Lambda(kind, nvar, UnknownType(tloc), lbody), ctx (* /!\ Missing Type *)
+            Lambda(kind, nvar, UnknownType(tloc), lbody), ctx 
             
         (* Function Call *)
         | Pcall (fname, args) ->
+            (*  DUMMY IMPLEMENTATION            *)
+            (*  NOT DONE || We give two dummy args so binop can be recognized *)
             let fname, ctx = lexp_parse fname ctx in
-            Call(fname, (Aexplicit, UnknownType(tloc))::[]), ctx
-            
+            Call(fname, (Aexplicit,UnknownType(tloc))::
+                        (Aexplicit,UnknownType(tloc))::[]), ctx
+        
+        (* Pinductive *)
+        (* Pcons *)
+        (* Pcase *)
+        
         | _ 
             -> UnknownType(tloc), ctx
+            
+
 
 and lexp_parse_let decls ctx =
 
-    (*  Merge Type info and declaration together  since we don't know where the
-        type info will be a map is used to merge together declaration *)
+    (*  Merge Type info and declaration together *)
+    (*  This function uses Partial Evaluation to create a Predicate *)
+    let rec is_equal target (p:(vdef * pexp option * pexp option)): bool =
+        let ((loc, name), _, _) = p in
+            if name == target then true else false in
+            
     let rec loop (decls: (pvar * pexp * bool) list) merged: 
                                     (vdef * pexp option * pexp option) list =
                 
         (*  we cant evaluate here because variable are not in the environment *)
         match decls with
-            | [] -> (SMap.fold (fun k d acc -> d::acc) merged [])
+            | [] -> List.rev merged
             | hd::tl ->
                 match hd with
                 (*  Type Info: Var:Type *)
@@ -133,28 +151,24 @@ and lexp_parse_let decls ctx =
                     try
                         (*  If found its means the instruction was declared 
                          *  before the type info. Should we allow this? *)
-                        let (vd, inst, _) = SMap.find name merged in
+                        let (vd, inst, _) = List.find (is_equal name) merged in
                         let new_decl = (vd, inst, Some type_info) in
-                        let new_map = SMap.add name new_decl merged in
-                        (loop tl new_map)
+                        (loop tl (new_decl::merged))
                     with Not_found ->
                         let new_decl = (loc, name), None, Some type_info in
-                        let new_map = (SMap.add name new_decl merged) in
-                        (loop tl new_map) end
+                        (loop tl (new_decl::merged)) end
                     
                 (* Instruction: Var = expr *)
                 | ((loc, name), inst, false) -> begin
                     try
-                        let (vd, _, ptyp) = SMap.find name merged in
+                        let (vd, _, ptyp) = List.find (is_equal name) merged in
                         let new_decl = (vd, Some inst, ptyp) in
-                        let new_map = SMap.add name new_decl merged in
-                        (loop tl new_map)
+                        (loop tl (new_decl::merged))
                     with Not_found ->
                         let new_decl = ((loc, name), Some inst, None) in
-                        let new_map = SMap.add name new_decl merged in
-                        (loop tl new_map) end in
+                        (loop tl (new_decl::merged)) end in
                         
-    let decls = loop decls SMap.empty in
+    let decls = loop decls [] in
     
     (*  Add Each Variable to the environment *)
     let rec add_var_env decls ctx =
@@ -171,7 +185,7 @@ and lexp_parse_let decls ctx =
             
     let nctx = add_var_env decls ctx in
     
-    (* Evaluate Instruction and types *)
+    (* lexp_parse instruction and types *)
     let rec eval_decls decls ctx acc =
         match decls with
             | [] -> acc, ctx
@@ -184,6 +198,8 @@ and lexp_parse_let decls ctx =
                         (eval_decls tl nctx nacc)
                     | ((loc, name), Some pinst, None) ->
                         let linst, nctx = lexp_parse pinst ctx in
+                        (*  This is where UnknownType are introduced *)
+                        (*  need Inference HERE *)
                         let nacc = ((loc, name), linst, UnknownType(loc))::acc in
                         (eval_decls tl nctx nacc) 
                     (* Skip the variable *)
@@ -195,16 +211,13 @@ and lexp_parse_let decls ctx =
     eval_decls decls nctx []
 ;;
 
-(*  Print back in CET (Close Enough Typer) 
- *      param: pretty => Should the code be indented and everything
- *)
- 
-              (*  pretty ? * indent level *)
-type print_context = (bool * int)
+(*  Print back in CET (Close Enough Typer) easier to read *)
+              (*  pretty ? * indent level * print_type? *)
+type print_context = (bool * int * bool)
  
 let rec lexp_print_adv opt exp =
     let slexp_print = lexp_print_adv opt in (* short_lexp_print *)
-    let pty, indent = opt in
+    let (pty, indent, prtp) = opt in
     match exp with
         | Imm(value)             -> sexp_print value
         | Var ((loc, name), idx) -> 
@@ -213,9 +226,9 @@ let rec lexp_print_adv opt exp =
                 print_string "("; print_int idx; print_string ")"; end
         
         | Let (_, decls, body)   ->
-            print_string "let "; lexp_print_decls (pty, indent + 1) decls; 
-            make_line " " (indent * 4 + 4);
-            print_string " in "; lexp_print_adv (pty, indent + 2) body
+            print_string "let"; lexp_print_decls (pty, indent + 1, prtp) decls; 
+            if pty then make_line " " (indent * 4 + 4);
+            print_string " in "; lexp_print_adv (pty, indent + 2, prtp) body
             
         | Arrow(kind, Some (_, name), tp, loc, expr) ->
             slexp_print tp; print_string ": "; print_string name;
@@ -229,36 +242,52 @@ let rec lexp_print_adv opt exp =
             slexp_print ltype; print_string ") -> "; slexp_print lbody;
             
         | Call(fname, args) -> begin  (*  /!\ Partial Print *)
+            (*  get function name *)
             let str = match fname with
                 | Var((_, name), _) -> name
-                | _ -> print_string "\nhere\n"; "unkwn" in
-            match str with
+                | _ -> "unkwn" in
+                
+            let print_arg arg = match arg with | (kind, lxp) -> 
+                 lexp_print_adv (pty, 0, prtp) lxp in
+                           
+            let print_binop op lhs rhs = 
+                print_arg lhs; print_string op; print_arg rhs in
+                        
+            match (str, args) with
                 (* Special Operator *)
-                | "_=_" -> print_string ("(lhs" ^ " = " ^ "rhs)")
-                | "_+_" -> print_string ("(lhs" ^ " + " ^ "rhs)")
-                | "_-_" -> print_string ("(lhs" ^ " - " ^ "rhs)")
-                | "_/_" -> print_string ("(lhs" ^ " / " ^ "rhs)")
-                | "_*_" -> print_string ("(lhs" ^ " * " ^ "rhs)")
+                | ("_=_", [lhs; rhs]) -> print_binop " = " lhs rhs
+                | ("_+_", [lhs; rhs]) -> print_binop " + " lhs rhs
+                | ("_-_", [lhs; rhs]) -> print_binop " - " lhs rhs
+                | ("_/_", [lhs; rhs]) -> print_binop " / " lhs rhs
+                | ("_*_", [lhs; rhs]) -> print_binop " * " lhs rhs
                 (* not an operator *)
-                | _ -> print_string ("(" ^ str ^ ")") end
+                | _ -> 
+                    print_string ("(" ^ str);
+                    List.iter (fun arg -> print_string " "; print_arg arg) args;
+                    print_string ")" end
 
         (* debug catch all *)
         | UnknownType (loc)      -> print_string "unkwn";
         | _ -> print_string "expr"
             
 and lexp_print_decls opt decls =
-    let pty, indent = opt in
+    let (pty, indent, prtp) = opt in
+    let print_type nm tp =
+        print_string (" " ^ nm ^  ": "); lexp_print_adv opt tp; 
+        print_string ";"; in
+
     List.iteri (fun idx g -> match g with
         | ((loc, name), expr, ltyp) ->
             if pty && idx > 0 then make_line " " (indent * 4);
-            print_string (name ^  ": "); lexp_print_adv opt ltyp; print_string "; ";
-            print_string (name ^ " = "); lexp_print_adv opt expr; print_string ";";
+            if prtp then print_type name ltyp; print_string " ";
+            print_string (name ^ " = "); 
+            lexp_print_adv opt expr; print_string ";";
             if pty then print_string "\n")
         decls
 ;;
 
 
-let lexp_print = lexp_print_adv (false, 0)
+let lexp_print = lexp_print_adv (false, 0, true)
             
 let lexp_parse_all (p: pexp list) (ctx: lexp_context): 
                                         (lexp list * lexp_context) =
