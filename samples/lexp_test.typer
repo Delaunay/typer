@@ -1,7 +1,7 @@
 ab;
 
 % Type is read as a Pvar ?????
-lambda (a : Type) => lambda x : a -> x;
+add = lambda (a : Type) -> lambda (b : Type) -> (add a b);
 
 % How typer is supposed to read this
 p:int -> int;
@@ -14,10 +14,10 @@ odd  n = case n | 0 => false | S n' => even (n');
 %   name are EXACLTY equivalent in the eyes
 %   of the compiler
 %
-%   Declaration order STILL MATTER
+%   Declaration order STILL MATTERS
 %
 
-% Recursive let
+% let
 let a:Nat; d:Nat; c:Nat; b:Nat;
     a = b;
     d = a; 
@@ -26,7 +26,7 @@ let a:Nat; d:Nat; c:Nat; b:Nat;
   in a + b + c + d
 ;
 
-% Recursive let: Different naming
+% let: Different naming
 let e:Nat; f:Nat; g:Nat; h:Nat;
     e = h;
     f = e; 
@@ -35,7 +35,7 @@ let e:Nat; f:Nat; g:Nat; h:Nat;
   in e + h + g + f
 ;
 
-% Recursive let: Different Ordering
+% let: Different Ordering
 let b:Nat; c:Nat; d:Nat; a:Nat;
     c = d;
     d = a; 
@@ -45,12 +45,9 @@ let b:Nat; c:Nat; d:Nat; a:Nat;
 ;
 
 %
-%
+%   Recursivity detection
 %
  
-odd n; % this is a call to odd
-
-% For some reason the (decls list) in Plet is empty
 let odd: (int -> int);
     even: (int -> int);
     odd  n = case n | 0 => false | S n' => even (n');

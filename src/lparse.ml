@@ -28,11 +28,6 @@
  *      Description:
  *          parse pexp expression into lexp
  *
- *
- *      NB:
- *          I don't think we can check Debruijn index correctness without
- *          printing the environment. 
- *
  * --------------------------------------------------------------------------- *)
 
 open Util
@@ -124,9 +119,9 @@ let rec lexp_parse (p: pexp) (ctx: lexp_context): (lexp * lexp_context) =
 
             Call(fname, new_args), ctx
         
-        (* Pinductive *)
         (* Pcons *)
         (* Pcase *)
+        (* Pinductive *) (* Pinductive Pexp implementation is not ready *)
         
         | _ 
             -> UnknownType(tloc), ctx
@@ -188,29 +183,29 @@ and lexp_parse_let decls ctx =
     let nctx = add_var_env decls ctx in
     
     (* lexp_parse instruction and types *)
-    let rec eval_decls decls ctx acc =
+    let rec parse_decls decls ctx acc =
         match decls with
-            | [] -> acc, ctx
+            | [] -> (List.rev acc), ctx
             | hd::tl -> begin
                 match hd with 
                     | ((loc, name), Some pinst, Some ptype) ->
                         let linst, nctx = lexp_parse pinst ctx in
                         let ltyp, nctx = lexp_parse ptype nctx in
                         let nacc = ((loc, name), linst, ltyp)::acc in
-                        (eval_decls tl nctx nacc)
+                        (parse_decls tl nctx nacc)
                     | ((loc, name), Some pinst, None) ->
                         let linst, nctx = lexp_parse pinst ctx in
                         (*  This is where UnknownType are introduced *)
                         (*  need Inference HERE *)
                         let nacc = ((loc, name), linst, UnknownType(loc))::acc in
-                        (eval_decls tl nctx nacc) 
+                        (parse_decls tl nctx nacc) 
                     (* Skip the variable *)
                     | ((loc, name), None, _) -> 
                         lexp_warning loc "Unused Variable";
-                        (eval_decls tl ctx acc) 
+                        (parse_decls tl ctx acc) 
                          end in
                         
-    eval_decls decls nctx []
+    parse_decls decls nctx []
     
 and lexp_parse_all (p: pexp list) (ctx: lexp_context): 
                                         (lexp list * lexp_context) =
@@ -233,7 +228,7 @@ let rec lexp_print_adv opt exp =
         | Imm(value)             -> sexp_print value
         | Var ((loc, name), idx) -> 
             print_string name; 
-            if idx >= 0 then begin
+            if idx > 0 then begin
                 print_string "("; print_int idx; print_string ")"; end
         
         | Let (_, decls, body)   ->

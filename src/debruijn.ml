@@ -36,6 +36,9 @@
  *          find_var name ctx: return the index of the variable 'name'
  *          add_variable name loc ctx : add a variable to the current context
  *
+ *      TODO:
+ *          ADD meyers list <index -> (type, name?)>
+ *
  * ---------------------------------------------------------------------------*)
 
 open Util
@@ -94,6 +97,13 @@ let _inc_offset (ctx: lexp_context): lexp_context =
     match ctx with
         | ((offset, scope), None) -> ((offset + 1, scope), None)
         | ((offset, scope), Some outter) -> ((offset + 1, scope), Some outter)
+;;
+
+(*  Increase the indexes of all inner variables *)
+let _inc_index (ctx: lexp_context): lexp_context =
+    let ((offset, scope), otr) = ctx in
+    let scope = StringMap.map (fun value -> value + 1) scope in
+        ((offset, scope), otr)
 ;;
 
 (*  Public methods: DO USE
