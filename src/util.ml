@@ -46,12 +46,12 @@ let prerr_loc (loc: location) =
 ;;
 
 (*  File is not printed because currently we parse only one file... *)
-(*  Section is the name of the compilation step for debugging       *)
-(*  'prerr' out_channel is ugly                                     *)
+(*  Section is the name of the compilation step [for debugging]     *)
+(*  'prerr' output is ugly                                          *)
 let msg_message kind section (loc: location) msg =
-  print_string " ["; print_loc loc; print_string "]    ";
-  print_string section;
   print_string ("   " ^ kind);
+  print_string " ["; print_loc loc; print_string "]    ";
+  print_string (section ^ "    ");
   print_string msg;
   print_newline ()
   

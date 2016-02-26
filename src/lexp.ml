@@ -34,7 +34,10 @@ open Grammar
  * debugging purposes, we remember the name that was used in the source
  * code.  *)
 type vdef = location * string
-type vref = vdef * int
+type db_index = int             (* DeBruijn index.  *)
+type db_offset = int            (* DeBruijn index offset.  *)
+type db_revindex = int          (* DeBruijn index counting from the root.  *)
+type vref = vdef * db_index
 
 
 type label = symbol
@@ -53,20 +56,24 @@ type builtin =
 
 type ltype = lexp
  and lexp =
-    | Imm of sexp                        (* Used for strings, ...  *)
-    | SortLevel of sort_level
-    | Sort of location * sort
-    | Builtin of builtin * string * ltype
-    | Var of vref
-    (* This "Let" allows recursion.  *)
-    | Let of location * (vdef * lexp * ltype) list * lexp
-    | Arrow of arg_kind * vdef option * ltype * location * lexp
-    | Lambda of arg_kind * vdef * ltype * lexp
-    | Call of lexp * (arg_kind * lexp) list (* Curried call.  *)
-    | Inductive of location * label * ((arg_kind * vdef * ltype) list)
-                            * ((arg_kind * ltype) list) SMap.t
-    | Cons of vref * symbol
-    | Case of location * lexp
+   | Imm of sexp                        (* Used for strings, ...  *)
+   | SortLevel of sort_level
+   | Sort of location * sort
+   | Builtin of builtin * string * ltype
+   | Var of vref
+   (* This just means that all non-local Var bindings in the lexp should
+    * have their debuijn index incremented by i.  IOW it guarantees that
+    * the lexp does not refer to the topmost i elements of the context.  *)
+   | Shift of db_offset * lexp
+   (* This "Let" allows recursion.  *)
+   | Let of location * (vdef * lexp * ltype) list * lexp
+   | Arrow of arg_kind * vdef option * ltype * location * lexp
+   | Lambda of arg_kind * vdef * ltype * lexp
+   | Call of lexp * (arg_kind * lexp) list (* Curried call.  *)
+   | Inductive of location * label * ((arg_kind * vdef * ltype) list)
+                  * ((arg_kind * ltype) list) SMap.t
+   | Cons of vref * symbol
+   | Case of location * lexp
              * ltype (* The base inductive type over which we switch.  *)
              * (location * (arg_kind * vdef) option list * lexp) SMap.t
              * lexp option               (* Default.  *)
@@ -152,6 +159,48 @@ let builtins =
  *                      VMap.add v (e, t) venv))
  *                    (SMap.empty, VMap.empty)
  *                    builtins *)
+
+(* Handling scoping/bindings is always tricky.  So it's always important
+ * to keep in mind for *every* expression which is its context.
+ *
+ * In particular, this holds true as well for those expressions that appear
+ * in the context.  Traditionally for dependently typed languages we expect
+ * the context's rules to say something like:
+ *
+ *      ⊢ Γ    Γ ⊢ τ:Type
+ *      —————————————————
+ *          ⊢ Γ,x:τ
+ *
+ * Which means that we expect (τ) expressions in the context to be typed
+ * within the *rest* of that context.
+ *
+ * This also means that when we look up a binding in the context, we need to
+ * adjust the result, since we need to use it in the context where we looked
+ * it up, which is different from the context where it was defined.
+ *
+ * More concretely, this means that lookup(Γ, i) should return an expression
+ * where debruijn indices have been shifted by "i".
+ *
+ * This is nice for "normal bindings", but there's a complication in the
+ * case of recursive definitions.  Typically, this is handled by using
+ * something like a μx.e construct, which works OK for the theory but tends
+ * to become rather inconvenient in practice for mutually recursive
+ * definitions.  So instead, we annotate the recursive binding with
+ * a "recursion_offset" to say that rather than being defined in "the rest
+ * of the context", they're defined in a slightly larger context that
+ * includes "younger" bindings.
+ *)
+
+type env_elem = (db_offset, vdef, lexp option, ltype)
+type env_type = env_elem myers
+let env_lookup_type (env : env_type) (v : vref) =
+  let ((_, rname), dbi) = v in
+  try let (recursion_offset, (_, dname), _, t) = Myers.nth dbi env in
+      if dname = rname then
+        Shift (dbi - recursion_offset, t)
+      else
+        internal_error "DeBruijn index refers to wrong name!"
+  with Not_found -> internal_error "DeBruijn index out of bounds!"
 
 (*****  SMap fold2 helper *****)
 
@@ -531,6 +580,7 @@ and lexp_unparse e : pexp =
     (* (internal_error "Can't print a Susp") *)
 
 let lexp_print e = sexp_print (pexp_unparse (lexp_unparse e))
+<<<<<<< HEAD
     
 (* let rec lexp_type (env: (lexp option * lexp) VMap.t) e : lexp =
  *   let rec follow e =
@@ -611,3 +661,33 @@ let lexp_print e = sexp_print (pexp_unparse (lexp_unparse e))
 (*
 let rec lexp_parse (p : pexp) (env : (vdef * lexp option * ltype) myers) = *)
 *)
+
+type senv_type = (db_revindex SMap.t * db_index)
+let senv_lookup senv s : db_index =
+  let (m, i) = senv in
+  i - SMap.find s senv
+  
+(* Parsing a Pexp into an Lexp is really "elaboration", i.e. it needs to
+ * infer the types and perform macro-expansion.  For won't really
+ * do any of that, but we can already start structuring it accordingly.
+ *
+ * More specifically, we do it with 2 mutually recursive functions:
+ * one takes a Pexp along with its expected type and return an Lexp
+ * of that type (hopefully), whereas the other takes a Pexp and
+ * infers its type (which it returns along with the Lexp).
+ * This is the idea of "bidirectional type checking", which minimizes
+ * the amount of "guessing" and/or annotations.  Basically guessing/annotations
+ * is only needed at those few places where the code is not fully-normalized,
+ * which in normal programs is only in "let" definitions.
+ * So the rule of thumbs are:
+ * - use lexp_p_infer for destructors, and use lexp_p_check for constructors.
+ * - use lexp_p_check whenever you can.
+ *)
+let rec lexp_p_infer (env : env_type) (p : pexp) : lexp * ltype = ?
+
+and lexp_p_check (env : env_type) (p : pexp) (t : ltype) : lexp =
+  match p with
+  | _
+    -> let (e, inferred_t) = lexp_p_infer env p in
+      (* FIXME: check that inferred_t = t!  *)
+      e

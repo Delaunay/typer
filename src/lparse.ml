@@ -127,20 +127,24 @@ and lexp_parse_let decls ctx =
             | [] -> (SMap.fold (fun k d acc -> d::acc) merged []), ctx
             | hd::tl ->
                 match hd with
+                (*  Type Info: Var:Type *)
                 | ((loc, name), type_info, true) -> begin
                     let new_ltype, nctx = lexp_parse type_info ctx in
                     try
+                        (*  If found its means the instruction was declared 
+                         *  before the type info. Should we allow this? *)
                         let (vd, inst, ltyp) = SMap.find name merged in
                         let new_map = SMap.add name (vd, inst, new_ltype) merged in
                         (loop tl new_map nctx)
                     with Not_found ->
                         let new_decl = (loc, name), UnknownType(loc), new_ltype in
                         let new_map = (SMap.add name new_decl merged) in
+                        (*  Add the variable to the env *)
+                        let nctx = add_variable name loc nctx in
                         (loop tl new_map nctx) end
                     
-                (* if we declared a function *)
+                (* Instruction: Var = expr *)
                 | ((loc, name), inst, false) -> begin
-                    
                     let new_inst, nctx = lexp_parse inst ctx in
                     try
                         let (vd, inst, ltyp) = SMap.find name merged in
@@ -149,6 +153,8 @@ and lexp_parse_let decls ctx =
                     with Not_found ->
                         let new_decl = ((loc, name), new_inst, UnknownType(loc)) in
                         let new_map = SMap.add name new_decl merged in
+                        (*  Add the variable to the env *)
+                        let nctx = add_variable name loc nctx in
                         (loop tl new_map nctx) end in
                         
     (* use the function *)

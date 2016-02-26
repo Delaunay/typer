@@ -14,7 +14,8 @@ let a:Nat; b:Nat;
     b = a; 
   in a + b
 ;
-    
+ 
+% This one does not work which is odd
 let odd: (int -> int);
     even: (int -> int);
   in a + b
