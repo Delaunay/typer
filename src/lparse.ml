@@ -85,7 +85,7 @@ let rec lexp_parse (p: pexp) (ctx: lexp_context): (lexp * lexp_context) =
         | Plet(loc, decls, body) ->         (* /!\ HERE *)    
             let decl, nctx = lexp_parse_let decls (add_scope ctx) in
             let bdy, nctx = lexp_parse body nctx in
-            print_lexp_context nctx;
+            (* print_lexp_context nctx; *)
             (*  Send back old context as we exit the inner scope *)
             Let(tloc, decl, bdy), ctx
             
@@ -114,12 +114,15 @@ let rec lexp_parse (p: pexp) (ctx: lexp_context): (lexp * lexp_context) =
             Lambda(kind, nvar, UnknownType(tloc), lbody), ctx 
             
         (* Function Call *)
-        | Pcall (fname, args) ->
-            (*  DUMMY IMPLEMENTATION            *)
-            (*  NOT DONE || We give two dummy args so binop can be recognized *)
+        | Pcall (fname, _args) ->
             let fname, ctx = lexp_parse fname ctx in
-            Call(fname, (Aexplicit,UnknownType(tloc))::
-                        (Aexplicit,UnknownType(tloc))::[]), ctx
+            let pargs = pexp_parse_all _args in
+            let largs, fctx = lexp_parse_all pargs ctx in 
+            
+            (*  Make everything explicit for now *)
+            let new_args = List.map (fun g -> (Aexplicit, g)) largs in
+
+            Call(fname, new_args), ctx
         
         (* Pinductive *)
         (* Pcons *)
@@ -129,13 +132,12 @@ let rec lexp_parse (p: pexp) (ctx: lexp_context): (lexp * lexp_context) =
             -> UnknownType(tloc), ctx
             
 
-
 and lexp_parse_let decls ctx =
 
-    (*  Merge Type info and declaration together *)
-    (*  This function uses Partial Evaluation to create a Predicate *)
+    (*  Merge Type info and declaration together                      *)
+    (*  We use a list because order matters and Maps reorder elements *)
     let rec is_equal target (p:(vdef * pexp option * pexp option)): bool =
-        let ((loc, name), _, _) = p in
+        let ((_, name), _, _) = p in
             if name == target then true else false in
             
     let rec loop (decls: (pvar * pexp * bool) list) merged: 
@@ -209,6 +211,15 @@ and lexp_parse_let decls ctx =
                          end in
                         
     eval_decls decls nctx []
+    
+and lexp_parse_all (p: pexp list) (ctx: lexp_context): 
+                                        (lexp list * lexp_context) =
+    let rec loop (plst: pexp list) ctx (acc: lexp list) = 
+        match plst with
+            | [] -> ((List.rev acc), ctx)
+            | _  -> let lxp, new_ctx = lexp_parse (List.hd plst) ctx in
+                    (loop (List.tl plst) new_ctx (lxp::acc)) in
+    (loop p ctx [])
 ;;
 
 (*  Print back in CET (Close Enough Typer) easier to read *)
@@ -289,12 +300,3 @@ and lexp_print_decls opt decls =
 
 let lexp_print = lexp_print_adv (false, 0, true)
             
-let lexp_parse_all (p: pexp list) (ctx: lexp_context): 
-                                        (lexp list * lexp_context) =
-    let rec loop (plst: pexp list) ctx (acc: lexp list) = 
-        match plst with
-            | [] -> ((List.rev acc), ctx)
-            | _  -> let lxp, new_ctx = lexp_parse (List.hd plst) ctx in
-                    (loop (List.tl plst) new_ctx (lxp::acc)) in
-    (loop p ctx [])
-;;
