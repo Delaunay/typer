@@ -9,9 +9,11 @@ p:int -> int;
 % this is a call to _=_
 odd  n = case n | 0 => false | S n' => even (n');
 
-let a:Nat; b:Nat;
+let a:Nat; d:Nat; c:Nat; b:Nat;
     a = b;
     b = a; 
+    c = d;
+    d = c;
   in a + b
 ;
  

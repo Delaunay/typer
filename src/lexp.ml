@@ -191,7 +191,8 @@ let builtins =
  * includes "younger" bindings.
  *)
 
-type env_elem = (db_offset, vdef, lexp option, ltype)
+
+type env_elem = (db_offset * vdef * lexp option * ltype)
 type env_type = env_elem myers
 let env_lookup_type (env : env_type) (v : vref) =
   let ((_, rname), dbi) = v in
@@ -662,10 +663,11 @@ let lexp_print e = sexp_print (pexp_unparse (lexp_unparse e))
 let rec lexp_parse (p : pexp) (env : (vdef * lexp option * ltype) myers) = *)
 *)
 
+(* FIXME
 type senv_type = (db_revindex SMap.t * db_index)
 let senv_lookup senv s : db_index =
   let (m, i) = senv in
-  i - SMap.find s senv
+  i - SMap.find s senv *)
   
 (* Parsing a Pexp into an Lexp is really "elaboration", i.e. it needs to
  * infer the types and perform macro-expansion.  For won't really
@@ -683,7 +685,9 @@ let senv_lookup senv s : db_index =
  * - use lexp_p_infer for destructors, and use lexp_p_check for constructors.
  * - use lexp_p_check whenever you can.
  *)
-let rec lexp_p_infer (env : env_type) (p : pexp) : lexp * ltype = ?
+ 
+let rec lexp_p_infer (env : env_type) (p : pexp) : lexp * ltype =
+    (UnknownType(dummy_location),  UnknownType(dummy_location))
 
 and lexp_p_check (env : env_type) (p : pexp) (t : ltype) : lexp =
   match p with
