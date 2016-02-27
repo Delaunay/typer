@@ -24,11 +24,11 @@ this program.  If not, see <http://www.gnu.org/licenses/>.  *)
 open Util
 open Lexer
 open Sexp
-open Elaborate
-open Javascript
+(* open Elaborate *)
+(* open Javascript *)
 
 (* I think they shouldn't be here, but for now I use them.  *)
-open Lexp
+(* open Lexp *)
 open Prelexer
 open Pexp
 
@@ -154,15 +154,15 @@ let process_typer_file sourcename choppable_suffix venv =
     sexp_print sexp; print_newline();
     let pdecls = pexp_p_decls sexp in
     sexp_print (pexp_u_decls pdecls); print_newline();
-    let (decls',pnames',delayed',senv',venv')
-      = List.fold_left (elaborate_decl (ScopeLevel 0) (default_stt, grm))
-                       ([], pnames, delayed, senv, venv)
-                       pdecls in
-    let pdecls = lexp_unparse_decls decls' in
-    sexp_print (pexp_u_decls pdecls); print_newline();
+    (* let (decls',pnames',delayed',senv',venv')
+     *   = List.fold_left (elaborate_decl (ScopeLevel 0) (default_stt, grm))
+     *                    ([], pnames, delayed, senv, venv)
+     *                    pdecls in
+     * let pdecls = lexp_unparse_decls decls' in
+     * sexp_print (pexp_u_decls pdecls); print_newline(); *)
     (* print_string ": ";
      * sexp_print (pexp_unparse (lexp_unparse t)); print_newline(); *)
-    print_newline();
+    (* print_newline(); *)
 
 
 
@@ -191,9 +191,9 @@ let process_typer_file sourcename choppable_suffix venv =
     match rest with
       | [] -> (decls, venv)
       | _ -> process_decl (grm, rest,
-                          decls' @ decls, pnames', delayed', senv', venv')
+                          pdecls @ decls, pnames, delayed, senv, venv)
   in process_decl (default_grammar, tokens,
-                   [], SMap.empty, [], senv_builtin, venv)
+                   [], SMap.empty, None, [], venv)
    (* ; close_out js_file *)
 
 let process_file filename venv =
@@ -202,7 +202,7 @@ let process_file filename venv =
   else
     raise (Arg.Bad ("Unknown filetype: " ^ filename))
 
-let (perv_decls, perv_venv) = process_file "pervasive.typer" venv_builtin
+let (perv_decls, perv_venv) = process_file "pervasive.typer" None
 
 let _ = Arg.parse
           [
