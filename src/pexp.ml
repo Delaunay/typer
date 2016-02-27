@@ -55,8 +55,7 @@ type pexp =
   | Pcall of pexp * sexp list           (* Curried call.  *)
   (* The symbols are only used so that we can distinguish two
    * otherwise isomorphic types.  *)
-  (* (arg_kind * pvar * pexp option) list was replaced by pexp list *)
-  | Pinductive of symbol * pexp list 
+  | Pinductive of symbol * (arg_kind * pvar * pexp option) list
                   * (symbol * (arg_kind * pvar option * pexp) list) list
   | Pcons of pvar * symbol
   | Pcase of location * pexp * (ppat * pexp) list
@@ -97,7 +96,7 @@ let rec pexp_parse (s : sexp) : pexp =
     -> Phastype (start, pexp_parse e, pexp_parse t)
   (* let *)
   | Node (Symbol (start, "let_in_"), [decls; body])
-    -> Plet (start, pexp_decls decls, pexp_parse body)
+    -> Plet (start, pexp_p_decls decls, pexp_parse body)
   | Node (Symbol (start, ("let_in_" | "let" | "let_")), _)
     -> pexp_error start "Unrecognized let expression"; Pmetavar (start, "_")
   (* arrow *)
@@ -145,8 +144,8 @@ let rec pexp_parse (s : sexp) : pexp =
                -> (s, List.map pexp_p_ind_arg cases)::pcases
              | _ -> pexp_error (sexp_location case)
                              "Unrecognized constructor declaration"; pcases)
-          cases [] in 
-      Pinductive (name, pexp_inductive_args args, pcases)
+          cases [] in
+      Pinductive (name, List.map pexp_p_formal_arg args, pcases)
   | Node (Symbol (start, "inductive_"), _)
     -> pexp_error start "Unrecognized inductive type"; Pmetavar (start, "_")
   (* constructor *)
@@ -171,15 +170,38 @@ let rec pexp_parse (s : sexp) : pexp =
   | Node (f, []) -> pexp_parse f
   | Node (f, args) -> Pcall (pexp_parse f, args)
 
-(*    Bug here   
- * args are sexp and Pinductive is expecting: 
- *        (arg_kind * pvar * pexp option) list
- *    and (pexp list) is given. I modified the type declaration for
- *    this to work. But it is not what it should be 
- *  Turn a (sexp) list into (arg_kind * pvar * pexp option) list *)  
-and pexp_inductive_args sexp = 
-    List.map pexp_parse sexp
-  
+and pexp_p_actual_arg arg : (arg_kind * pvar option * pexp) =
+  match arg with
+  | Node (Symbol (_, ":≡"), [Symbol s; e])
+    -> (Aerasable, Some s, pexp_parse e)
+  | Node (Symbol (_, ":="), [Symbol s; e])
+    -> (Aimplicit, Some s, pexp_parse e)
+  | Node (Symbol (_, ":-"), [Symbol s; e])
+    -> (Aexplicit, Some s, pexp_parse e)
+  | e -> (Aexplicit, None, pexp_parse e)
+
+and pexp_p_formal_arg arg : (arg_kind * pvar * pexp option) =
+  match arg with
+  | Node (Symbol (_, ":::"), [Symbol s; e])
+    -> (Aerasable, s, Some (pexp_parse e))
+  | Node (Symbol (_, "::"), [Symbol s; e])
+    -> (Aimplicit, s, Some (pexp_parse e))
+  | Node (Symbol (_, ":"), [Symbol s; e])
+    -> (Aexplicit, s, Some (pexp_parse e))
+  | Symbol s -> (Aexplicit, s, None)
+  | _ -> (pexp_error (sexp_location arg) "Unrecognized formal arg");
+         (Aexplicit, (sexp_location arg, "{arg}"), None)
+
+and pexp_u_formal_arg (arg : arg_kind * pvar * pexp option) =
+  match arg with
+  | (Aexplicit, s, None) -> Symbol s
+  | (ak, ((l,_) as s), t)
+    -> Node (Symbol (l, match ak with Aerasable -> ":::"
+                                   | Aimplicit -> "::"
+                                   | Aexplicit -> ":"),
+            [Symbol s; match t with Some e -> pexp_unparse e
+                                  | None -> Symbol (l, "_")])
+
 and pexp_p_id (x : location * string) : (location * string) option =
   match x with
   | (_, "_") -> None
@@ -243,11 +265,11 @@ and pexp_u_pat (p : ppat) : sexp = match p with
   | Ppatvar s -> Symbol s
   | Ppatcons (c, args) -> Node (Symbol c, List.map pexp_u_pat_arg args)
 
-and pexp_decls e =
+and pexp_p_decls e =
   match e with
   | Epsilon -> []
   | Node (Symbol (_, ("_;_" | "_;" | ";_")), decls)
-    -> List.concat (List.map pexp_decls decls)
+    -> List.concat (List.map pexp_p_decls decls)
   | Node (Symbol (_, "_:_"), [Symbol s; t]) -> [(s, pexp_parse t, true)]
   | Node (Symbol (_, "_=_"), [Symbol s; t]) -> [(s, pexp_parse t, false)]
   | Node (Symbol (_, "_=_"), [Node (Symbol s, args); t]) ->
@@ -294,7 +316,7 @@ and pexp_unparse (e : pexp) : sexp =
   (* Pinductive *)
   | Pinductive (s, t, branches) ->
     Node (Symbol (dummy_location, "inductive_"),
-          sexp_u_list (List.map pexp_unparse t)
+          sexp_u_list (List.map pexp_u_formal_arg t)
           :: List.map (fun ((l,name) as s, types)
                        -> Node (Symbol s,
                                List.map pexp_u_ind_arg types))

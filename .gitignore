@@ -1,5 +1,6 @@
 ChangeLog
 typer
+*.byte
 *.elc
 *.annot
 *.cmi
