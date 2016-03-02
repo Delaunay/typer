@@ -79,7 +79,7 @@ let rec lexp_parse (p: pexp) (ctx: lexp_context): (lexp * lexp_context) =
             
         (*  Symbol i.e identifier /!\ A lot of Pvar are not variables /!\ *)
         | Pvar (loc, name) -> 
-            let idx = get_var_index name ctx in
+            let idx = senv_lookup name ctx in
             (* This should be an error but we accept it for debugging *)
             if idx < 0 then
                 lexp_warning tloc ("Variable: '" ^ name ^ "' does not exist");
@@ -89,7 +89,6 @@ let rec lexp_parse (p: pexp) (ctx: lexp_context): (lexp * lexp_context) =
         | Plet(loc, decls, body) ->         (* /!\ HERE *)    
             let decl, nctx = lexp_parse_let decls (add_scope ctx) in
             let bdy, nctx = lexp_parse body nctx in
-            (* print_lexp_context nctx; *)
             (*  Send back old context as we exit the inner scope *)
             Let(tloc, decl, bdy), ctx
             
@@ -146,8 +145,7 @@ let rec lexp_parse (p: pexp) (ctx: lexp_context): (lexp * lexp_context) =
         (* Pcase *)
         | Pcase (loc, target, patterns) ->
 
-            let lxp, nctx = lexp_parse target ctx in
-            let ltp = UnknownType(loc) in (* /!\ HERE *)
+            let lxp, ltp = lexp_p_infer target ctx in
             
             (*  Read patterns one by one *)
             let rec loop ptrns merged dflt =
@@ -170,14 +168,10 @@ let rec lexp_parse (p: pexp) (ctx: lexp_context): (lexp * lexp_context) =
         | _ 
             -> UnknownType(tloc), ctx
     
-(*  Read a pattern a create the equivalent representation *)    
+(*  Read a pattern and create the equivalent representation *)    
 and lexp_read_pattern pattern exp target: 
                      (string * location * (arg_kind * vdef) option list) =
-    
-    (*  I think the best way to define target is as  a nested call of inductive
-     *  constructor. Since we don't allow nested constructor pattern we only
-     *  need to use args of targets                                           *)
-     
+
     match pattern with
         | Ppatany (loc) ->            (* Catch all expression nothing to do  *)
             ("_", loc, [])  
@@ -192,7 +186,7 @@ and lexp_read_pattern pattern exp target:
         | Ppatcons (ctor_name, args) ->
             let (loc, name) = ctor_name in
 
-            (*  Zip through target_args and pattern args *)
+            (* read pattern args *)
             let args = lexp_read_pattern_args args in
                 (name, loc, args)
             
@@ -296,7 +290,7 @@ and lexp_parse_let decls ctx =
                     (*  Warning will be printed later   *)
                     | ((loc, name), None, _) -> add_var_env tl ctx 
                     | ((loc, name), _, _) -> 
-                        let ctx = add_variable name loc ctx in
+                        let ctx = senv_add_var name loc ctx in
                             add_var_env tl ctx end in
             
     let nctx = add_var_env decls ctx in
@@ -312,7 +306,7 @@ and lexp_parse_let decls ctx =
                         let ltyp, nctx = lexp_parse ptype nctx in
                         let nacc = ((loc, name), linst, ltyp)::acc in
                         let nctx = 
-                            add_variable_info (0, (loc, name), linst, ltyp) nctx in
+                            env_add_var_info (0, (loc, name), linst, ltyp) nctx in
                         (parse_decls tl nctx nacc)
                     | ((loc, name), Some pinst, None) ->
                         let linst, nctx = lexp_parse pinst ctx in
@@ -320,7 +314,7 @@ and lexp_parse_let decls ctx =
                         (*  need Inference HERE *)
                         let nacc = ((loc, name), linst, UnknownType(loc))::acc in
                         let nctx = 
-                            add_variable_info (0, (loc, name), linst, UnknownType(loc)) nctx in
+                            env_add_var_info (0, (loc, name), linst, UnknownType(loc)) nctx in
                         (parse_decls tl nctx nacc) 
                     (* Skip the variable *)
                     | ((loc, name), None, _) -> 
@@ -339,6 +333,39 @@ and lexp_parse_all (p: pexp list) (ctx: lexp_context):
                     (loop (List.tl plst) new_ctx (lxp::acc)) in
     (loop p ctx [])
 
+(*
+ *      Type Inference
+ * --------------------- *)
+(* Parsing a Pexp into an Lexp is really "elaboration", i.e. it needs to
+ * infer the types and perform macro-expansion.  For won't really
+ * do any of that, but we can already start structuring it accordingly.
+ *
+ * More specifically, we do it with 2 mutually recursive functions:
+ * one takes a Pexp along with its expected type and return an Lexp
+ * of that type (hopefully), whereas the other takes a Pexp and
+ * infers its type (which it returns along with the Lexp).
+ * This is the idea of "bidirectional type checking", which minimizes
+ * the amount of "guessing" and/or annotations.  Basically guessing/annotations
+ * is only needed at those few places where the code is not fully-normalized,
+ * which in normal programs is only in "let" definitions.
+ * So the rule of thumbs are:
+ * - use lexp_p_infer for destructors, and use lexp_p_check for constructors.
+ * - use lexp_p_check whenever you can.
+ *)
+ 
+and lexp_p_infer (p : pexp) (env : lexp_context) : lexp * ltype =
+    let lxp, nctx = lexp_parse p env in
+        lxp, UnknownType(dummy_location)
+
+and lexp_p_check (env : lexp_context) (p : pexp) (t : ltype) : lexp =
+  match p with
+  | _
+    -> let (e, inferred_t) = lexp_p_infer p env in
+      (* FIXME: check that inferred_t = t!  *)
+      e
+(*
+ *      Printing
+ * --------------------- *)
 (* So print can be called while parsing *)
 and lexp_print_adv opt exp =
     let slexp_print = lexp_print_adv opt in (* short_lexp_print *)

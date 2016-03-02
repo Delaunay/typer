@@ -37,6 +37,8 @@ open Myers
 open Sexp
 open Fmt
 
+
+
 let print_myers_list l print_fun = 
     let n = (length l) in
     
@@ -63,16 +65,15 @@ let get_int lxp =
         | Imm(Integer(_, l)) -> l
         | _ -> lexp_print lxp; -1
 ;;
+
 (*  Runtime Environ *)
 type runtime_env = lexp myers
 let make_runtime_ctx = nil;;
+let add_rte_variable x l = (cons x l);;
+let get_rte_variable idx l = (nth (idx) l);;
+
 let print_rte_ctx l = print_myers_list l 
     (fun g -> lexp_print g; print_string "\n")
-;;
-
-let add_rte_variable x l = (cons x l);;
-
-let rec get_rte_variable idx l = (nth (idx) l)
 ;;
 
 (*  Evaluation reduce an expression x to an Lexp.Imm *)
@@ -85,7 +86,6 @@ let rec eval lxp ctx: (lexp * runtime_env) =
         (*  Return a value stored in the environ *)
         | Var((loc, name), idx) -> begin
             try
-                print_int idx; print_string "\n";
                 (get_rte_variable idx ctx), ctx
             with 
                 Not_found ->
@@ -107,7 +107,7 @@ let rec eval lxp ctx: (lexp * runtime_env) =
             let nctx = build_arg_list args ctx in
             
             (* We need to seek out the function declaration and eval the body *)
-            (* but currently we cannot declare function so I hardcoded + *)
+            (* but currently we cannot declare functions so I hardcoded + *)
    (*       let bdy = get_body fname in
                 eval bdy nctx                *)
             
@@ -119,9 +119,6 @@ let rec eval lxp ctx: (lexp * runtime_env) =
                     (*  Get the two args *)
                     let l = get_int (get_rte_variable 0 nctx) in
                     let r = get_int (get_rte_variable 1 nctx) in
-                    
-                    print_int l; print_string "  \t ";
-                    print_int r; print_string "\n"; 
                     
                     Imm(Integer(dummy_location, l + r)), ctx end
                 else
@@ -159,16 +156,4 @@ let evalprint lxp ctx =
     print_eval_result v;
     ctx
 ;;
-
-
-(*
-    let rec _loop args ctx nctx =
-        match args with
-            | [] -> nctx
-            | hd::tl -> 
-                let (kind, exp) = hd in     (*  retrieve instruction *)
-                let value, nctx = eval exp ctx in (*  eval instruction *)
-                let nctx = add_rte_variable value nctx in (* add the value *)
-                    _loop tl ctx nctx in
-    _loop args ctx ctx *)
 

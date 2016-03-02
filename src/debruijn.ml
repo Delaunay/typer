@@ -30,15 +30,6 @@
  *          methods starting with '_' are considered private and should not
  *          elsewhere in the project
  *
- *      Methods:
- *          make_context     : make an empty context
- *          add_scope ctx    : add new scope to the current context
- *          find_var name ctx: return the index of the variable 'name'
- *          add_variable name loc ctx : add a variable to the current context
- *
- *      TODO:
- *          ADD meyers list <index -> (type, name?)>
- *
  * ---------------------------------------------------------------------------*)
 
 open Util
@@ -53,7 +44,7 @@ let debruijn_warning = msg_warning "DEBRUIJN"
 
 (*  Index -> Variable Info *) 
 type env_elem = (int * (location * string) * lexp * ltype)
-type environ = env_elem myers
+type env_type = env_elem myers
  
 (* This exist because I don't want that file to depend on anything *)
 module StringMap
@@ -66,16 +57,16 @@ type scope = (int) StringMap.t  (*  Map<String, int>*)
 (* Offset is the number to take us out of the inner scope
  * Scope is the Mapping between Variable's names and its current index loc 
  *                Offset + Scope *)
-type context_impl = int * scope 
+type senv_type = int * scope 
 
 (*  The recursive type that does everything  
  *                   inner Scope * Outer Scope  *)
-type lexp_context = context_impl * lexp_context option * environ
+type lexp_context = senv_type * lexp_context option * env_type
 
 
 (*  internal definitions: DO NOT USE
  * ---------------------------------- *)
- 
+
 let _make_scope = StringMap.empty;;
 let _make_context_impl = (0, _make_scope);;
 let _make_myers = nil
@@ -123,7 +114,7 @@ let _add_var_environ variable ctx =
 (*  return its current DeBruijn index
  *  return -1 if the variable does not exist 
  *  return closest variable *)
-let rec find_var (name: string) (ctx: lexp_context) =
+let rec senv_lookup (name: string) (ctx: lexp_context) =
     (*  Search *)
     let local_index = find_local name ctx in
     if  local_index >= 0 then 
@@ -148,17 +139,14 @@ and find_local (name: string) (ctx: lexp_context): int =
  *  the reason is _find_outer does not send back a correct index *)
 and _find_outer (name: string) (ctx: lexp_context): int =
     match ctx with
-        | (_, Some ct, _) -> (find_var name ct) 
+        | (_, Some ct, _) -> (senv_lookup name ct) 
         | _ -> -1
 ;;
-
-(*  Alias *)
-let get_var_index name ctx = find_var name ctx;;
      
 (*  We first add variable into our map later on we will add them into 
  *  the environment. The reason for this is that the type info is
  *  known after lexp parsing which need the index fist *)
-let add_variable name loc ctx =
+let senv_add_var name loc ctx =
     (*let (name, loc, exp, type_info) = var in *)
 
     (*  I think this should be illegal *)
@@ -183,32 +171,29 @@ let add_variable name loc ctx =
 ;;
 
 (*  *)
-let add_variable_info var ctx =
+let env_add_var_info var ctx =
     let (rof, (loc, name), value, ltyp) = var in
     let nenv = _add_var_environ (rof, (loc, name), value, ltyp) ctx in
     let (a, b, env) = ctx in
         (a, b, nenv)
 ;;
 
-let get_type_by_index index ctx = 
+let env_lookup_type_by_index index ctx = 
     try
         let (roffset, (_, name), _, t) = Myers.nth index (_get_environ ctx) in
-            t
+            Shift (index - roffset, t)
     with
         Not_found -> internal_error "DeBruijn index out of bounds!"
 ;;
 
-let get_type_by_vref v ctx =
-    let ((_, rname), dbi) = v in
-    try 
-        let (roffset, (_, dname), _, t) = Myers.nth dbi (_get_environ ctx) in
-        if dname = rname then
-            t
-        else
-            internal_error "DeBruijn index refers to wrong name!"
-    with
-        Not_found -> internal_error "DeBruijn index out of bounds!"
-;;
+let env_lookup_type (env : env_type) (v : vref) =
+  let ((_, rname), dbi) = v in
+  try let (recursion_offset, (_, dname), _, t) = Myers.nth dbi env in
+      if dname = rname then
+        Shift (dbi - recursion_offset, t)
+      else
+        internal_error "DeBruijn index refers to wrong name!"
+  with Not_found -> internal_error "DeBruijn index out of bounds!"
 
 (*  Make a Global context *)
 let make_context = (_make_context_impl, None, _make_myers);;
