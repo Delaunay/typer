@@ -38,8 +38,26 @@ open Grammar
 open Pexp
 open Debruijn
 open Lparse
+open Myers
+open Eval
 
+(*  pexp and lexp can be done together, one by one *)
+let pexp_lexp_one node ctx = 
+    let pxp = pexp_parse node in
+    lexp_parse pxp ctx
+;;
 
+let pexp_lexp_all nodes ctx =
+
+    let rec loop nodes ctx acc = 
+        match nodes with
+            | [] -> ((List.rev acc), ctx)
+            | hd::tl  -> 
+                let lxp, new_ctx = pexp_lexp_one hd ctx in
+                    (loop tl new_ctx (lxp::acc)) in
+    (loop nodes ctx [])
+;;
+        
 let main () = 
 
     let arg_n = Array.length Sys.argv in
@@ -71,7 +89,7 @@ let main () =
         
         (* get node sexp  *)
         let nodes = sexp_parse_all_to_list default_grammar toks (Some ";") in
-
+        
         (* get pexp *)
         let pexps = pexp_parse_all nodes in
 
@@ -87,7 +105,12 @@ let main () =
         print_title "Lexp";         debug_lexp_print_all lexps;
         
         (* Eval Each Expression *)
+        print_title "Eval Print";
         
+        (*  Eval One *)
+        let rctx = make_runtime_ctx in
+        let c, rctx = eval (List.hd lexps) rctx in
+            print_eval_result c
     
     end
 ;;

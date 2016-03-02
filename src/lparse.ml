@@ -47,8 +47,17 @@ let not_implemented_error () =
     internal_error "not implemented"
 ;;
 
-let lexp_error = msg_error "LEXP"
+let lexp_error loc msg = 
+    msg_error "LEXP" loc msg;
+    raise (internal_error msg)
+;;
+
+let dloc = dummy_location
 let lexp_warning = msg_warning "LEXP"
+
+(*  Print back in CET (Close Enough Typer) easier to read *)
+              (*  pretty ? * indent level * print_type? *)
+type print_context = (bool * int * bool)
 
 (* Vdef is exactly similar to Pvar but need to modify our ctx *)
 let pvar_to_vdef p =
@@ -110,7 +119,9 @@ let rec lexp_parse (p: pexp) (ctx: lexp_context): (lexp * lexp_context) =
             
         (* Function Call *)
         | Pcall (fname, _args) ->
+            (*  Why function names are pexp ? *)
             let fname, ctx = lexp_parse fname ctx in
+            
             let pargs = pexp_parse_all _args in
             let largs, fctx = lexp_parse_all pargs ctx in 
             
@@ -118,15 +129,123 @@ let rec lexp_parse (p: pexp) (ctx: lexp_context): (lexp * lexp_context) =
             let new_args = List.map (fun g -> (Aexplicit, g)) largs in
 
             Call(fname, new_args), ctx
-        
+
+        (* Pinductive *)
+        | Pinductive (label, _, ctors) ->
+            let dummy = (Aexplicit, (dummy_location, "a"), UnknownType(tloc))::[] in
+            let map_ctor, nctx = lexp_parse_constructors ctors ctx in
+            (*  We exit current context, return old context *)
+            Inductive(tloc, label, dummy, map_ctor), ctx
+            
         (* Pcons *)
+        | Pcons(var, sym) -> (* vref, symbol*)
+            let (loc, name) = var in
+            let idx = 0 in
+            Cons(((pvar_to_vdef var), idx), sym), ctx
+            
         (* Pcase *)
-        (* Pinductive *) (* Pinductive Pexp implementation is not ready *)
-        
+        | Pcase (loc, target, patterns) ->
+
+            let lxp, nctx = lexp_parse target ctx in
+            let ltp = UnknownType(loc) in (* /!\ HERE *)
+            
+            (*  Read patterns one by one *)
+            let rec loop ptrns merged dflt =
+                match ptrns with
+                    | [] -> merged, dflt
+                    | hd::tl -> 
+                        let (pat, exp) = hd in
+                        (*  Parse the pattern first then parse the expr *)
+                        let (name, iloc, arg) = lexp_read_pattern pat exp lxp in
+                        let exp, nctx = lexp_parse exp ctx in
+                        if name = "_" then
+                            loop tl merged (Some exp)
+                        else
+                            let merged = SMap.add name (iloc, arg, exp) merged in
+                            loop tl merged dflt in
+                                
+            let (lpattern, dflt) = loop patterns SMap.empty None in
+            Case(loc, lxp, ltp, lpattern, dflt), ctx 
+            
         | _ 
             -> UnknownType(tloc), ctx
+    
+(*  Read a pattern a create the equivalent representation *)    
+and lexp_read_pattern pattern exp target: 
+                     (string * location * (arg_kind * vdef) option list) =
+    
+    (*  I think the best way to define target is as  a nested call of inductive
+     *  constructor. Since we don't allow nested constructor pattern we only
+     *  need to use args of targets                                           *)
+     
+    match pattern with
+        | Ppatany (loc) ->            (* Catch all expression nothing to do  *)
+            ("_", loc, [])  
             
+        | Ppatvar (loc, name) ->      (* Create a variable containing target *)
+            (*let nctx = add_variable name loc ctx in
+            let idx = get_var_index name nctx in
+            let info = (idx, (loc, name), target, UnknownType(loc)) in
+            let nctx = add_variable_info info nctx in *)
+                (name, loc, [])
 
+        | Ppatcons (ctor_name, args) ->
+            let (loc, name) = ctor_name in
+
+            (*  Zip through target_args and pattern args *)
+            let args = lexp_read_pattern_args args in
+                (name, loc, args)
+            
+(*  Read patterns inside a constructor *)
+and lexp_read_pattern_args args:((arg_kind * vdef) option list) =
+
+    let rec loop args acc =
+        match args with
+            | [] -> (List.rev acc)
+            | hd::tl -> 
+                let (_, pat) = hd in
+                match pat with
+                    (* Nothing to do *)
+                    | Ppatany (loc) -> loop tl (None::acc)
+                    | Ppatvar (loc, name) -> 
+                        (* get kind from the call *)
+                        let nacc = (Some (Aexplicit, (loc, name)))::acc in
+                        loop tl nacc
+                    | _ -> lexp_error dloc "Constructor inside a Constructor"; 
+
+    in loop args []
+ 
+(*  Parse inductive constructor *)
+and lexp_parse_constructors ctors ctx =
+    
+    let make_args (args:(arg_kind * pvar option * pexp) list):
+                                       (arg_kind * ltype) list * lexp_context = 
+        let rec loop args acc ctx =
+            match args with
+                | [] -> (List.rev acc), ctx
+                | hd::tl -> begin
+                    match hd with
+                        (* What does the optional Pvar do ?
+                                        that expression does not exist in LEXP*)
+                        | (kind, _, exp) -> 
+                        let lxp, nctx = lexp_parse exp ctx in
+                        loop tl ((kind, lxp)::acc) nctx end in
+        loop args [] ctx in
+         
+    let rec loop ctors merged ctx =
+        match ctors with
+            | [] -> merged, ctx
+            | hd::tl -> begin 
+                match hd with   
+                    | ((loc, name), args) ->
+                        let largs, nctx = make_args args in
+                        let nmerged = SMap.add name largs merged in
+                        (loop tl nmerged ctx)
+            end in 
+            
+    loop ctors SMap.empty ctx
+
+(*  Parse let declaration *)
 and lexp_parse_let decls ctx =
 
     (*  Merge Type info and declaration together                      *)
@@ -192,12 +311,16 @@ and lexp_parse_let decls ctx =
                         let linst, nctx = lexp_parse pinst ctx in
                         let ltyp, nctx = lexp_parse ptype nctx in
                         let nacc = ((loc, name), linst, ltyp)::acc in
+                        let nctx = 
+                            add_variable_info (0, (loc, name), linst, ltyp) nctx in
                         (parse_decls tl nctx nacc)
                     | ((loc, name), Some pinst, None) ->
                         let linst, nctx = lexp_parse pinst ctx in
                         (*  This is where UnknownType are introduced *)
                         (*  need Inference HERE *)
                         let nacc = ((loc, name), linst, UnknownType(loc))::acc in
+                        let nctx = 
+                            add_variable_info (0, (loc, name), linst, UnknownType(loc)) nctx in
                         (parse_decls tl nctx nacc) 
                     (* Skip the variable *)
                     | ((loc, name), None, _) -> 
@@ -215,13 +338,9 @@ and lexp_parse_all (p: pexp list) (ctx: lexp_context):
             | _  -> let lxp, new_ctx = lexp_parse (List.hd plst) ctx in
                     (loop (List.tl plst) new_ctx (lxp::acc)) in
     (loop p ctx [])
-;;
 
-(*  Print back in CET (Close Enough Typer) easier to read *)
-              (*  pretty ? * indent level * print_type? *)
-type print_context = (bool * int * bool)
- 
-let rec lexp_print_adv opt exp =
+(* So print can be called while parsing *)
+and lexp_print_adv opt exp =
     let slexp_print = lexp_print_adv opt in (* short_lexp_print *)
     let (pty, indent, prtp) = opt in
     match exp with
@@ -246,6 +365,11 @@ let rec lexp_print_adv opt exp =
         | Lambda(kind, (loc, name), ltype, lbody) ->
             print_string "lambda ("; print_string (name ^ ": "); 
             slexp_print ltype; print_string ") -> "; slexp_print lbody;
+            
+        | Cons(vf, symbol) ->
+            let (loc, name) = symbol in
+            let ((loc, vname), idx) = vf in
+                print_string (name ^ "("); print_string (vname ^ ")");
             
         | Call(fname, args) -> begin  (*  /!\ Partial Print *)
             (*  get function name *)
@@ -272,10 +396,50 @@ let rec lexp_print_adv opt exp =
                     List.iter (fun arg -> print_string " "; print_arg arg) args;
                     print_string ")" end
 
+        | Inductive (_, (_, name), _, ctors) ->
+            print_string ("inductive_ " ^ name ^ " ");
+            lexp_print_ctors opt ctors;
+            
+        | Case (_, target, tpe, map, dflt) -> begin
+            print_string "case "; slexp_print target;
+            print_string ": "; slexp_print tpe; 
+            
+            if pty then print_string "\n";
+            
+            let print_arg arg =
+                 List.iter (fun v -> 
+                    match v with
+                        | None -> print_string " _"
+                        | Some (kind, (l, n)) -> print_string (" " ^ n)) arg in
+            
+            SMap.iter (fun key (loc, arg, exp) ->
+                make_line " " (indent * 4);
+                print_string ("| " ^ key); print_arg arg; 
+                print_string " -> ";
+                slexp_print exp; print_string "; ";
+                if pty then print_string "\n";)
+                map;
+            
+            match dflt with
+                | None -> ()
+                | Some df -> 
+                    make_line " " (indent * 4);
+                    print_string "| _ -> "; slexp_print df;
+                    print_string ";"; if pty then print_string "\n"; end
+            
         (* debug catch all *)
         | UnknownType (loc)      -> print_string "unkwn";
-        | _ -> print_string "expr"
-            
+        | _ -> print_string "Printint Not Implemented"
+        
+        
+and lexp_print_ctors opt ctors =
+    SMap.iter (fun key value ->
+            print_string ("(" ^ key ^ ": ");
+            List.iter (fun (kind, arg) -> 
+                lexp_print_adv opt arg; print_string " ") value;
+            print_string ")")
+        ctors
+
 and lexp_print_decls opt decls =
     let (pty, indent, prtp) = opt in
     let print_type nm tp =

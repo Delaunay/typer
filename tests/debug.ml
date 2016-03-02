@@ -147,20 +147,27 @@ let debug_pexp_print_all pexps =
 (* Print lexp with debug info *)
 let debug_lexp_print lxp = 
     print_string " ";
-    let print_info msg loc expr= 
+    let dloc = dummy_location in
+    let print_info_impl msg loc = 
         print_string msg; print_string "["; 
         print_loc loc; 
-        print_string "]\t";
+        print_string "]\t" in
+    let print_info msg loc lxp = 
+        print_info_impl msg loc;
         lexp_print lxp in
     match lxp with
-        | Var((loc, _), _)  -> print_info "Var         " loc lxp
-        | Imm(s)            -> print_info "Imm         " dummy_location lxp
-        | Let(loc, _, _)    -> print_info "Let         " loc lxp
+        | Var((loc, _), _)          -> print_info "Var         " loc lxp
+        | Imm(s)                    -> print_info "Imm         " dloc lxp
+        | Let(loc, _, _)            -> print_info "Let         " loc lxp
         | Arrow(_, _, _, loc, _)    -> print_info "Arrow       " loc lxp
         | Lambda(_, (loc, _), _, _) -> print_info "Lambda      " loc lxp
-        | Call(_, _)        -> print_info "Call        " dummy_location lxp
-        | UnknownType(loc)  -> print_info "UnknownType " loc lxp
-        | _ -> print_string "Nothing";
+        | Call(_, _)                -> print_info "Call        " dloc lxp
+        | Inductive(loc, _, _, _)   -> print_info "Inductive   " loc lxp
+        | UnknownType(loc)          -> print_info "UnknownType " loc lxp
+        | Case(loc, _, _, _, _)     -> print_info "Case        " loc lxp
+        | Cons (rf, sym)            -> let ((loc, name), idx) = rf in
+            print_info "Cons        " loc lxp
+        | _ -> print_string "Debug Printing Not Implemented";
 ;;
 
 (* Print a list of lexp *)

@@ -1,62 +1,49 @@
-ab;
 
-% Type is read as a Pvar ?????
-add = lambda (a : Type) -> lambda (b : Type) -> (add a b);
 
-% How typer is supposed to read this
-p:int -> int;
+% -------------------------------------------
+%   Function Calls
+% -------------------------------------------
 
-% this is a call to _=_
-odd  n = case n | 0 => false | S n' => even (n');
+% define sqrt
+sqrt x = lambda (x : Nat) -> x * x;
 
-%
-%   Here we test that two declaration with different 
-%   name are EXACLTY equivalent in the eyes
-%   of the compiler
-%
-%   Declaration order STILL MATTERS
-%
+% define cube
+cube = lambda (x : Nat) -> x * (sqrt x);
 
-% let
-let a:Nat; d:Nat; c:Nat; b:Nat;
-    a = b;
-    d = a; 
-    c = d;
-    b = c;
-  in a + b + c + d
-;
+% explicit 
+mult = lambda (x : Nat) -> lambda (y : Nat) -> (y * x);
 
-% let: Different naming
-let e:Nat; f:Nat; g:Nat; h:Nat;
-    e = h;
-    f = e; 
-    g = f;
-    h = g;
-  in e + h + g + f
-;
+% implicit (Type annotation introduce a bug)
+cube = lambda x y -> (x * y);
 
-% let: Different Ordering
-let b:Nat; c:Nat; d:Nat; a:Nat;
-    c = d;
-    d = a; 
-    b = c;
-    a = b;
-  in a + b + c + d
-;
 
-%
-%   Recursivity detection
-%
- 
-let odd: (int -> int);
-    even: (int -> int);
-    odd  n = case n | 0 => false | S n' => even (n');
-    even n = case n | 0 => true | S n' => odd (n');
-  in a + b;
-  
+% -------------------------------------------
+%   Inductive type
+% -------------------------------------------
 
-% Do I consider functions as variable ?? Yes
+inductive_ (dummy_Nat) (zero) (succ Nat);
 
-  
-  
-    
+% Usage
+Nat : Type                                          % This line is not parsed
+Nat = inductive_ (dummy_Nat) (zero) (succ Nat);     % zero is not parsed
+
+%   Constructor
+% -------------------------------------------
+
+% only inductive-cons is available
+
+inductive-cons Nat succ;
+
+% Usage
+zero = inductive-cons Nat zero; % those are aliases
+succ = inductive-cons Nat succ;
+
+one = (succ (zero));
+
+% -------------------------------------------
+%   Cases
+% -------------------------------------------
+
+case x
+    | zero => y
+    | succ x => succ (plus x y);
