@@ -83,7 +83,7 @@ let rec lexp_parse (p: pexp) (ctx: lexp_context): (lexp * lexp_context) =
             (* This should be an error but we accept it for debugging *)
             if idx < 0 then
                 lexp_warning tloc ("Variable: '" ^ name ^ "' does not exist");
-            (make_var name (idx + 1) loc), ctx; 
+            (make_var name (idx) loc), ctx; 
         
         (*  Let, Variable declaration + local scope *)
         | Plet(loc, decls, body) ->         (* /!\ HERE *)    

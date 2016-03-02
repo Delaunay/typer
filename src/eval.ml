@@ -35,13 +35,21 @@ open Lexp
 open Lparse
 open Myers
 open Sexp
+open Fmt
 
 let print_myers_list l print_fun = 
     let n = (length l) in
     
+    print_string "-------------------\n";
+    print_string " Environement: \n";
+    print_string "-------------------\n";
+    
     for i = 0 to n - 1 do
-        print_fun (nth i l)
-    done
+        ralign_print_int (i + 1) 4;
+        print_string ")    ";
+        print_fun (nth i l);
+    done;
+    print_string "-------------------\n";
 ;;
 
 let get_function_name fname =
@@ -56,45 +64,19 @@ let get_int lxp =
         | _ -> lexp_print lxp; -1
 ;;
 (*  Runtime Environ *)
-type runtime_scope = lexp myers
-type runtime_ctx = runtime_scope * runtime_ctx option
-
-let make_runtime_ctx = (nil, None)
+type runtime_env = lexp myers
+let make_runtime_ctx = nil;;
+let print_rte_ctx l = print_myers_list l 
+    (fun g -> lexp_print g; print_string "\n")
 ;;
 
-let rec print_rte_ctx ctx =
-    let (inner, outer) = ctx in
-    print_myers_list inner (fun g -> lexp_print g; print_string "\n");
-    match outer with
-        | Some otr -> print_rte_ctx otr;
-        | None -> ()
-;;
+let add_rte_variable x l = (cons x l);;
 
-let add_rte_variable x l =
-    let (ctx, v) = l in 
-    let ctx = (cons x ctx) in
-        (ctx, v)
-;;
-
-let enter_scope ctx = 
-    (nil, Some ctx)
-;;
-
-let rec get_rte_variable idx l =
-    let (inner, outer) = l in
-    let inner_n = (length inner) in
-    match outer with
-        | Some otr ->
-            if idx > inner_n then 
-                get_rte_variable (idx - inner_n) otr
-            else                  
-                (nth (idx - 1) inner)
-        | None -> 
-            (nth (idx - 1) inner)
+let rec get_rte_variable idx l = (nth (idx) l)
 ;;
 
 (*  Evaluation reduce an expression x to an Lexp.Imm *)
-let rec eval lxp ctx: (lexp * runtime_ctx) = 
+let rec eval lxp ctx: (lexp * runtime_env) = 
         
     match lxp with
         (*  This is already a leaf *)
@@ -103,6 +85,7 @@ let rec eval lxp ctx: (lexp * runtime_ctx) =
         (*  Return a value stored in the environ *)
         | Var((loc, name), idx) -> begin
             try
+                print_int idx; print_string "\n";
                 (get_rte_variable idx ctx), ctx
             with 
                 Not_found ->
@@ -113,51 +96,46 @@ let rec eval lxp ctx: (lexp * runtime_ctx) =
         (*  this works for non recursive let *)
         | Let(_, decls, inst) -> begin
             (*  First we evaluate all declaration then we evaluate the instruction *)
-            let nctx = enter_scope ctx in
-            let nctx = build_ctx decls nctx in
+            let nctx = build_ctx decls ctx in
             let value, nctx = eval inst nctx in
             (*  return old context as we exit let's scope*)
                 value, ctx end
                 
         (*  Function call *)
         | Call (fname, args) ->
-            (*  Create function scope  *)
-            let nctx = enter_scope ctx in
-            
             (*  Add args in the scope *)
-            let nctx = build_arg_list args nctx in
+            let nctx = build_arg_list args ctx in
             
             (* We need to seek out the function declaration and eval the body *)
             (* but currently we cannot declare function so I hardcoded + *)
-            (*
-            let bdy = get_body fname in
-                eval bdy nctx
-            *)
+   (*       let bdy = get_body fname in
+                eval bdy nctx                *)
             
             (*  fname is currently a var *)
             let name = get_function_name fname in
                 (*  Hardcoded function for now *)
-                if name = "_+_" then 
+                if name = "_+_" then begin
+
                     (*  Get the two args *)
-                    let l = get_int (get_rte_variable 1 nctx) in
-                    let r = get_int (get_rte_variable 2 nctx) in
+                    let l = get_int (get_rte_variable 0 nctx) in
+                    let r = get_int (get_rte_variable 1 nctx) in
                     
-                    Imm(Integer(dummy_location, l + r)), ctx
+                    print_int l; print_string "  \t ";
+                    print_int r; print_string "\n"; 
+                    
+                    Imm(Integer(dummy_location, l + r)), ctx end
                 else
                     Imm(String(dummy_location, "Funct Not Implemented")), ctx 
                    
         | _ -> Imm(String(dummy_location, "Eval Not Implemented")), ctx
         
 and build_arg_list args ctx =
-    let rec _loop args ctx =
-        match args with
-            | [] -> ctx
-            | hd::tl -> 
-                let (kind, exp) = hd in     (*  retrieve instruction *)
-                let value, nctx = eval exp ctx in (*  eval instruction *)
-                let nctx = add_rte_variable value nctx in (* add the value *)
-                    _loop tl nctx in
-    _loop args ctx
+
+    (*  Eval every args *)
+    let arg_val = List.map (fun (k, e) -> let (v, c) = eval e ctx in v) args in
+    
+    (*  Add args inside context *)
+    List.fold_left (fun c v -> add_rte_variable v c) ctx arg_val
 
 and build_ctx decls ctx =
     match decls with
@@ -182,4 +160,15 @@ let evalprint lxp ctx =
     ctx
 ;;
 
+
+(*
+    let rec _loop args ctx nctx =
+        match args with
+            | [] -> nctx
+            | hd::tl -> 
+                let (kind, exp) = hd in     (*  retrieve instruction *)
+                let value, nctx = eval exp ctx in (*  eval instruction *)
+                let nctx = add_rte_variable value nctx in (* add the value *)
+                    _loop tl ctx nctx in
+    _loop args ctx ctx *)
 
