@@ -94,7 +94,7 @@ let main () =
         let pexps = pexp_parse_all nodes in
 
         (* get lexp *)
-        let ctx = make_context in
+        let ctx = make_lexp_context in
         let lexps, new_ctx = lexp_parse_all pexps ctx in
         
         (* Printing *)(*

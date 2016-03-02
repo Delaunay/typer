@@ -54,3 +54,9 @@ Read tests/full_debug.ml for ocaml usage
         sexp_parse sexp
         
 * Sexp -> Lexp
+
+    Replace variable name by their (reverse) index in the environment.
+    
+    
+        
+

@@ -40,6 +40,8 @@ open Sexp
 open Pexp
 open Lexp
 open Lparse
+open Debruijn
+open Fmt
 
 (* Print aPretokens *)
 let rec debug_pretokens_print pretoken =
@@ -176,5 +178,6 @@ let debug_lexp_print_all lexps =
             print_string "\n") 
         lexps
 ;;
+
 
 

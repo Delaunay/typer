@@ -38,7 +38,6 @@ open Sexp
 open Fmt
 
 
-
 let print_myers_list l print_fun = 
     let n = (length l) in
     
@@ -104,7 +103,9 @@ let rec eval lxp ctx: (lexp * runtime_env) =
         (*  Function call *)
         | Call (fname, args) ->
             (*  Add args in the scope *)
+            (*print_rte_ctx ctx;*)
             let nctx = build_arg_list args ctx in
+            (*print_rte_ctx nctx;*)
             
             (* We need to seek out the function declaration and eval the body *)
             (* but currently we cannot declare functions so I hardcoded + *)
@@ -115,10 +116,13 @@ let rec eval lxp ctx: (lexp * runtime_env) =
             let name = get_function_name fname in
                 (*  Hardcoded function for now *)
                 if name = "_+_" then begin
-
+                
                     (*  Get the two args *)
                     let l = get_int (get_rte_variable 0 nctx) in
                     let r = get_int (get_rte_variable 1 nctx) in
+                    
+                    (*print_int l; print_string " "; 
+                      print_int r; print_string "\n"; *)
                     
                     Imm(Integer(dummy_location, l + r)), ctx end
                 else
@@ -127,10 +131,8 @@ let rec eval lxp ctx: (lexp * runtime_env) =
         | _ -> Imm(String(dummy_location, "Eval Not Implemented")), ctx
         
 and build_arg_list args ctx =
-
     (*  Eval every args *)
     let arg_val = List.map (fun (k, e) -> let (v, c) = eval e ctx in v) args in
-    
     (*  Add args inside context *)
     List.fold_left (fun c v -> add_rte_variable v c) ctx arg_val
 

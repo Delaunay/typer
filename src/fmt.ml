@@ -36,55 +36,43 @@ let str_size_int value =
 ;;
 
 (* print n char 'c' *)
-let rec make_line c n = 
-    print_string c;
-    if n >= 1 then (make_line c (n - 1));
-;;
+let rec make_line c n = String.make n c;;
+
+(*  Big numbers are replaced by #### *)
+let cut_int (v:int) (start:int) (len:int): int = 0;;
      
-(* print an integer right-aligned *)
-let ralign_print_int value nb =
-    make_line " " (nb - (str_size_int value));
-    print_int value;
+(*  LALIGN 
+ * ----------------------- *)
+let ralign_generic get_size print_str print_elem cut_elem elem col =
+    let n = get_size elem in
+    if n > col then 
+        print_elem (cut_elem elem 0 col)
+    else begin
+        print_str (make_line ' ' (col - n));
+        print_elem elem; end
 ;;
 
-let lalign_print_int value nb =
-    print_int value;
-    make_line " " (nb - (str_size_int value));
-;;
+let ralign_print_string = 
+    ralign_generic String.length print_string print_string String.sub;;
 
-let ralign_print_string str nb =
-    make_line " " (nb - String.length str);
-    print_string str;
-;;
+let ralign_print_int =
+    ralign_generic str_size_int print_string print_int cut_int;;
+    
 
-let lalign_print_string str nb =
-    print_string str;
-    make_line " " (nb - String.length str);
-;;
+(*  LALIGN 
+ * ----------------------- *)
+let lalign_generic get_size print_str print_elem cut_elem elem col =
+    let n = get_size elem in
+    if n > col then 
+        print_elem (cut_elem elem 0 col)
+    else begin
+        print_elem elem; 
+        print_str (make_line ' ' (col - n)); end
+;;  
+    
+let lalign_print_string = 
+    lalign_generic String.length print_string print_string String.sub;;
 
-(* print n char 'c' *)
-let rec prerr_make_line c n = 
-    prerr_string c;
-    if n >= 1 then (make_line c (n - 1));
-;;
-     
-(* print an integer right-aligned *)
-let ralign_prerr_int value nb =
-    prerr_make_line " " (nb - (str_size_int value));
-    prerr_int value;
-;;
+let lalign_print_int =
+    lalign_generic str_size_int print_string print_int cut_int;;
 
-let lalign_prerr_int value nb =
-    prerr_int value;
-    prerr_make_line " " (nb - (str_size_int value));
-;;
-
-let ralign_prerr_string str nb =
-    prerr_make_line " " (nb - String.length str);
-    prerr_string str;
-;;
-
-let lalign_prerr_string str nb =
-    prerr_string str;
-    prerr_make_line " " (nb - String.length str);
-;;

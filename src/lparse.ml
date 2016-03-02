@@ -87,7 +87,7 @@ let rec lexp_parse (p: pexp) (ctx: lexp_context): (lexp * lexp_context) =
         
         (*  Let, Variable declaration + local scope *)
         | Plet(loc, decls, body) ->         (* /!\ HERE *)    
-            let decl, nctx = lexp_parse_let decls (add_scope ctx) in
+            let decl, nctx = lexp_parse_let decls ctx in
             let bdy, nctx = lexp_parse body nctx in
             (*  Send back old context as we exit the inner scope *)
             Let(tloc, decl, bdy), ctx
@@ -172,6 +172,9 @@ let rec lexp_parse (p: pexp) (ctx: lexp_context): (lexp * lexp_context) =
 and lexp_read_pattern pattern exp target: 
                      (string * location * (arg_kind * vdef) option list) =
 
+    (*  lookup target val if its a var and extract its args *)
+        (*  TODO *)
+                     
     match pattern with
         | Ppatany (loc) ->            (* Catch all expression nothing to do  *)
             ("_", loc, [])  
@@ -379,7 +382,7 @@ and lexp_print_adv opt exp =
         
         | Let (_, decls, body)   ->
             print_string "let"; lexp_print_decls (pty, indent + 1, prtp) decls; 
-            if pty then make_line " " (indent * 4 + 4);
+            if pty then print_string (make_line ' ' (indent * 4 + 4));
             print_string " in "; lexp_print_adv (pty, indent + 2, prtp) body
             
         | Arrow(kind, Some (_, name), tp, loc, expr) ->
@@ -440,7 +443,7 @@ and lexp_print_adv opt exp =
                         | Some (kind, (l, n)) -> print_string (" " ^ n)) arg in
             
             SMap.iter (fun key (loc, arg, exp) ->
-                make_line " " (indent * 4);
+                print_string (make_line ' ' (indent * 4));
                 print_string ("| " ^ key); print_arg arg; 
                 print_string " -> ";
                 slexp_print exp; print_string "; ";
@@ -450,7 +453,7 @@ and lexp_print_adv opt exp =
             match dflt with
                 | None -> ()
                 | Some df -> 
-                    make_line " " (indent * 4);
+                    print_string (make_line ' ' (indent * 4));
                     print_string "| _ -> "; slexp_print df;
                     print_string ";"; if pty then print_string "\n"; end
             
@@ -475,14 +478,36 @@ and lexp_print_decls opt decls =
 
     List.iteri (fun idx g -> match g with
         | ((loc, name), expr, ltyp) ->
-            if pty && idx > 0 then make_line " " (indent * 4);
+            if pty && idx > 0 then print_string (make_line ' ' (indent * 4));
             if prtp then print_type name ltyp; print_string " ";
             print_string (name ^ " = "); 
             lexp_print_adv opt expr; print_string ";";
             if pty then print_string "\n")
         decls
-;;
 
+(*  Print context  *)
+and lexp_context_print ctx =
+    let ((n, map), env) = ctx in
+    
+    StringMap.iter (fun key idx ->
+        (* Print senv info *)
+        print_string "    ";
+        ralign_print_string key 20;
+        print_string "  =>  ";
+        ralign_print_int idx 4;
+        print_string "  =>  ";
+        
+        (*  Print env Info *)
+        let (_, (_, name), exp, tp) = env_lookup_by_index (n - idx) ctx in 
+            print_string name; (*   name must match *)
+            print_string " = ";
+            lexp_print_adv (false, 0, true) exp;
+            print_string ": ";
+            lexp_print_adv (false, 0, true) tp;
+            
+        print_string "\n")
+        map
+;;
 
 let lexp_print = lexp_print_adv (false, 0, true)
             

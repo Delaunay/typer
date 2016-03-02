@@ -36,15 +36,6 @@ let print_loc (loc: location) =
     Fmt.ralign_print_int loc.column 3;
 ;;
 
-(* print debug info *)
-let prerr_loc (loc: location) = 
-    (*print_string loc.file; *) (* Printing the file is too much*)
-    prerr_string "ln "; 
-    Fmt.ralign_prerr_int loc.line 3;
-    prerr_string ", cl ";
-    Fmt.ralign_prerr_int loc.column 3;
-;;
-
 (*  File is not printed because currently we parse only one file... *)
 (*  Section is the name of the compilation step [for debugging]     *)
 (*  'prerr' output is ugly                                          *)
