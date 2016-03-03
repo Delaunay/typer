@@ -47,13 +47,14 @@ let not_implemented_error () =
     internal_error "not implemented"
 ;;
 
-let lexp_error loc msg = 
+let dloc = dummy_location
+
+let lexp_warning = msg_warning "LEXP"
+let lexp_error = msg_error "LEXP"
+let lexp_fatal loc msg = 
     msg_error "LEXP" loc msg;
     raise (internal_error msg)
 ;;
-
-let dloc = dummy_location
-let lexp_warning = msg_warning "LEXP"
 
 (*  Print back in CET (Close Enough Typer) easier to read *)
               (*  pretty ? * indent level * print_type? *)
@@ -77,17 +78,22 @@ let rec lexp_parse (p: pexp) (ctx: lexp_context): (lexp * lexp_context) =
         (*  Block/String/Integer/Float *)
         | Pimm value -> Imm(value), ctx
             
-        (*  Symbol i.e identifier /!\ A lot of Pvar are not variables /!\ *)
-        | Pvar (loc, name) -> 
-            let idx = senv_lookup name ctx in
-            (* This should be an error but we accept it for debugging *)
-            if idx < 0 then
-                lexp_warning tloc ("Variable: '" ^ name ^ "' does not exist");
-            (make_var name (idx) loc), ctx; 
-        
+        (*  Symbol i.e identifier *)
+        | Pvar (loc, name) -> begin
+            try
+                (*  Send Variable loc *)
+                let idx = senv_lookup name ctx in
+                (make_var name idx loc), ctx; 
+                
+            with Not_found ->
+                (*  Add Variable *)
+                let ctx = senv_add_var name loc ctx in
+                (make_var name 0 loc), ctx; end
+                
         (*  Let, Variable declaration + local scope *)
-        | Plet(loc, decls, body) ->         (* /!\ HERE *)    
+        | Plet(loc, decls, body) ->      
             let decl, nctx = lexp_parse_let decls ctx in
+            lexp_context_print nctx;
             let bdy, nctx = lexp_parse body nctx in
             (*  Send back old context as we exit the inner scope *)
             Let(tloc, decl, bdy), ctx
@@ -115,19 +121,42 @@ let rec lexp_parse (p: pexp) (ctx: lexp_context): (lexp * lexp_context) =
             let nvar = pvar_to_vdef var in  (* /!\ HERE *)(* /!\ Missing Type *)
             let lbody, ctx = lexp_parse body ctx in
             Lambda(kind, nvar, UnknownType(tloc), lbody), ctx 
-            
-        (* Function Call *)
+           
         | Pcall (fname, _args) ->
-            (*  Why function names are pexp ? *)
-            let fname, ctx = lexp_parse fname ctx in
-            
+            (*  Process Arguments *)
             let pargs = pexp_parse_all _args in
             let largs, fctx = lexp_parse_all pargs ctx in 
-            
             (*  Make everything explicit for now *)
             let new_args = List.map (fun g -> (Aexplicit, g)) largs in
-
-            Call(fname, new_args), ctx
+                
+            (*  Call to named function which must have been defined earlier  *
+             *          i.e they must be in the context                      *)
+            begin try begin
+                (*  Get function name *)
+                let name, loc = match fname with
+                    | Pvar(loc, nm) -> nm, loc
+                    | Pcons (_, (loc, nm)) -> nm, loc
+                    | _ -> raise Not_found in
+                
+                try
+                    (*  Check if the function was defined *)
+                    let idx = senv_lookup name ctx in
+                    let vf = (make_var name idx loc) in
+                    Call(vf, new_args), ctx
+                    
+                with Not_found ->
+                    (*  Don't stop even if an error was found *)
+                    lexp_error loc ("The function \"" ^ name ^ 
+                                                          "\" was not defined");
+                    let vf = (make_var name (-1) loc) in
+                    Call(vf, new_args), ctx end
+                    
+            (*  Call to a nameless function *)
+            with Not_found ->
+                (*  I think this should not modify context.
+                 *  if so, funny things might happen when evaluating *)
+                let fname, ctx = lexp_parse fname ctx in
+                Call(fname, new_args), ctx end
 
         (* Pinductive *)
         | Pinductive (label, _, ctors) ->
@@ -205,10 +234,9 @@ and lexp_read_pattern_args args:((arg_kind * vdef) option list) =
                     (* Nothing to do *)
                     | Ppatany (loc) -> loop tl (None::acc)
                     | Ppatvar (loc, name) -> 
-                        (* get kind from the call *)
                         let nacc = (Some (Aexplicit, (loc, name)))::acc in
                         loop tl nacc
-                    | _ -> lexp_error dloc "Constructor inside a Constructor"; 
+                    | _ -> lexp_fatal dloc "Constructor inside a Constructor"; 
 
     in loop args []
  
@@ -284,19 +312,11 @@ and lexp_parse_let decls ctx =
     let decls = loop decls [] in
     
     (*  Add Each Variable to the environment *)
-    let rec add_var_env decls ctx =
-        match decls with
-            | [] -> ctx
-            | hd::tl -> begin
-                match hd with 
-                    (*  Unused variable: No Instruction *)
-                    (*  Warning will be printed later   *)
-                    | ((loc, name), None, _) -> add_var_env tl ctx 
-                    | ((loc, name), _, _) -> 
-                        let ctx = senv_add_var name loc ctx in
-                            add_var_env tl ctx end in
-            
-    let nctx = add_var_env decls ctx in
+    let nctx = List.fold_left (fun ctx hd ->
+        match hd with 
+            | (_, None, _) -> ctx   (*  Unused variable: No Instruction *)
+            | ((loc, name), _, _) -> senv_add_var name loc ctx)  
+        ctx decls in
     
     (* lexp_parse instruction and types *)
     let rec parse_decls decls ctx acc =
@@ -312,19 +332,16 @@ and lexp_parse_let decls ctx =
                             env_add_var_info (0, (loc, name), linst, ltyp) nctx in
                         (parse_decls tl nctx nacc)
                     | ((loc, name), Some pinst, None) ->
-                        let linst, nctx = lexp_parse pinst ctx in
-                        (*  This is where UnknownType are introduced *)
-                        (*  need Inference HERE *)
-                        let nacc = ((loc, name), linst, UnknownType(loc))::acc in
-                        let nctx = 
-                            env_add_var_info (0, (loc, name), linst, UnknownType(loc)) nctx in
+                        let lxp, ltp = lexp_p_infer pinst ctx in
+                        let nacc = ((loc, name), lxp, ltp)::acc in
+                        let nctx =
+                           env_add_var_info (0, (loc, name), lxp, ltp) nctx in
                         (parse_decls tl nctx nacc) 
                     (* Skip the variable *)
                     | ((loc, name), None, _) -> 
-                        lexp_warning loc "Unused Variable";
-                        (parse_decls tl ctx acc) 
-                         end in
-                        
+                        lexp_warning loc "Unused Variable"; 
+                        (parse_decls tl ctx acc) end in
+                                           
     parse_decls decls nctx []
     
 and lexp_parse_all (p: pexp list) (ctx: lexp_context): 
@@ -498,14 +515,15 @@ and lexp_context_print ctx =
         print_string "  =>  ";
         
         (*  Print env Info *)
-        let (_, (_, name), exp, tp) = env_lookup_by_index (n - idx) ctx in 
+        try let (_, (_, name), exp, tp) = env_lookup_by_index (n - idx) ctx in 
             print_string name; (*   name must match *)
             print_string " = ";
             lexp_print_adv (false, 0, true) exp;
             print_string ": ";
             lexp_print_adv (false, 0, true) tp;
-            
-        print_string "\n")
+            print_string "\n"
+        with
+            Not_found -> print_string "Not_found \n")
         map
 ;;
 

@@ -8,7 +8,7 @@ let c = 1; a = 5; b = 10; d = 3; in
 % -------------------------------------------
 
 % define sqrt
-sqrt x = lambda (x : Nat) -> x * x;
+sqrt = lambda (x : Nat) -> x * x;
 
 % define cube
 cube = lambda (x : Nat) -> x * (sqrt x);

@@ -55,7 +55,7 @@ module StringMap
 (*  Map matching variable name and its distance in the current scope *)        
 type scope = (int) StringMap.t  (*  Map<String, int>*)
 
-type senv_length = int  (*  Map length *)
+type senv_length = int  (* it is not the map true length *)
 type senv_type = senv_length * scope 
 
              (* name -> index * index -> info *)
@@ -91,10 +91,8 @@ let make_lexp_context = (_make_senv_type, _make_myers);;
  
 (*  return its current DeBruijn index *)
 let rec senv_lookup (name: string) (ctx: lexp_context) =
-    try
-        let ((n, map), _) = ctx in
-            n - (StringMap.find name map) - 1
-    with Not_found -> -1
+    let ((n, map), _) = ctx in
+        n - (StringMap.find name map) - 1
 ;;
      
 (*  We first add variable into our map. Later on, we will add them into 
@@ -102,8 +100,15 @@ let rec senv_lookup (name: string) (ctx: lexp_context) =
  *  known after lexp parsing which need the index fist *)
 let senv_add_var name loc ctx =
     let ((n, map), e) = ctx in
-    let nmap = StringMap.add name n map in
-        ((n + 1, nmap), e)
+    try
+        let idx = senv_lookup name ctx in
+            debruijn_warning loc ("Variable Shadowing " ^ name);
+        let nmap = StringMap.add name n map in
+                ((n + 1, nmap), e)
+    with
+        Not_found ->
+            let nmap = StringMap.add name n map in
+                ((n + 1, nmap), e)
 ;;
 
 (*  *)

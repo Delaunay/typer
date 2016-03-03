@@ -37,6 +37,14 @@ open Myers
 open Sexp
 open Fmt
 
+let eval_error loc msg = 
+    msg_error "EVAL" loc msg;
+    raise (internal_error msg)
+;;
+
+let dloc = dummy_location
+let eval_warning = msg_warning "EVAL"
+
 
 let print_myers_list l print_fun = 
     let n = (length l) in
@@ -101,11 +109,23 @@ let rec eval lxp ctx: (lexp * runtime_env) =
                 value, ctx end
                 
         (*  Function call *)
-        | Call (fname, args) ->
+        | Call (lname, args) ->
+            (*  Try to extract name *)(*
+            let tname = match lname with
+                | Var((loc, name), _) -> name
+                | _ -> lexp_print lname; eval_error "Incorrect Function Name" in
+                
+            (*  Save declaration in environment *)
+            let n = List.length args in
+            if tname = "_=_" && n == 2 then
+                let (((_, name), _), expr) = args in
+                let nctx = add_rte_variable  *)
+              
+        
             (*  Add args in the scope *)
-            (*print_rte_ctx ctx;*)
+            print_rte_ctx ctx;
             let nctx = build_arg_list args ctx in
-            (*print_rte_ctx nctx;*)
+            print_rte_ctx nctx;
             
             (* We need to seek out the function declaration and eval the body *)
             (* but currently we cannot declare functions so I hardcoded + *)
@@ -113,7 +133,7 @@ let rec eval lxp ctx: (lexp * runtime_env) =
                 eval bdy nctx                *)
             
             (*  fname is currently a var *)
-            let name = get_function_name fname in
+            let name = get_function_name lname in
                 (*  Hardcoded function for now *)
                 if name = "_+_" then begin
                 
