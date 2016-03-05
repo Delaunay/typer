@@ -67,6 +67,13 @@ type print_context = (bool * int * bool)
 let pvar_to_vdef p =
     p
 ;;
+
+(*
+let _ab = senv_add_var;;
+let senv_add_var =
+    _ab name loc ctx
+;;*)
+
 (*  PEXP is not giving SEXP types this is why types are always unknown *)
 
 (*
@@ -91,12 +98,11 @@ let rec lexp_parse (p: pexp) (ctx: lexp_context): (lexp * lexp_context) =
             with Not_found ->
                 (*  Add Variable *)
                 let ctx = senv_add_var name loc ctx in
-                (make_var name 0 loc), ctx; end
+                    (make_var name 0 loc), ctx;  end
                 
         (*  Let, Variable declaration + local scope *)
         | Plet(loc, decls, body) ->      
             let decl, nctx = lexp_parse_let decls ctx in
-            lexp_context_print nctx;
             let bdy, nctx = lexp_parse body nctx in
             (*  Send back old context as we exit the inner scope *)
             Let(tloc, decl, bdy), ctx
@@ -115,23 +121,27 @@ let rec lexp_parse (p: pexp) (ctx: lexp_context): (lexp * lexp_context) =
             
         (*  *)
         | Plambda (kind, var, Some ptype, body) ->
-            let nvar = pvar_to_vdef var in  (* /!\ HERE *)
-            let ltyp, ctx = lexp_parse ptype ctx in
-            let lbody, ctx = lexp_parse body ctx in
-            Lambda(kind, nvar, ltyp, lbody), ctx
+            (*  Add argument to context *)
+            let (loc, vname) = var in
+            let nctx = senv_add_var vname loc ctx in
+
+            let ltyp, nctx = lexp_parse ptype nctx in
+            let lbody, nctx = lexp_parse body nctx in
+            
+            (*  Return old context as we exit lambda scope*)
+            Lambda(kind, var, ltyp, lbody), ctx
             
         | Plambda (kind, var, None, body) ->
-            let nvar = pvar_to_vdef var in  (* /!\ HERE *)(* /!\ Missing Type *)
+            let (loc, vname) = var in
+            let nctx = senv_add_var vname loc ctx in
+            
             let lbody, ctx = lexp_parse body ctx in
-            Lambda(kind, nvar, UnknownType(tloc), lbody), ctx 
+            Lambda(kind, var, UnknownType(tloc), lbody), ctx 
            
         | Pcall (fname, _args) ->
             (*  Process Arguments *)
             let pargs = pexp_parse_all _args in
-            let largs, fctx = lexp_parse_all pargs ctx in 
-            (*  Make everything explicit for now *)
-            let new_args = List.map (fun g -> (Aexplicit, g)) largs in
-                
+            
             (*  Call to named function which must have been defined earlier  *
              *          i.e they must be in the context                      *)
             begin try begin
@@ -140,11 +150,32 @@ let rec lexp_parse (p: pexp) (ctx: lexp_context): (lexp * lexp_context) =
                     | Pvar(loc, nm) -> nm, loc
                     | Pcons (_, (loc, nm)) -> nm, loc
                     | _ -> raise Not_found in
-                
+                    
+                (* _=_ is a special function *) (**)
+                let n = List.length pargs in
+                if name = "_=_" && n = 2 then(
+                    let (var, inst) = match pargs with [a; b] -> a, b in 
+                    let vname = match var with Pvar(loc, name) -> name 
+                        | e -> pexp_print var; "str" in
+                    (*  we should add the defined var to ctx *)
+                    let nctx = senv_add_var vname loc ctx in 
+                    let idx = senv_lookup vname nctx in 
+                    let lxp, _ = lexp_parse inst nctx in (* var type is given by inst *)
+                    
+                    (*  _=_ is the only function with -2 index *)
+                    let vf = (make_var "_=_" (-2) loc) in
+                    let vr = (make_var vname idx loc) in
+
+                    Call(vf, [(Aexplicit, vr); (Aexplicit, lxp)]), nctx)
+                else(**)
+                let largs, fctx = lexp_parse_all pargs ctx in 
+                let new_args = List.map (fun g -> (Aexplicit, g)) largs in
+            
                 try
                     (*  Check if the function was defined *)
                     let idx = senv_lookup name ctx in
                     let vf = (make_var name idx loc) in
+                    
                     Call(vf, new_args), ctx
                     
                 with Not_found ->
@@ -156,6 +187,8 @@ let rec lexp_parse (p: pexp) (ctx: lexp_context): (lexp * lexp_context) =
                     
             (*  Call to a nameless function *)
             with Not_found ->
+                let largs, fctx = lexp_parse_all pargs ctx in 
+                let new_args = List.map (fun g -> (Aexplicit, g)) largs in
                 (*  I think this should not modify context.
                  *  if so, funny things might happen when evaluating *)
                 let fname, ctx = lexp_parse fname ctx in
@@ -231,7 +264,7 @@ and lexp_read_pattern_args args:((arg_kind * vdef) option list) =
     let rec loop args acc =
         match args with
             | [] -> (List.rev acc)
-            | hd::tl -> 
+            | hd::tl -> (
                 let (_, pat) = hd in
                 match pat with
                     (* Nothing to do *)
@@ -239,7 +272,7 @@ and lexp_read_pattern_args args:((arg_kind * vdef) option list) =
                     | Ppatvar (loc, name) -> 
                         let nacc = (Some (Aexplicit, (loc, name)))::acc in
                         loop tl nacc
-                    | _ -> lexp_fatal dloc "Constructor inside a Constructor"; 
+                    | _ -> lexp_fatal dloc "Constructor inside a Constructor")
 
     in loop args []
  
@@ -398,7 +431,7 @@ and lexp_print_adv opt exp =
         | Var ((loc, name), idx) -> 
             print_string name; 
             if idx > 0 then begin
-                print_string "("; print_int idx; print_string ")"; end
+                print_string "["; print_int idx; print_string "]"; end
         
         | Let (_, decls, body)   ->
             print_string "let"; lexp_print_decls (pty, indent + 1, prtp) decls; 
@@ -423,9 +456,9 @@ and lexp_print_adv opt exp =
             
         | Call(fname, args) -> begin  (*  /!\ Partial Print *)
             (*  get function name *)
-            let str = match fname with
-                | Var((_, name), _) -> name
-                | _ -> "unkwn" in
+            let str, idx = match fname with
+                | Var((_, name), idx) -> name, idx
+                | _ -> "unkwn", -1 in
                 
             let print_arg arg = match arg with | (kind, lxp) -> 
                  lexp_print_adv (pty, 0, prtp) lxp in
@@ -442,7 +475,7 @@ and lexp_print_adv opt exp =
                 | ("_*_", [lhs; rhs]) -> print_binop " * " lhs rhs
                 (* not an operator *)
                 | _ -> 
-                    print_string ("(" ^ str);
+                    print_string ("(" ^ str ^ "["); print_int idx; print_string "]";
                     List.iter (fun arg -> print_string " "; print_arg arg) args;
                     print_string ")" end
 
@@ -514,7 +547,7 @@ and lexp_context_print ctx =
         print_string "    ";
         ralign_print_string key 20;
         print_string "  =>  ";
-        ralign_print_int idx 4;
+        ralign_print_int (n - idx) 4;
         print_string "  =>  ";
         
         (*  Print env Info *)

@@ -37,28 +37,27 @@ open Myers
 open Sexp
 open Fmt
 
-let eval_error loc msg = 
-    msg_error "EVAL" loc msg;
+let _eval_error loc msg = 
+    msg_error "_eval" loc msg;
     raise (internal_error msg)
 ;;
 
 let dloc = dummy_location
-let eval_warning = msg_warning "EVAL"
+let _eval_warning = msg_warning "_eval"
 
 
 let print_myers_list l print_fun = 
     let n = (length l) in
+    let sep = "    " ^ (make_line '-' 76) ^ "\n" in
     
-    print_string "-------------------\n";
-    print_string " Environement: \n";
-    print_string "-------------------\n";
-    
+    print_string (sep ^ (make_line ' ' 30) ^ "Environement\n" ^ sep);  
     for i = 0 to n - 1 do
-        ralign_print_int (i + 1) 4;
-        print_string ")    ";
+    print_string "    |";
+        ralign_print_int i 4;
+        print_string " | ";
         print_fun (nth i l);
     done;
-    print_string "-------------------\n";
+    print_string sep;
 ;;
 
 let get_function_name fname =
@@ -74,17 +73,23 @@ let get_int lxp =
 ;;
 
 (*  Runtime Environ *)
-type runtime_env = lexp myers
+type runtime_env = (string option * lexp) myers
 let make_runtime_ctx = nil;;
-let add_rte_variable x l = (cons x l);;
-let get_rte_variable idx l = (nth (idx) l);;
+let add_rte_variable name x l = (cons (name, x) l);;
+
+let get_rte_variable idx l = let (_, x) = (nth (idx) l) in x;;
 
 let print_rte_ctx l = print_myers_list l 
-    (fun g -> lexp_print g; print_string "\n")
+    (fun (n, g) -> 
+        let _ = 
+        match n with
+            | Some m -> lalign_print_string m 10; print_string "  |  "
+            | None -> print_string (make_line ' ' 10); print_string "  |  " in
+        lexp_print g; print_string "\n")
 ;;
 
-(*  Evaluation reduce an expression x to an Lexp.Imm *)
-let rec eval lxp ctx: (lexp * runtime_env) = 
+(*  _evaluation reduce an expression x to an Lexp.Imm *)
+let rec _eval lxp ctx: (lexp * runtime_env) = 
         
     match lxp with
         (*  This is already a leaf *)
@@ -102,80 +107,118 @@ let rec eval lxp ctx: (lexp * runtime_env) =
                 
         (*  this works for non recursive let *)
         | Let(_, decls, inst) -> begin
-            (*  First we evaluate all declaration then we evaluate the instruction *)
+            (*  First we _evaluate all declaration then we eval the instruction *)
+            
             let nctx = build_ctx decls ctx in
-            let value, nctx = eval inst nctx in
+            
+            (*
+            print_rte_ctx ctx;
+            print_rte_ctx nctx; *)
+            
+            let value, nctx = _eval inst nctx in
             (*  return old context as we exit let's scope*)
                 value, ctx end
                 
         (*  Function call *)
-        | Call (lname, args) ->
-            (*  Try to extract name *)(*
-            let tname = match lname with
-                | Var((loc, name), _) -> name
-                | _ -> lexp_print lname; eval_error "Incorrect Function Name" in
-                
-            (*  Save declaration in environment *)
+        | Call (lname, args) -> (
+            (*  Try to extract name *)
             let n = List.length args in
-            if tname = "_=_" && n == 2 then
-                let (((_, name), _), expr) = args in
-                let nctx = add_rte_variable  *)
-              
-        
-            (*  Add args in the scope *)
-            print_rte_ctx ctx;
-            let nctx = build_arg_list args ctx in
-            print_rte_ctx nctx;
-            
-            (* We need to seek out the function declaration and eval the body *)
-            (* but currently we cannot declare functions so I hardcoded + *)
-   (*       let bdy = get_body fname in
-                eval bdy nctx                *)
-            
-            (*  fname is currently a var *)
-            let name = get_function_name lname in
-                (*  Hardcoded function for now *)
-                if name = "_+_" then begin
+            match lname with
+                (*  Function declaration *)
+                | Var((loc, name), _) when name = "_=_" -> 
+                    (*  Save declaration in environment *)
+                    let (vr, body) = match args with [(_, a); (_, b)] -> a, b in
+                    let vname = get_function_name vr in
+                    let nctx = add_rte_variable (Some vname) body ctx in
+                        body, nctx
                 
-                    (*  Get the two args *)
+                (*  Hardcoded functions *)
+                | Var((_, name), _) when name = "_+_" ->
+                    let nctx = build_arg_list args ctx in
                     let l = get_int (get_rte_variable 0 nctx) in
                     let r = get_int (get_rte_variable 1 nctx) in
+                    Imm(Integer(dloc, l + r)), ctx 
                     
-                    (*print_int l; print_string " "; 
-                      print_int r; print_string "\n"; *)
+                | Var((_, name), _) when name = "_*_" ->
+                    let nctx = build_arg_list args ctx in
+                    let l = get_int (get_rte_variable 0 nctx) in
+                    let r = get_int (get_rte_variable 1 nctx) in
+                    Imm(Integer(dloc, l * r)), ctx 
+                
+                (* This is a named function call *)
+                (*  TODO: handle partial application *)
+                | Var((_, _), idx) when idx >= 0 ->
+                    (*  get function body *)
+                    let body = get_rte_variable idx ctx in
+                    (*  Add args in the scope *)
+                    let nctx = build_arg_list args ctx in
+                    let e, nctx = (_eval body nctx) in
+                    (*  we exit function and send back old ctx *)
+                        e, ctx
+    
+                (* TODO Everything else *)
+                | _ -> Imm(String(dloc, "Funct Not Implemented")), ctx)
+                        
+        | Lambda(_, vr, _, body) -> begin 
+            let (loc, name) = vr in
+            let value = (get_rte_variable 0 ctx) in
+            let nctx = add_rte_variable (Some name) value ctx in
+            
+            let rec build_body bd idx nctx = 
+                match bd with
+                    | Lambda(_, vr, _, body) ->
+                        let (loc, name) = vr in
+                        (*  Get Variable from call context *)
+                        let value = (get_rte_variable idx ctx) in
+                        (*  Build lambda context *)
+                        let nctx = add_rte_variable (Some name) value nctx in
+                            (build_body body (idx + 1) nctx)
+                    | _ -> bd, nctx in
                     
-                    Imm(Integer(dummy_location, l + r)), ctx end
-                else
-                    Imm(String(dummy_location, "Funct Not Implemented")), ctx 
+            let body, nctx = build_body body 1 nctx in
+                    
+            let e, nctx = _eval body nctx in
+                e, ctx end
                    
-        | _ -> Imm(String(dummy_location, "Eval Not Implemented")), ctx
+        | _ -> Imm(String(dloc, "eval Not Implemented")), ctx 
         
 and build_arg_list args ctx =
-    (*  Eval every args *)
-    let arg_val = List.map (fun (k, e) -> let (v, c) = eval e ctx in v) args in
+    (*  _eval every args *)
+    let arg_val = List.map (fun (k, e) -> let (v, c) = _eval e ctx in v) args in
     (*  Add args inside context *)
-    List.fold_left (fun c v -> add_rte_variable v c) ctx arg_val
+    List.fold_left (fun c v -> add_rte_variable None v c) ctx arg_val
 
 and build_ctx decls ctx =
     match decls with
         | [] -> ctx
         | hd::tl -> 
             let (v, exp, tp) = hd in
-            let (value, nctx) = eval exp ctx in
-            let nctx = add_rte_variable value nctx in  
+            let (value, nctx) = _eval exp ctx in
+            let nctx = add_rte_variable None value nctx in  
                 build_ctx tl nctx
 ;;
 
-let print_eval_result lxp =
-    print_string " >> ";
+
+let eval lxp ctx = 
+    try
+        _eval lxp ctx
+    with 
+        e -> print_rte_ctx ctx;
+        Imm(String(dloc, "Evaluation Failed")), ctx
+;;
+
+let print_eval_result i lxp =
+    print_string " [";
+    ralign_print_int i 2;
+    print_string "] >> ";
     match lxp with
         | Imm(v) -> sexp_print v; print_string "\n"
-        | _ ->  print_string "Evaluation Failed\n"
+        | e ->  lexp_print e; print_string "\n"
 ;;
 
 let evalprint lxp ctx = 
     let v, ctx = (eval lxp ctx) in
-    print_eval_result v;
+    print_eval_result 0 v;
     ctx
 ;;
 

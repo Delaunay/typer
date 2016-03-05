@@ -41,12 +41,15 @@ open Lparse
 open Myers
 open Eval
 open Util
+open Lexp
 
 (*  pexp and lexp can be done together, one by one *)
 let pexp_lexp_one node ctx = 
     let pxp = pexp_parse node in
     lexp_parse pxp ctx
 ;;
+
+let dloc = dummy_location;;
 
 let pexp_lexp_all nodes ctx =
 
@@ -57,6 +60,28 @@ let pexp_lexp_all nodes ctx =
                 let lxp, new_ctx = pexp_lexp_one hd ctx in
                     (loop tl new_ctx (lxp::acc)) in
     (loop nodes ctx [])
+;;
+
+let dummy_decl = Imm(String(dloc, "Dummy"));;
+
+let add_def name ctx = 
+    senv_add_var name dloc ctx;;
+
+let add_rte_def name ctx = 
+    (add_rte_variable (Some name) dummy_decl ctx);;
+    
+
+let eval_until_nth xpr n rctx =
+
+    let rec loop xpr nb rctx =
+        match xpr, nb with
+            | [], _ -> rctx
+            | _, nb when nb = n -> rctx
+            | hd::tl, _ -> 
+                let c, rctx = eval hd rctx in
+                    print_eval_result nb c;
+                    loop tl (nb + 1) rctx in  
+        loop xpr 0 rctx
 ;;
         
 let main () = 
@@ -96,9 +121,11 @@ let main () =
 
         (* get lexp *)
         let ctx = make_lexp_context in
+        (*  Those are hardcoded operation *)
+            let ctx = add_def "_+_" ctx in
+            let ctx = add_def "_*_" ctx in
+            let ctx = add_def "_=_" ctx in
         let lexps, new_ctx = lexp_parse_all pexps ctx in
-
-        prelex_string "HAHAH ";
         
         (* Printing *)(*
         print_title "PreTokens";    debug_pretokens_print_all pretoks;
@@ -111,9 +138,11 @@ let main () =
         print_title "Eval Print";
         
         (*  Eval One *)
-        let rctx = make_runtime_ctx in
-        let c, rctx = eval (List.hd lexps) rctx in
-            print_eval_result c
+        let rctx = make_runtime_ctx in 
+        let rctx = eval_until_nth lexps 10 rctx in
+            print_string "\n DONE \n";
+            
+        print_rte_ctx rctx;
     
     end
 ;;
