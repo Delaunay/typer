@@ -22,6 +22,8 @@ this program.  If not, see <http://www.gnu.org/licenses/>.  *)
 
 open Util
 open Sexp
+open Lexer
+open Prelexer
 
 let pexp_error = msg_error "PEXP"
 
@@ -348,4 +350,11 @@ let pexp_print e = sexp_print (pexp_unparse e)
 (* Parse All Pexp as a list *)
 let pexp_parse_all (nodes: sexp list) =
     List.map pexp_parse nodes
+;;
+
+let pexp_parse_string (str: string) tenv grm limit =
+    let pretoks = prelex_string str in
+    let toks = lex tenv pretoks in
+    let sxps = sexp_parse_all_to_list grm toks limit in
+        pexp_parse_all sxps
 ;;

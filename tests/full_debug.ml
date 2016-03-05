@@ -97,6 +97,8 @@ let main () =
         (* get lexp *)
         let ctx = make_lexp_context in
         let lexps, new_ctx = lexp_parse_all pexps ctx in
+
+        prelex_string "HAHAH ";
         
         (* Printing *)(*
         print_title "PreTokens";    debug_pretokens_print_all pretoks;

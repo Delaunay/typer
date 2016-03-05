@@ -117,4 +117,16 @@ let lex tenv (pts : pretoken list) : sexp list =
       | _ -> let (tok, pts, bpos, cpos) = nexttoken tenv pts bpos cpos
             in gettokens pts bpos cpos (tok :: acc) in
   gettokens pts 0 0 []
+;;
+  
+let lex_string (str: string) tenv =
+    let pretoks = prelex_string str in
+        lex tenv pretoks
+;;
+
+let node_parse_string (str: string) tenv grm limit =
+    let pretoks = prelex_string str in
+    let toks = lex tenv pretoks in
+        sexp_parse_all_to_list grm toks limit
+;;
             

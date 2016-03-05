@@ -141,7 +141,12 @@ let prelex_file file =
   in prelex file fin 1 [] []  (* Traditionally, line numbers start at 1 :-(  *)
   
 let prelex_string str = 
-    prelex "string" str 1 [] []
+    let fin = open_out "_temp_hack" in
+        output_string fin str;
+        (flush_all);
+        close_out fin;
+    let fin = open_in "_temp_hack" in
+    prelex "string" fin 1 [] []
 
 let rec pretokens_print pretokens =
   List.iter (fun pt ->
@@ -153,3 +158,8 @@ let rec pretokens_print pretokens =
                | Prestring(_, str)
                  -> print_string "\""; print_string str; print_string "\"")
             pretokens
+
+            
+            
+            
+            

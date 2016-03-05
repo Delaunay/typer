@@ -38,6 +38,9 @@ open Grammar
 open Debruijn
 open Fmt
 
+open Lexer
+open Prelexer
+
 (* Shortcut => Create a Var *)
 let make_var name index loc = 
     Var(((loc, name), index))
@@ -528,4 +531,13 @@ and lexp_context_print ctx =
 ;;
 
 let lexp_print = lexp_print_adv (false, 0, true)
-            
+           
+           
+let pexp_parse_string (str: string) tenv grm limit =
+    let pretoks = prelex_string str in
+    let toks = lex tenv pretoks in
+    let sxps = sexp_parse_all_to_list grm toks limit in
+    let ctx = make_lexp_context in
+    let pxps = pexp_parse_all sxps in
+        lexp_parse_all pxps ctx
+;;
