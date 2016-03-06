@@ -135,24 +135,31 @@ let rec lexp_parse (p: pexp) (ctx: lexp_context): (lexp * lexp_context) =
             let (loc, vname) = var in
             let nctx = senv_add_var vname loc ctx in
             
-            let lbody, ctx = lexp_parse body ctx in
+            let lbody, ctx = lexp_parse body nctx in
             Lambda(kind, var, UnknownType(tloc), lbody), ctx 
            
         | Pcall (fname, _args) ->
             lexp_call fname _args ctx
 
         (* Pinductive *)
-        | Pinductive (label, _, ctors) ->
-            let dummy = (Aexplicit, (dummy_location, "a"), UnknownType(tloc))::[] in
+        | Pinductive (label, [], ctors) ->
             let map_ctor, nctx = lexp_parse_constructors ctors ctx in
-            (*  We exit current context, return old context *)
-            Inductive(tloc, label, dummy, map_ctor), ctx
+            Inductive(tloc, label, [], map_ctor), nctx
             
         (* Pcons *)
-        | Pcons(var, sym) -> (* vref, symbol*)
-            let (loc, name) = var in
-            let idx = 0 in
-            Cons(((pvar_to_vdef var), idx), sym), ctx
+        | Pcons(vr, sym) -> (
+            let (loc, type_name) = vr in
+            let (_, ctor_name) = sym in
+            
+            (*  An inductive type named type_name must be in the environment *)
+            try let idx = senv_lookup type_name ctx in
+                (*  Check if the constructor exists *)
+                            (* TODO *)
+                Cons((vr, idx), sym), ctx
+            with Not_found ->
+                lexp_error loc 
+                ("The inductive type: " ^ type_name ^ " was not declared");
+                Cons((vr, -1), sym), ctx)
             
         (* Pcase *)
         | Pcase (loc, target, patterns) ->
@@ -197,7 +204,11 @@ and lexp_call fname _args ctx =
         (* _=_ is a special function *) (**)
         let n = List.length pargs in
         if name = "_=_" && n = 2 then(
-            let (var, inst) = match pargs with [a; b] -> a, b in 
+            let (var, inst) = match pargs with 
+                | [a; b] -> a, b 
+                (*  This was added to remove a warning but will never be true *)
+                | _ -> lexp_fatal loc "Wrong Number of Args" in
+            
             let vname = match var with Pvar(loc, name) -> name 
                 | e -> pexp_print var; "str" in
             (*  we should add the defined var to ctx *)
@@ -456,7 +467,8 @@ and lexp_print_adv opt exp =
         | Cons(vf, symbol) ->
             let (loc, name) = symbol in
             let ((loc, vname), idx) = vf in
-                print_string (name ^ "("); print_string (vname ^ ")");
+                print_string (name ^ "("); print_string vname;
+                print_string "["; print_int idx; print_string "])"
             
         | Call(fname, args) -> begin  (*  /!\ Partial Print *)
             (*  get function name *)

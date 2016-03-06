@@ -122,12 +122,14 @@ let rec _eval lxp ctx: (lexp * runtime_env) =
         (*  Function call *)
         | Call (lname, args) -> (
             (*  Try to extract name *)
-            let n = List.length args in
             match lname with
                 (*  Function declaration *)
-                | Var((loc, name), _) when name = "_=_" -> 
+                | Var((loc, name), _) when name = "_=_" ->
                     (*  Save declaration in environment *)
-                    let (vr, body) = match args with [(_, a); (_, b)] -> a, b in
+                    let (vr, body) = match args with 
+                        | [(_, a); (_, b)] -> a, b
+                        | _ ->  _eval_error loc "Wrong number of Args" in
+                    
                     let vname = get_function_name vr in
                     let nctx = add_rte_variable (Some vname) body ctx in
                         body, nctx
@@ -180,7 +182,19 @@ let rec _eval lxp ctx: (lexp * runtime_env) =
                     
             let e, nctx = _eval body nctx in
                 e, ctx end
-                   
+       
+        (*  Inductive is a type declaration. We have nothing to eval *)
+        | Inductive (_, _, _, _) as e -> e, ctx
+        
+        (*  inductive-cons build a type too? *)
+        | Cons (_, _) as e -> e, ctx
+        
+        (* Case *) (*
+        | Case (_, target, _, pat, dflt) ->
+            ( * *)
+            
+            
+
         | _ -> Imm(String(dloc, "eval Not Implemented")), ctx 
         
 and build_arg_list args ctx =

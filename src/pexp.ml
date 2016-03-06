@@ -144,6 +144,9 @@ let rec pexp_parse (s : sexp) : pexp =
              (* read Constructor name + args => Type ((Symbol * args) list) *)
              | Node (Symbol s, cases)   
                -> (s, List.map pexp_p_ind_arg cases)::pcases
+             (* This is a constructor with no args *)
+             | Symbol s -> (s, [])::pcases
+               
              | _ -> pexp_error (sexp_location case)
                              "Unrecognized constructor declaration"; pcases)
           cases [] in

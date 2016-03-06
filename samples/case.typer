@@ -5,11 +5,9 @@
 % definition
 inductive_ (dummy_Nat) (zero) (succ Nat);
 
-
 % declaration 
 % Nat : Type;                                         % This line is not parsed
 Nat = inductive_ (dummy_Nat) (zero) (succ Nat);     % zero is not parsed
-
 
 % only inductive-cons is available
 inductive-cons Nat succ;
@@ -21,3 +19,13 @@ succ = inductive-cons Nat succ;
 one = (succ (zero));
 one = (succ (zero));
 one = (succ (zero));
+
+% Case test
+x = (succ zero);
+
+% recusive call not yet implemented 
+case x
+    | zero => 0
+    | succ y => 1;
+    
+    

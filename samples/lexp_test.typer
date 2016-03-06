@@ -4,15 +4,7 @@
 %   Constructor
 % -------------------------------------------
 
-% only inductive-cons is available
 
-inductive-cons Nat succ;
-
-% Usage
-zero = inductive-cons Nat zero; % those are aliases
-succ = inductive-cons Nat succ;
-
-one = (succ (zero));
 
 % -------------------------------------------
 %   Cases
