@@ -1,0 +1,11 @@
+% -------------------------------------------
+%   Inductive type
+% -------------------------------------------
+
+% definition
+inductive_ (dummy_Nat) (zero) (succ Nat);
+
+
+% declaration 
+% Nat : Type;                                         % This line is not parsed
+Nat = inductive_ (dummy_Nat) (zero) (succ Nat);     % zero is not parsed

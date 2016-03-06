@@ -1,0 +1,32 @@
+% -------------------------------------------
+%   Function Calls
+% -------------------------------------------
+
+% define sqrt
+sqrt = lambda (x : Nat) -> x * x;
+
+(sqrt 2);
+
+% define cube
+cube = lambda (x : Nat) -> x * (sqrt x);
+
+(cube 3);
+
+% explicit 
+mult = lambda (x : Nat) -> lambda (y : Nat) -> (y * x);
+
+(mult 2 3);
+
+% Not Working
+% ---------------------
+
+% implicit (Type annotation introduce a bug) 
+% cube = lambda x y -> (x * y);
+
+
+% partial application
+partial_mul = (mult 2);
+
+(partial_mul 3);
+
+"FUNCTION END";

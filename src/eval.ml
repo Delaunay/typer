@@ -157,6 +157,7 @@ let rec _eval lxp ctx: (lexp * runtime_env) =
                         e, ctx
     
                 (* TODO Everything else *)
+                (*  Which includes a call to a lambda *)
                 | _ -> Imm(String(dloc, "Funct Not Implemented")), ctx)
                         
         | Lambda(_, vr, _, body) -> begin 
@@ -208,7 +209,7 @@ let eval lxp ctx =
 ;;
 
 let print_eval_result i lxp =
-    print_string " [";
+    print_string "     Out[";
     ralign_print_int i 2;
     print_string "] >> ";
     match lxp with
@@ -221,4 +222,16 @@ let evalprint lxp ctx =
     print_eval_result 0 v;
     ctx
 ;;
+
+(*
+let eval_string (str: string) tenv grm limit lxp_ctx rctx =
+    let pretoks = prelex_string str in
+    let toks = lex tenv pretoks in
+    let sxps = sexp_parse_all_to_list grm toks limit in
+    let pxps = pexp_parse_all sxps in
+    let lxp, lxp_ctx = lexp_parse_all pxps lxp_ctx in
+        (eval lxp rctx), lxp_ctx
+;;
+
+*)
 

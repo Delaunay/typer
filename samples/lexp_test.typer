@@ -1,46 +1,5 @@
-% Eval test
 
-let c = 1; a = 5; b = 10; d = 3; in
-    a + b;
-    
-% -------------------------------------------
-%   Function Calls
-% -------------------------------------------
 
-% define sqrt
-sqrt = lambda (x : Nat) -> x * x;
-
-(sqrt 2);
-
-% define cube
-cube = lambda (x : Nat) -> x * (sqrt x);
-
-(cube 3);
-
-% explicit 
-mult = lambda (x : Nat) -> lambda (y : Nat) -> (y * x);
-
-% implicit (Type annotation introduce a bug) 
-% cube = lambda x y -> (x * y);
-
-% partial application
-(mult 2 3);
-
-partial_mul = (mult 2);
-
-(partial_mul 3);
-
-"FUNCTION END"
-
-% -------------------------------------------
-%   Inductive type
-% -------------------------------------------
-
-inductive_ (dummy_Nat) (zero) (succ Nat);
-
-% Usage
-% Nat : Type;                                         % This line is not parsed
-Nat = inductive_ (dummy_Nat) (zero) (succ Nat);     % zero is not parsed
 
 %   Constructor
 % -------------------------------------------

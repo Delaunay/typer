@@ -64,9 +64,6 @@ let pexp_lexp_all nodes ctx =
 
 let dummy_decl = Imm(String(dloc, "Dummy"));;
 
-let add_def name ctx = 
-    senv_add_var name dloc ctx;;
-
 let add_rte_def name ctx = 
     (add_rte_variable (Some name) dummy_decl ctx);;
     

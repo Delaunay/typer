@@ -139,60 +139,7 @@ let rec lexp_parse (p: pexp) (ctx: lexp_context): (lexp * lexp_context) =
             Lambda(kind, var, UnknownType(tloc), lbody), ctx 
            
         | Pcall (fname, _args) ->
-            (*  Process Arguments *)
-            let pargs = pexp_parse_all _args in
-            
-            (*  Call to named function which must have been defined earlier  *
-             *          i.e they must be in the context                      *)
-            begin try begin
-                (*  Get function name *)
-                let name, loc = match fname with
-                    | Pvar(loc, nm) -> nm, loc
-                    | Pcons (_, (loc, nm)) -> nm, loc
-                    | _ -> raise Not_found in
-                    
-                (* _=_ is a special function *) (**)
-                let n = List.length pargs in
-                if name = "_=_" && n = 2 then(
-                    let (var, inst) = match pargs with [a; b] -> a, b in 
-                    let vname = match var with Pvar(loc, name) -> name 
-                        | e -> pexp_print var; "str" in
-                    (*  we should add the defined var to ctx *)
-                    let nctx = senv_add_var vname loc ctx in 
-                    let idx = senv_lookup vname nctx in 
-                    let lxp, _ = lexp_parse inst nctx in (* var type is given by inst *)
-                    
-                    (*  _=_ is the only function with -2 index *)
-                    let vf = (make_var "_=_" (-2) loc) in
-                    let vr = (make_var vname idx loc) in
-
-                    Call(vf, [(Aexplicit, vr); (Aexplicit, lxp)]), nctx)
-                else(**)
-                let largs, fctx = lexp_parse_all pargs ctx in 
-                let new_args = List.map (fun g -> (Aexplicit, g)) largs in
-            
-                try
-                    (*  Check if the function was defined *)
-                    let idx = senv_lookup name ctx in
-                    let vf = (make_var name idx loc) in
-                    
-                    Call(vf, new_args), ctx
-                    
-                with Not_found ->
-                    (*  Don't stop even if an error was found *)
-                    lexp_error loc ("The function \"" ^ name ^ 
-                                                          "\" was not defined");
-                    let vf = (make_var name (-1) loc) in
-                    Call(vf, new_args), ctx end
-                    
-            (*  Call to a nameless function *)
-            with Not_found ->
-                let largs, fctx = lexp_parse_all pargs ctx in 
-                let new_args = List.map (fun g -> (Aexplicit, g)) largs in
-                (*  I think this should not modify context.
-                 *  if so, funny things might happen when evaluating *)
-                let fname, ctx = lexp_parse fname ctx in
-                Call(fname, new_args), ctx end
+            lexp_call fname _args ctx
 
         (* Pinductive *)
         | Pinductive (label, _, ctors) ->
@@ -232,7 +179,64 @@ let rec lexp_parse (p: pexp) (ctx: lexp_context): (lexp * lexp_context) =
             
         | _ 
             -> UnknownType(tloc), ctx
+
+(*  Identify Call Type and return processed call *)
+and lexp_call fname _args ctx =
+    (*  Process Arguments *)
+    let pargs = pexp_parse_all _args in
     
+    (*  Call to named function which must have been defined earlier  *
+     *          i.e they must be in the context                      *)
+    begin try begin
+        (*  Get function name *)
+        let name, loc = match fname with
+            | Pvar(loc, nm) -> nm, loc
+            | Pcons (_, (loc, nm)) -> nm, loc
+            | _ -> raise Not_found in
+            
+        (* _=_ is a special function *) (**)
+        let n = List.length pargs in
+        if name = "_=_" && n = 2 then(
+            let (var, inst) = match pargs with [a; b] -> a, b in 
+            let vname = match var with Pvar(loc, name) -> name 
+                | e -> pexp_print var; "str" in
+            (*  we should add the defined var to ctx *)
+            let nctx = senv_add_var vname loc ctx in 
+            let idx = senv_lookup vname nctx in 
+            let lxp, _ = lexp_parse inst nctx in (* var type is given by inst *)
+            
+            (*  _=_ is the only function with -2 index *)
+            let vf = (make_var "_=_" (-2) loc) in
+            let vr = (make_var vname idx loc) in
+
+            Call(vf, [(Aexplicit, vr); (Aexplicit, lxp)]), nctx)
+        else(**)
+        let largs, fctx = lexp_parse_all pargs ctx in 
+        let new_args = List.map (fun g -> (Aexplicit, g)) largs in
+    
+        try
+            (*  Check if the function was defined *)
+            let idx = senv_lookup name ctx in
+            let vf = (make_var name idx loc) in
+            
+            Call(vf, new_args), ctx
+            
+        with Not_found ->
+            (*  Don't stop even if an error was found *)
+            lexp_error loc ("The function \"" ^ name ^ 
+                                                  "\" was not defined");
+            let vf = (make_var name (-1) loc) in
+            Call(vf, new_args), ctx end
+            
+    (*  Call to a nameless function *)
+    with Not_found ->
+        let largs, fctx = lexp_parse_all pargs ctx in 
+        let new_args = List.map (fun g -> (Aexplicit, g)) largs in
+        (*  I think this should not modify context.
+         *  if so, funny things might happen when evaluating *)
+        let fname, ctx = lexp_parse fname ctx in
+        Call(fname, new_args), ctx end
+
 (*  Read a pattern and create the equivalent representation *)    
 and lexp_read_pattern pattern exp target: 
                      (string * location * (arg_kind * vdef) option list) =
@@ -566,7 +570,7 @@ and lexp_context_print ctx =
 let lexp_print = lexp_print_adv (false, 0, true)
            
            
-let pexp_parse_string (str: string) tenv grm limit =
+let lexp_parse_string (str: string) tenv grm limit =
     let pretoks = prelex_string str in
     let toks = lex tenv pretoks in
     let sxps = sexp_parse_all_to_list grm toks limit in
@@ -574,3 +578,6 @@ let pexp_parse_string (str: string) tenv grm limit =
     let pxps = pexp_parse_all sxps in
         lexp_parse_all pxps ctx
 ;;
+
+let add_def name ctx = 
+    senv_add_var name dloc ctx;;
