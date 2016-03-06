@@ -36,6 +36,7 @@ open Lparse
 open Myers
 open Sexp
 open Fmt
+open Grammar
 
 let _eval_error loc msg = 
     msg_error "_eval" loc msg;
@@ -189,11 +190,68 @@ let rec _eval lxp ctx: (lexp * runtime_env) =
         (*  inductive-cons build a type too? *)
         | Cons (_, _) as e -> e, ctx
         
-        (* Case *) (*
-        | Case (_, target, _, pat, dflt) ->
-            ( * *)
+        (* Case *) 
+        | Case (loc, target, _, pat, dflt) -> begin
             
+            (* Eval target *)
+            let v, nctx = _eval target ctx in
             
+            (*  V must be a constructor Call *)
+            let ctor_name, args = match v with
+                | Call(lname, args) -> (match lname with
+                    | Var((_, ctor_name), _) -> ctor_name, args
+                    | _ -> _eval_error loc "Target is not a Constructor" )
+                    
+                | Cons((_, idx), (_, cname)) -> begin
+                    (*  retrieve type definition *)
+                    let info = get_rte_variable idx ctx in
+                    let Inductive(_, _, _, ctor_def) = info in
+                    try let args = SMap.find cname ctor_def in
+                        cname, args
+                    with 
+                        Not_found ->
+                            _eval_error loc "Constructor does not exist" end 
+                            
+                | _ -> lexp_print target;
+                    _eval_error loc "Can't match expression" in
+                
+            (*  Check if a default is present *)
+            let run_default df = 
+                match df with
+                | None -> Imm(String(loc, "Match Failure")), ctx
+                | Some lxp -> _eval lxp ctx in
+            
+            let ctor_n = List.length args in
+            
+            (*  Build a filter option *)
+            let is_true key value =
+                let (_, pat_args, _) = value in
+                let pat_n = List.length pat_args in
+                    if pat_n = ctor_n && ctor_name = key then 
+                        true
+                    else 
+                        false in
+                        
+            (*  Search for the working pattern *)
+            let sol = SMap.filter is_true pat in
+                if SMap.is_empty sol then
+                    run_default dflt
+                else
+                    (*  Get working pattern *)
+                    let key, (_, pat_args, exp) = SMap.min_binding sol in
+                    
+                    (* build context *)
+                    let nctx = List.fold_left2 (fun nctx pat cl ->
+                        match pat with
+                            | None -> nctx 
+                            | Some (_, (_, name)) -> let (_, xp) = cl in
+                                add_rte_variable (Some name) xp nctx) 
+                                
+                        nctx pat_args args in
+                        
+                    let r, nctx = _eval exp nctx in
+                    (* return old context as we exist the case *)
+                        r, ctx end
 
         | _ -> Imm(String(dloc, "eval Not Implemented")), ctx 
         

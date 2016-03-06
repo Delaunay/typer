@@ -17,15 +17,14 @@ zero = inductive-cons Nat zero; % those are aliases
 succ = inductive-cons Nat succ;
 
 one = (succ (zero));
-one = (succ (zero));
-one = (succ (zero));
 
 % Case test
-x = (succ zero);
+% x = (succ zero);
+x = (succ (succ zero));
 
 % recusive call not yet implemented 
 case x
     | zero => 0
-    | succ y => 1;
-    
+    | succ y => y
+    | _ => (2 + 4);
     

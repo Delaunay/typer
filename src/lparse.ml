@@ -164,17 +164,20 @@ let rec lexp_parse (p: pexp) (ctx: lexp_context): (lexp * lexp_context) =
         (* Pcase *)
         | Pcase (loc, target, patterns) ->
 
-            let lxp, ltp = lexp_p_infer target ctx in
-            
+            let lxp, nctx = lexp_parse target ctx in
+            let ltp = UnknownType(loc) in
+
             (*  Read patterns one by one *)
             let rec loop ptrns merged dflt =
                 match ptrns with
                     | [] -> merged, dflt
                     | hd::tl -> 
                         let (pat, exp) = hd in
-                        (*  Parse the pattern first then parse the expr *)
-                        let (name, iloc, arg) = lexp_read_pattern pat exp lxp in
-                        let exp, nctx = lexp_parse exp ctx in
+                        (*  Create pattern context *)
+                        let (name, iloc, arg), nctx = lexp_read_pattern pat exp lxp nctx in
+                        (*  parse using pattern context *)
+                        let exp, nctx = lexp_parse exp nctx in
+                        
                         if name = "_" then
                             loop tl merged (Some exp)
                         else
@@ -182,6 +185,7 @@ let rec lexp_parse (p: pexp) (ctx: lexp_context): (lexp * lexp_context) =
                             loop tl merged dflt in
                                 
             let (lpattern, dflt) = loop patterns SMap.empty None in
+            (* Exit case, send back old context *)
             Case(loc, lxp, ltp, lpattern, dflt), ctx 
             
         | _ 
@@ -249,47 +253,51 @@ and lexp_call fname _args ctx =
         Call(fname, new_args), ctx end
 
 (*  Read a pattern and create the equivalent representation *)    
-and lexp_read_pattern pattern exp target: 
-                     (string * location * (arg_kind * vdef) option list) =
+and lexp_read_pattern pattern exp target ctx: 
+          ((string * location * (arg_kind * vdef) option list) * lexp_context) =
 
     (*  lookup target val if its a var and extract its args *)
         (*  TODO *)
                      
     match pattern with
         | Ppatany (loc) ->            (* Catch all expression nothing to do  *)
-            ("_", loc, [])  
+            ("_", loc, []), ctx  
             
         | Ppatvar (loc, name) ->      (* Create a variable containing target *)
-            (*let nctx = add_variable name loc ctx in
+            let nctx = senv_add_var name loc ctx in (*
             let idx = get_var_index name nctx in
             let info = (idx, (loc, name), target, UnknownType(loc)) in
             let nctx = add_variable_info info nctx in *)
-                (name, loc, [])
+                (name, loc, []), nctx
 
         | Ppatcons (ctor_name, args) ->
             let (loc, name) = ctor_name in
 
             (* read pattern args *)
-            let args = lexp_read_pattern_args args in
-                (name, loc, args)
+            let args, nctx = lexp_read_pattern_args args ctx in
+                (name, loc, args), nctx
             
 (*  Read patterns inside a constructor *)
-and lexp_read_pattern_args args:((arg_kind * vdef) option list) =
+and lexp_read_pattern_args args ctx:
+                               (((arg_kind * vdef) option list) * lexp_context)=
 
-    let rec loop args acc =
+    let rec loop args acc ctx =
         match args with
-            | [] -> (List.rev acc)
+            | [] -> (List.rev acc), ctx
             | hd::tl -> (
                 let (_, pat) = hd in
                 match pat with
                     (* Nothing to do *)
-                    | Ppatany (loc) -> loop tl (None::acc)
+                    | Ppatany (loc) -> loop tl (None::acc) ctx
                     | Ppatvar (loc, name) -> 
+                        (*  Add var *)
+                        let nctx = senv_add_var name loc ctx in
                         let nacc = (Some (Aexplicit, (loc, name)))::acc in
-                        loop tl nacc
-                    | _ -> lexp_fatal dloc "Constructor inside a Constructor")
+                            loop tl nacc nctx
+                    | _ -> lexp_error dloc "Constructor inside a Constructor";
+                           loop tl (None::acc) ctx)
 
-    in loop args []
+    in loop args [] ctx
  
 (*  Parse inductive constructor *)
 and lexp_parse_constructors ctors ctx =
@@ -445,8 +453,7 @@ and lexp_print_adv opt exp =
         | Imm(value)             -> sexp_print value
         | Var ((loc, name), idx) -> 
             print_string name; 
-            if idx > 0 then begin
-                print_string "["; print_int idx; print_string "]"; end
+            print_string "["; print_int idx; print_string "]"
         
         | Let (_, decls, body)   ->
             print_string "let"; lexp_print_decls (pty, indent + 1, prtp) decls; 
