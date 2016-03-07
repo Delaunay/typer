@@ -122,6 +122,7 @@ let main () =
             let ctx = add_def "_+_" ctx in
             let ctx = add_def "_*_" ctx in
             let ctx = add_def "_=_" ctx in
+  
         let lexps, new_ctx = lexp_parse_all pexps ctx in
         
         (* Printing *)(*
@@ -131,16 +132,17 @@ let main () =
         print_title "Pexp";         debug_pexp_print_all pexps;
         print_title "Lexp";         debug_lexp_print_all lexps;
         
+        print_string "\n\n";
+        lexp_context_print new_ctx;
+        
         (* Eval Each Expression *)
         print_title "Eval Print";
         
         (*  Eval One *)
         let rctx = make_runtime_ctx in 
-        let rctx = eval_until_nth lexps 10 rctx in
-            print_string "\n DONE \n";
-            
-        print_rte_ctx rctx;
-    
+        let rctx = eval_until_nth lexps 500 rctx in 
+            print_string "\n\n";
+            print_rte_ctx rctx;
     end
 ;;
 

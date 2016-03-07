@@ -49,12 +49,22 @@ let _eval_warning = msg_warning "_eval"
 
 let print_myers_list l print_fun = 
     let n = (length l) in
-    let sep = "    " ^ (make_line '-' 76) ^ "\n" in
     
-    print_string (sep ^ (make_line ' ' 30) ^ "Environement\n" ^ sep);  
+    let title = " EVAL ENVIRONMENT " in
+    let title_n = String.length title in
+    let sep_n = (80 - title_n - 4) / 2 in
+    let sep_t = 80 - 4 in
+    let psep = (make_line '=' sep_n) in
+    let fsep = (make_line '=' sep_t) in
+    let sep = "    " ^ fsep ^ "\n" in
+    
+    print_string ("    " ^ psep ^ title ^ psep ^ "\n");
+    print_string "    | INDEX | VARIABLE NAME | VALUE \n";
+    print_string ("    " ^ (make_line '-' sep_t) ^ "\n"); 
+    
     for i = 0 to n - 1 do
-    print_string "    |";
-        ralign_print_int i 4;
+    print_string "    | ";
+        ralign_print_int i 5;
         print_string " | ";
         print_fun (nth i l);
     done;
@@ -84,8 +94,8 @@ let print_rte_ctx l = print_myers_list l
     (fun (n, g) -> 
         let _ = 
         match n with
-            | Some m -> lalign_print_string m 10; print_string "  |  "
-            | None -> print_string (make_line ' ' 10); print_string "  |  " in
+            | Some m -> lalign_print_string m 12; print_string "  |  "
+            | None -> print_string (make_line ' ' 12); print_string "  |  " in
         lexp_print g; print_string "\n")
 ;;
 
@@ -201,7 +211,7 @@ let rec _eval lxp ctx: (lexp * runtime_env) =
                 | Call(lname, args) -> (match lname with
                     | Var((_, ctor_name), _) -> ctor_name, args
                     | _ -> _eval_error loc "Target is not a Constructor" )
-                    
+                (*
                 | Cons((_, idx), (_, cname)) -> begin
                     (*  retrieve type definition *)
                     let info = get_rte_variable idx ctx in
@@ -210,7 +220,7 @@ let rec _eval lxp ctx: (lexp * runtime_env) =
                         cname, args
                     with 
                         Not_found ->
-                            _eval_error loc "Constructor does not exist" end 
+                            _eval_error loc "Constructor does not exist" end *)
                             
                 | _ -> lexp_print target;
                     _eval_error loc "Can't match expression" in
@@ -270,7 +280,6 @@ and build_ctx decls ctx =
             let nctx = add_rte_variable None value nctx in  
                 build_ctx tl nctx
 ;;
-
 
 let eval lxp ctx = 
     try

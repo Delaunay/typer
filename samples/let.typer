@@ -6,6 +6,16 @@
 let c = 1; a = 5; b = 10; d = 3; in
     a + b;
     
+
+a = 1;
+b = 2;
+c = 3;
+d = 4;
+
+    
+let a = 3; g = 1; e = 1; f = 3; in
+    e + a + f + d;
+    
     
 % Not Implemented
 % ----------------------

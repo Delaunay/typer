@@ -74,6 +74,8 @@ let rec repl () =
             if ipt = "%quit" then ()       (* Stop REPL *)
             else if ipt = "%who" then      (* Print environment *)
                 (print_rte_ctx rctx; loop (i + 1) clxp rctx)
+            else if ipt = "%info" then
+                (lexp_context_print clxp; loop (i + 1) clxp rctx)
         (*  Else Process Typer code *)
             else
                 let (ret, rctx), clxp = (eval_string ipt clxp rctx) in
@@ -88,8 +90,9 @@ let rec repl () =
 let main () = 
     print_string ((make_line '-' 80) ^ "\n");
     print_string "   Typer REPL \n";
-    print_string "      %quit to leave\n";
-    print_string "      %who to print environment\n";
+    print_string "      %quit : to leave\n";
+    print_string "      %who  : to print runtime environment\n";
+    print_string "      %info : to print elaboration environment\n";
     print_string ((make_line '-' 80) ^ "\n\n");
     flush stdout; 
 

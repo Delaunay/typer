@@ -22,9 +22,18 @@ one = (succ (zero));
 % x = (succ zero);
 x = (succ (succ zero));
 
-% recusive call not yet implemented 
+% Simple
 case x
     | zero => 0
     | succ y => y
     | _ => (2 + 4);
+    
+% recursive
+tonum = lambda x -> case x 
+    | zero => 0
+    | (succ y) => (1 + (tonum y));
+    
+(tonum x);
+    
+    
     

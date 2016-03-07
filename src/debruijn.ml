@@ -113,10 +113,8 @@ let senv_add_var name loc ctx =
 
 (*  *)
 let env_add_var_info var (ctx: lexp_context) =
-    let (a, _) = ctx in
-    (* let (rof, (loc, name), value, ltyp) = var in *)
-    let nenv = _add_var_env var ctx in
-        (a, nenv)
+    let (a, env) = ctx in
+    (a, cons var env)
 ;;
 
 let env_lookup_type_by_index index ctx = 
