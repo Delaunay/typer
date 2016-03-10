@@ -83,8 +83,8 @@ let get_function_name fname =
 
 let get_int lxp =
     match lxp with
-        | Imm(Integer(_, l)) -> l
-        | _ -> lexp_print (Ltexp(lxp)); -1
+        | Imm(Integer(_, l)) -> l 
+        | _ -> lexp_print (Ltexp(lxp)); -40
 ;;
 
 (*  Runtime Environ *)
@@ -104,9 +104,18 @@ let print_rte_ctx l = print_myers_list l
 ;;
 
 
+let nfirst_rte_var n ctx =
+    let rec loop i acc = 
+        if i < n then
+            loop (i + 1) ((get_rte_variable i ctx)::acc)
+        else
+            List.rev acc in
+    loop 0 []
+;;
+
 (* *)
 let rec eval_toplevel ltop ctx: (value_type * runtime_env) =
-
+    global_trace := []; (*  Clean up trace info *)
     (*  I have to use a sexp because declaration are not "carried" *)
     match ltop with
         (* Eval expression and return results *)
@@ -130,7 +139,7 @@ and _eval lxp ctx i: (lexp * runtime_env) =
             with 
                 Not_found ->
                     print_string ("Variable: " ^ name ^ " was not found | "); 
-                    print_int idx; print_string "\n";
+                    print_int idx; print_string "\n"; flush stdout;
                     raise Not_found end
                 
         (*  this works for non recursive let *)
@@ -139,10 +148,6 @@ and _eval lxp ctx i: (lexp * runtime_env) =
             
             let nctx = build_ctx decls ctx i in
             
-            (*
-            print_rte_ctx ctx;
-            print_rte_ctx nctx; *)
-            
             let value, nctx = _eval inst nctx (i + 1) in
             (*  return old context as we exit let's scope*)
                 value, ctx end
@@ -150,29 +155,38 @@ and _eval lxp ctx i: (lexp * runtime_env) =
         (*  Function call *)
         | Call (lname, args) -> (
             (*  Try to extract name *)
+            let n = List.length args in
             match lname with
-
                 (*  Hardcoded functions *)
+                
+                (* + is read as a nested binary operator *)
                 | Var((_, name), _) when name = "_+_" ->
                     let nctx = build_arg_list args ctx i in
+                    
                     let l = get_int (get_rte_variable 0 nctx) in
-                    let r = get_int (get_rte_variable 1 nctx) in
+                    let r = get_int (get_rte_variable 1 nctx) in 
                     Imm(Integer(dloc, l + r)), ctx 
                     
+                (* _*_ is reas as a single function with x args *)
                 | Var((_, name), _) when name = "_*_" ->
                     let nctx = build_arg_list args ctx i in
-                    let l = get_int (get_rte_variable 0 nctx) in
-                    let r = get_int (get_rte_variable 1 nctx) in
-                    Imm(Integer(dloc, l * r)), ctx 
+                    
+                    let vint = (nfirst_rte_var n nctx) in
+                    let varg = List.map (fun g -> get_int g) vint in
+                    let v = List.fold_left (fun a g -> a * g) 1 varg in
+
+                    Imm(Integer(dloc, v)), ctx 
                 
                 (* This is a named function call *)
                 (*  TODO: handle partial application *)
-                | Var((_, _), idx) when idx >= 0 ->
+                | Var((_, name), idx) ->
+                    
                     (*  get function body *)
                     let body = get_rte_variable idx ctx in
                     (*  Add args in the scope *)
                     let nctx = build_arg_list args ctx i in
                     let e, nctx = (_eval body nctx (i + 1)) in
+                    
                     (*  we exit function and send back old ctx *)
                         e, ctx
     
@@ -182,6 +196,7 @@ and _eval lxp ctx i: (lexp * runtime_env) =
                         
         | Lambda(_, vr, _, body) -> begin 
             let (loc, name) = vr in
+            (*  Get first arg *)
             let value = (get_rte_variable 0 ctx) in
             let nctx = add_rte_variable (Some name) value ctx in
             
@@ -274,7 +289,11 @@ and _eval lxp ctx i: (lexp * runtime_env) =
         
 and build_arg_list args ctx i =
     (*  _eval every args *)
-    let arg_val = List.map (fun (k, e) -> let (v, c) = _eval e ctx (i + 1) in v) args in
+    let arg_val = List.map (
+        fun (k, e) -> 
+            let (v, c) = _eval e ctx (i + 1) in  v) 
+        args in
+            
     (*  Add args inside context *)
     List.fold_left (fun c v -> add_rte_variable None v c) ctx arg_val
 
@@ -289,6 +308,17 @@ and build_ctx decls ctx i =
                 
 and eval_decl ((l, n), lxp, ltp) ctx =
     add_rte_variable (Some n) lxp ctx
+      
+and print_eval_result i tlxp =
+     match tlxp with
+        | Void -> ()
+        | Val(lxp) ->
+    print_string "     Out[";
+    ralign_print_int i 2;
+    print_string "] >> ";
+    match lxp with
+        | Imm(v) -> sexp_print v; print_string "\n"
+        | e ->  lexp_print (Ltexp(e)); print_string "\n"
 ;;
 
 
@@ -330,8 +360,7 @@ let print_call_trace () =
 
 let eval lxp ctx = 
     try
-        let r, c = _eval lxp ctx 0 in
-            global_trace := [];
+        let r, c = eval_toplevel lxp ctx in
             (r, c)
     with e -> (
         print_rte_ctx ctx;
@@ -339,17 +368,7 @@ let eval lxp ctx =
         raise e)
 ;;
 
-let print_eval_result i tlxp =
-     match tlxp with
-        | Void -> ()
-        | Val(lxp) ->
-    print_string "     Out[";
-    ralign_print_int i 2;
-    print_string "] >> ";
-    match lxp with
-        | Imm(v) -> sexp_print v; print_string "\n"
-        | e ->  lexp_print (Ltexp(e)); print_string "\n"
-;;
+
 
 let evalprint lxp ctx = 
     let v, ctx = (eval_toplevel lxp ctx) in
@@ -363,7 +382,7 @@ let eval_all lxps rctx =
         match lxps with
             | [] -> (List.rev acc), rctx 
             | hd::tl ->
-                let lxp, rctx = eval_toplevel hd rctx in
+                let lxp, rctx = eval hd rctx in
                     _eval_all tl (lxp::acc) rctx in
     (_eval_all lxps [] rctx)
 ;;

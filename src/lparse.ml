@@ -367,24 +367,19 @@ and lexp_merge_info (decls: (pvar * pexp * bool) list) =
 
 (*  Add declaration in the environment *)    
 and lexp_p_decls (decl: (pvar * pexp * pexp option)) ctx =
+    let ((loc, vname), pxp, _) = decl in
     
-    (* Process Variables and Typing *)
-    let ((loc, name), lxp, ltp) = match decl with 
-        | ((loc, name), xp, Some tp) ->
-            let ltp, nctx = lexp_parse tp ctx in
-            let lxp = lexp_p_check xp ltp ctx in
-                ((loc, name), lxp, ltp)
+    (*  we should add the defined var to ctx *)
+    let nctx = senv_add_var vname loc ctx in 
             
-        | ((loc, name), xp, None) ->
-            let lxp, ltp = lexp_p_infer xp ctx in
-                ((loc, name), lxp, ltp) in
-                
-    (*  Add Variable *)
-    let nctx = senv_add_var name loc ctx in
-    let nctx = env_add_var_info (0, (loc, name), lxp, ltp) nctx in
+    (*let idx = senv_lookup vname nctx in *)
+    let lxp, ltp = lexp_p_infer pxp nctx in
+    
+    (*  Add Var info*)
+    let nctx = env_add_var_info (0, (loc, vname), lxp, ltp) nctx in
     
     (* return processed var *)
-        ((loc, name), lxp, ltp), nctx
+        ((loc, vname), lxp, ltp), nctx
         
 (*  Parse let declaration *)
 and lexp_parse_let decls ctx =
