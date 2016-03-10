@@ -114,27 +114,30 @@ let debug_sexp_print_all tokens =
 
 
 (* Print a Pexp with debug info *)
-let debug_pexp_print pexp =
+let debug_pexp_print ptop =
     print_string " ";
-    let l = pexp_location pexp in
+    let l = pexp_location_toplevel ptop in
     let print_info msg loc pex = 
         print_string msg; print_string "["; 
         print_loc loc; 
         print_string "]\t";
-        pexp_print pexp in
-    match pexp with
-        | Pimm _                 -> print_info "Pimm       " l pexp
-        | Pvar (_,_)             -> print_info "Pvar       " l pexp
-        | Phastype (_,_,_)       -> print_info "Phastype   " l pexp
-        | Pmetavar (_, _)        -> print_info "Pmetavar   " l pexp
-        | Plet (_, _, _)         -> print_info "Plet       " l pexp
-        | Parrow (_, _, _, _, _) -> print_info "Parrow     " l pexp
-        | Plambda (_,_, _, _)    -> print_info "Plambda    " l pexp
-        | Pcall (_, _)           -> print_info "Pcall      " l pexp
-        | Pinductive (_, _, _)   -> print_info "Pinductive " l pexp
-        | Pcons (_,_)            -> print_info "Pcons      " l pexp
-        | Pcase (_, _, _)        -> print_info "Pcase      " l pexp
-        | _                      -> print_info "Not Impl   " l pexp
+        pexp_print_toplevel pex in
+    match ptop with
+        | Ptdecl((l, n), pexp)       -> print_info "PDecl      " l ptop
+        | Ptexp (pexp) -> (
+        match pexp with
+            | Pimm _                 -> print_info "Pimm       " l ptop
+            | Pvar (_,_)             -> print_info "Pvar       " l ptop
+            | Phastype (_,_,_)       -> print_info "Phastype   " l ptop
+            | Pmetavar (_, _)        -> print_info "Pmetavar   " l ptop
+            | Plet (_, _, _)         -> print_info "Plet       " l ptop
+            | Parrow (_, _, _, _, _) -> print_info "Parrow     " l ptop
+            | Plambda (_,_, _, _)    -> print_info "Plambda    " l ptop
+            | Pcall (_, _)           -> print_info "Pcall      " l ptop
+            | Pinductive (_, _, _)   -> print_info "Pinductive " l ptop
+            | Pcons (_,_)            -> print_info "Pcons      " l ptop
+            | Pcase (_, _, _)        -> print_info "Pcase      " l ptop
+            | _                      -> print_info "Not Impl   " l ptop)
 ;;
 
 (* Print a list of pexp *)
@@ -147,7 +150,7 @@ let debug_pexp_print_all pexps =
 ;;
 
 (* Print lexp with debug info *)
-let debug_lexp_print lxp = 
+let debug_lexp_print tlxp = 
     print_string " ";
     let dloc = dummy_location in
     let print_info msg loc lex = 
@@ -155,18 +158,21 @@ let debug_lexp_print lxp =
         print_loc loc; 
         print_string "]\t";
         lexp_print lex in
-    let tloc = lexp_location lxp in
+    let tloc = lexp_location_toplevel tlxp in
+    match tlxp with
+        | Ltdecl ((_, x), lxp, ltp) -> print_info "Decl        " tloc tlxp
+        | Ltexp(lxp) ->
     match lxp with
-        | Var((loc, _), _)          -> print_info "Var         " tloc lxp
-        | Imm(s)                    -> print_info "Imm         " tloc lxp
-        | Let(loc, _, _)            -> print_info "Let         " tloc lxp
-        | Arrow(_, _, _, loc, _)    -> print_info "Arrow       " tloc lxp
-        | Lambda(_, (loc, _), _, _) -> print_info "Lambda      " tloc lxp
-        | Call(_, _)                -> print_info "Call        " tloc lxp
-        | Inductive(loc, _, _, _)   -> print_info "Inductive   " tloc lxp
-        | UnknownType(loc)          -> print_info "UnknownType " tloc lxp
-        | Case(loc, _, _, _, _)     -> print_info "Case        " tloc lxp
-        | Cons (rf, sym)            -> print_info "Cons        " tloc lxp
+        | Var((loc, _), _)          -> print_info "Var         " tloc tlxp
+        | Imm(s)                    -> print_info "Imm         " tloc tlxp
+        | Let(loc, _, _)            -> print_info "Let         " tloc tlxp
+        | Arrow(_, _, _, loc, _)    -> print_info "Arrow       " tloc tlxp
+        | Lambda(_, (loc, _), _, _) -> print_info "Lambda      " tloc tlxp
+        | Call(_, _)                -> print_info "Call        " tloc tlxp
+        | Inductive(loc, _, _, _)   -> print_info "Inductive   " tloc tlxp
+        | UnknownType(loc)          -> print_info "UnknownType " tloc tlxp
+        | Case(loc, _, _, _, _)     -> print_info "Case        " tloc tlxp
+        | Cons (rf, sym)            -> print_info "Cons        " tloc tlxp
         | _ -> print_string "Debug Printing Not Implemented";
 ;;
 

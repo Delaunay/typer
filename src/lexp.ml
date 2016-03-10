@@ -276,7 +276,21 @@ let rec lexp_location e =
   | Case (l,_,_,_,_) -> l
   (* | Susp (_, e) -> lexp_location e
    * | Metavar ((l,_),_,_) -> l *)
-
+   
+   
+let lexp_to_string e =
+  match e with
+    | Imm _ -> "Imm"
+    | Var _ -> "Var"
+    | Let _ -> "Let"
+    | Arrow _ -> "Arrow"
+    | Lambda _ -> "Lambda"
+    | Call _ -> "Call"
+    | Inductive _ -> "Inductive"
+    | Cons _ -> "Cons"
+    | Case _ -> "Case"
+;;
+    
 let builtin_reduce b args arg =
   match b,args,arg with
   | IAdd, [(_,Imm (Integer (_, i1)))], (Imm (Integer (_, i2)))

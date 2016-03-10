@@ -2,6 +2,13 @@
 %   Inductive type
 % -------------------------------------------
 
+
+%
+%   Constructor with not args are not processed
+%   correctly in case . I need type info to differentiate them
+%   from variables
+%
+
 % definition
 inductive_ (dummy_Nat) (zero) (succ Nat);
 
@@ -24,14 +31,13 @@ x = (succ (succ zero));
 
 % Simple
 case x
-    | zero => 0
     | succ y => y
     | _ => (2 + 4);
     
 % recursive
 tonum = lambda x -> case x 
-    | zero => 0
-    | (succ y) => (1 + (tonum y));
+    | (succ y) => (1 + (tonum y))
+    | _ => 0;
     
 (tonum x);
     

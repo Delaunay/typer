@@ -76,3 +76,32 @@ let lalign_print_string =
 let lalign_print_int =
     lalign_generic str_size_int print_string print_int cut_int;;
 
+(* Table Printing helper *)
+let make_title title = 
+    let title_n = String.length title in
+    let p = title_n mod 2 in
+    let sep_n = (80 - title_n - 4) / 2 in
+    let lsep = (make_line '=' sep_n) in
+    let rsep = (make_line '=' (sep_n + p)) in
+        ("    " ^ lsep ^ title ^ rsep ^ "\n")
+;;
+
+let make_rheader (head: (((char* int) option  * string) list)) =
+    print_string "    | ";
+    
+    List.iter (fun (o, name) ->
+        let _ = match o with
+            | Some ('r', size) -> ralign_print_string name size
+            | Some ('r', size) -> lalign_print_string name size
+            | _ -> print_string name in
+        print_string " | ")
+        head;
+    
+    print_string "\n"
+;;
+    
+let make_sep c = "    " ^ (make_line c 76) ^ "\n";;
+
+
+    
+    

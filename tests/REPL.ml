@@ -23,36 +23,28 @@ let rec read_input i =
     print_input_line i;
     flush stdout;
     
-    let rec loop str =
+    let rec loop str i =
+        flush stdout;
         let line = input_line stdin in
         let s = String.length str in
         let n = String.length line in
-            if n = 0 then loop str else
+            if s = 0 && n = 0 then read_input (i + 1) else
+            (if n = 0 then (
+                print_string "          : "; 
+                print_string (make_line ' ' (i * 4)); 
+                loop str (i + 1)) 
+            else
         let str = if s > 0 then  String.concat "\n" [str; line] else line in
             if line.[n - 1] = ';' || line.[0] = '%' then
                 str
-            else 
-                (print_string "          ";  loop str) in
+            else (
+                print_string "          . "; 
+                print_string (make_line ' ' (i * 4));
+                loop str (i + 1))) in
                 
-    loop ""
+    loop "" 1
 ;;
 
-
-let eval_string (str: string) tenv grm limit lxp_ctx rctx =
-    let rec eval_all lxps acc rctx = 
-        match lxps with
-            | [] -> (List.rev acc), rctx 
-            | hd::tl ->
-                let lxp, rctx = eval hd rctx in
-                    eval_all tl (lxp::acc) rctx in
-
-    let pretoks = prelex_string str in
-    let toks = lex tenv pretoks in
-    let sxps = sexp_parse_all_to_list grm toks limit in
-    let pxps = pexp_parse_all sxps in
-    let lxp, lxp_ctx = lexp_parse_all pxps lxp_ctx in
-        (eval_all lxp [] rctx), lxp_ctx
-;;
 
 (*  Specials commands %[command-name] *)
 let rec repl () = 
@@ -64,7 +56,6 @@ let rec repl () =
     (*  Those are hardcoded operation *)
         let lxp_ctx = add_def "_+_" lxp_ctx in
         let lxp_ctx = add_def "_*_" lxp_ctx in
-        let lxp_ctx = add_def "_=_" lxp_ctx in
             
     let rctx = make_runtime_ctx in
 
@@ -76,24 +67,25 @@ let rec repl () =
                 (print_rte_ctx rctx; loop (i + 1) clxp rctx)
             else if ipt = "%info" then
                 (lexp_context_print clxp; loop (i + 1) clxp rctx)
+            else if ipt = "%calltrace" then
+                (print_call_trace (); loop (i + 1) clxp rctx)
         (*  Else Process Typer code *)
             else
                 let (ret, rctx), clxp = (eval_string ipt clxp rctx) in
-                let printe j v = print_eval_result i v in
-                    List.iteri printe ret;
-                    print_string "\n";
+                let print_e j v = print_eval_result i v in
+                    List.iteri print_e ret;
                     loop (i + 1) clxp rctx  in
     
     loop 1 lxp_ctx rctx
 ;;
                 
 let main () = 
-    print_string ((make_line '-' 80) ^ "\n");
-    print_string "   Typer REPL \n";
-    print_string "      %quit : to leave\n";
-    print_string "      %who  : to print runtime environment\n";
-    print_string "      %info : to print elaboration environment\n";
-    print_string ((make_line '-' 80) ^ "\n\n");
+    print_string (make_title " TYPER REPL ");
+    print_string "      %quit      : leave REPL\n";
+    print_string "      %who       : print runtime environment\n";
+    print_string "      %info      : print elaboration environment\n";
+    print_string "      %calltrace : print call trace of last call \n";
+    print_string (make_sep '=');
     flush stdout; 
 
     repl ()

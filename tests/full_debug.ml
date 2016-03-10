@@ -36,11 +36,15 @@ open Lexer
 open Sexp
 open Grammar
 open Pexp
-open Debruijn
-open Lparse
-open Myers
-open Eval
 open Util
+open Fmt
+
+let dloc = dummy_location;;
+
+open Debruijn
+open Myers
+open Lparse
+open Eval
 open Lexp
 
 (*  pexp and lexp can be done together, one by one *)
@@ -49,7 +53,7 @@ let pexp_lexp_one node ctx =
     lexp_parse pxp ctx
 ;;
 
-let dloc = dummy_location;;
+
 
 let pexp_lexp_all nodes ctx =
 
@@ -75,22 +79,17 @@ let eval_until_nth xpr n rctx =
             | [], _ -> rctx
             | _, nb when nb = n -> rctx
             | hd::tl, _ -> 
-                let c, rctx = eval hd rctx in
+                let c, rctx = eval_toplevel hd rctx in
                     print_eval_result nb c;
                     loop tl (nb + 1) rctx in  
         loop xpr 0 rctx
-;;
+;; 
         
 let main () = 
 
     let arg_n = Array.length Sys.argv in
     let usage = 
         "  Usage: \n    " ^ Sys.argv.(0) ^ " <file_name> [options] \n\n" in
-    
-    let print_title msg = 
-        print_string "\n\t====\n";
-        print_string ("\t    " ^ msg ^ "\n");
-        print_string "\t=======================\n" in
     
     (*  Print Usage *)
     if arg_n == 1 then
@@ -104,6 +103,7 @@ let main () =
         
         (* Read additional Args if any *)
 
+        print_string (make_title " ERRORS ");
         (* get pretokens*)
         let pretoks = prelex_file filename in
         
@@ -121,28 +121,34 @@ let main () =
         (*  Those are hardcoded operation *)
             let ctx = add_def "_+_" ctx in
             let ctx = add_def "_*_" ctx in
-            let ctx = add_def "_=_" ctx in
   
-        let lexps, new_ctx = lexp_parse_all pexps ctx in
+        let lexps, new_ctx = lexp_parse_all pexps ctx in 
         
+        print_string "\n\n";
         (* Printing *)(*
         print_title "PreTokens";    debug_pretokens_print_all pretoks;
         print_title "Base Sexp";    debug_sexp_print_all toks;  *)
-        print_title "Node Sexp";    debug_sexp_print_all nodes;
-        print_title "Pexp";         debug_pexp_print_all pexps;
-        print_title "Lexp";         debug_lexp_print_all lexps;
-        
-        print_string "\n\n";
-        lexp_context_print new_ctx;
+        print_string (make_title " Node Sexp ");    debug_sexp_print_all nodes;
+        print_string "\n";
+        print_string (make_title " Pexp ");         debug_pexp_print_all pexps;
+        print_string "\n";
+        print_string (make_title " Lexp ");         debug_lexp_print_all lexps;
+        print_string "\n";
         
         (* Eval Each Expression *)
-        print_title "Eval Print";
+        print_string (make_title " Eval Print ");
         
         (*  Eval One *)
         let rctx = make_runtime_ctx in 
         let rctx = eval_until_nth lexps 500 rctx in 
             print_string "\n\n";
-            print_rte_ctx rctx;
+            print_rte_ctx rctx; 
+            
+        print_string "\n";
+        lexp_context_print new_ctx;
+        print_string "\n";
+            
+        print_call_trace ();
     end
 ;;
 

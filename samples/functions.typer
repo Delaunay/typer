@@ -3,12 +3,12 @@
 % -------------------------------------------
 
 % define sqrt
-sqrt = lambda (x : Nat) -> x * x;
+sqr = lambda (x : Nat) -> x * x;
 
-(sqrt 2);
+(sqr 2);
 
 % define cube
-cube = lambda (x : Nat) -> x * (sqrt x);
+cube = lambda (x : Nat) -> x * (sqr x);
 
 (cube 3);
 

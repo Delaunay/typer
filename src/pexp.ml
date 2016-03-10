@@ -61,6 +61,15 @@ type pexp =
                   * (symbol * (arg_kind * pvar option * pexp) list) list
   | Pcons of pvar * symbol
   | Pcase of location * pexp * (ppat * pexp) list
+  
+(* Top level expression annotation *)
+type ptop = 
+  | Ptexp of pexp
+  (* Declarations *)
+  | Ptann of pvar * pexp             (* Type annotation *)
+  | Ptdecl of pvar * pexp            (* Declaration     *)
+  | Ptanndecl of pvar * pexp * pexp  (* Annotated declaration  *)
+  | Ptnone
 
 let rec pexp_location e =
   match e with
@@ -81,11 +90,29 @@ let rec pexp_pat_location e = match e with
   | Ppatany l -> l
   | Ppatvar (l,_) -> l
   | Ppatcons ((l, _), _) -> l
-  
+;;
+
+let pexp_location_toplevel e =
+  match e with
+    | Ptexp (x) -> pexp_location x
+    | Ptdecl ((x, _), _) -> x 
+    | Ptann ((x, _), _) -> x
+    | Ptanndecl((x, _), _, _) -> x
+;;
+
+(*  We use a list so we can merge 2 contiguous definitions *)
+let rec pexp_p_toplevel (s : sexp): ptop =
+
+  match s with
+    | Node (Symbol (_, "_:_"), _) -> 
+        let (a, b, _)::_ = pexp_p_decls s in Ptann (a, b) 
+    | Node (Symbol (_, "_=_"), _) -> 
+        let (a, b, _)::_ = pexp_p_decls s in Ptdecl (a, b)
+    | _ -> Ptexp(pexp_parse s)
+
 (* In the following "pexp_p" the prefix for "parse a sexp, returning a pexp"
  * and "pexp_u" is the prefix for "unparse a pexp, returning a sexp".  *)
-                       
-let rec pexp_parse (s : sexp) : pexp =
+and pexp_parse (s : sexp) : pexp =
   match s with
   (* This is an internal error because Epsilon does not have any location
    * information so it needs to be caught elsewhere.  *)
@@ -350,9 +377,19 @@ and pexp_u_decls ds =
 
 let pexp_print e = sexp_print (pexp_unparse e)
 
+
+let pexp_print_toplevel e =
+  match e with
+    | Ptexp (x)               -> pexp_print x
+    | Ptdecl ((_, n), e)      -> print_string (n ^ " = "); pexp_print e; 
+    | Ptann ((_, n), e)       -> print_string (n ^ " : "); pexp_print e;
+    | Ptanndecl((_, n), e, t) -> print_string (n ^ " = "); pexp_print e;
+;;
+    
+    
 (* Parse All Pexp as a list *)
 let pexp_parse_all (nodes: sexp list) =
-    List.map pexp_parse nodes
+    List.map pexp_p_toplevel nodes
 ;;
 
 let pexp_parse_string (str: string) tenv grm limit =

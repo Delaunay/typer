@@ -20,4 +20,16 @@ let a = 3; g = 1; e = 1; f = 3; in
 % Not Implemented
 % ----------------------
 
+
+% Type definition
+Nat = inductive_ (dummy_Nat) (zero) (succ Nat);
+
+zero = inductive-cons Nat zero; 
+succ = inductive-cons Nat succ;
+
+v = (succ (succ zero));
+
 % Recursive Let
+let odd  = lambda n -> case n | (zero) => false | (succ y) => (even y);
+    even = lambda n -> case n | (zero) => true  | (succ y) => (odd y); in
+        (odd v)

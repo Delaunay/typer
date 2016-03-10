@@ -66,10 +66,7 @@ let main () =
             
             tests_n := !tests_n + 1;
 
-            print_string "          " ;
-            print_int !tests_n;
-            print_endline (") " ^ (cut_name files.(i)));
-            print_endline  "[RUN    ]";
+            print_endline ("[RUN    ] TEST: " ^ (cut_name files.(i)));
             
             exit_code := Sys.command (folder ^ files.(i) ^ " " ^ root_folder);
             
