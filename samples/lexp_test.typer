@@ -1,18 +1,20 @@
 
 
 
-% x : Nat;
 x = 4;
-
-x + x + x; % 12
-x * x * x; % 64
-
 sqr = lambda x -> x * x;
-% cube = lambda x -> x * x * x;
-
-(sqr x);    % 16
-%(cube x);
-
 cube = lambda x -> x * (sqr x); 
-(cube x);   % 64
 
+
+main = lambda z ->
+    (cube x)
+;
+
+
+
+% (sqr x);    % 16
+%(cube x);
+% (cube x);   % 64
+% cube = lambda x -> x * x * x;
+% x + x + x; % 12
+% x * x * x; % 64

@@ -90,7 +90,7 @@ let _add_var_env variable ctx =
 let make_lexp_context = (_make_senv_type, _make_myers);;
  
 (*  return its current DeBruijn index *)
-let rec senv_lookup (name: string) (ctx: lexp_context) =
+let rec senv_lookup (name: string) (ctx: lexp_context): int =
     let ((n, map), _) = ctx in
         n - (StringMap.find name map) - 1
 ;;

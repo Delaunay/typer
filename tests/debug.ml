@@ -116,29 +116,36 @@ let debug_sexp_print_all tokens =
 (* Print a Pexp with debug info *)
 let debug_pexp_print ptop =
     print_string " ";
-    let l = pexp_location_toplevel ptop in
+    let l = pexp_location ptop in
     let print_info msg loc pex = 
         print_string msg; print_string "["; 
         print_loc loc; 
         print_string "]\t";
-        pexp_print_toplevel pex in
+        pexp_print pex in
     match ptop with
-        | Ptdecl((l, n), pexp)       -> print_info "PDecl      " l ptop
-        | Ptexp (pexp) -> (
-        match pexp with
-            | Pimm _                 -> print_info "Pimm       " l ptop
-            | Pvar (_,_)             -> print_info "Pvar       " l ptop
-            | Phastype (_,_,_)       -> print_info "Phastype   " l ptop
-            | Pmetavar (_, _)        -> print_info "Pmetavar   " l ptop
-            | Plet (_, _, _)         -> print_info "Plet       " l ptop
-            | Parrow (_, _, _, _, _) -> print_info "Parrow     " l ptop
-            | Plambda (_,_, _, _)    -> print_info "Plambda    " l ptop
-            | Pcall (_, _)           -> print_info "Pcall      " l ptop
-            | Pinductive (_, _, _)   -> print_info "Pinductive " l ptop
-            | Pcons (_,_)            -> print_info "Pcons      " l ptop
-            | Pcase (_, _, _)        -> print_info "Pcase      " l ptop
-            | _                      -> print_info "Not Impl   " l ptop)
+        | Pimm _                 -> print_info "Pimm       " l ptop
+        | Pvar (_,_)             -> print_info "Pvar       " l ptop
+        | Phastype (_,_,_)       -> print_info "Phastype   " l ptop
+        | Pmetavar (_, _)        -> print_info "Pmetavar   " l ptop
+        | Plet (_, _, _)         -> print_info "Plet       " l ptop
+        | Parrow (_, _, _, _, _) -> print_info "Parrow     " l ptop
+        | Plambda (_,_, _, _)    -> print_info "Plambda    " l ptop
+        | Pcall (_, _)           -> print_info "Pcall      " l ptop
+        | Pinductive (_, _, _)   -> print_info "Pinductive " l ptop
+        | Pcons (_,_)            -> print_info "Pcons      " l ptop
+        | Pcase (_, _, _)        -> print_info "Pcase      " l ptop
+        | _                      -> print_info "Not Impl   " l ptop
 ;;
+
+let debug_pexp_decls decls =
+    List.iter (fun e ->
+            let ((_, name), pxp, tp) = e in
+            print_string name;
+                if tp then print_string " : " else print_string " = ";
+            pexp_print pxp; print_string "\n"
+        )
+        decls
+        
 
 (* Print a list of pexp *)
 let debug_pexp_print_all pexps =
@@ -158,11 +165,8 @@ let debug_lexp_print tlxp =
         print_loc loc; 
         print_string "]\t";
         lexp_print lex in
-    let tloc = lexp_location_toplevel tlxp in
+    let tloc = lexp_location tlxp in
     match tlxp with
-        | Ltdecl ((_, x), lxp, ltp) -> print_info "Decl        " tloc tlxp
-        | Ltexp(lxp) ->
-    match lxp with
         | Var((loc, _), _)          -> print_info "Var         " tloc tlxp
         | Imm(s)                    -> print_info "Imm         " tloc tlxp
         | Let(loc, _, _)            -> print_info "Let         " tloc tlxp
@@ -185,5 +189,15 @@ let debug_lexp_print_all lexps =
         lexps
 ;;
 
+let debug_lexp_decls decls =
+    List.iter (fun e ->
+            let ((_, name), lxp, ltp) = e in
+            print_string name; print_string " : ";
+                lexp_print ltp;
+                print_string " = ";
+                lexp_print lxp;
+            print_string ";\n"
+        )
+        decls
 
 

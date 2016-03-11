@@ -47,14 +47,10 @@ open Lparse
 open Eval
 open Lexp
 
-(*  pexp and lexp can be done together, one by one *)
-let pexp_lexp_one node ctx = 
-    let pxp = pexp_parse node in
-    lexp_parse pxp ctx
-;;
 
+let dummy_decl = Imm(String(dloc, "Dummy"));;
 
-
+(*
 let pexp_lexp_all nodes ctx =
 
     let rec loop nodes ctx acc = 
@@ -66,7 +62,7 @@ let pexp_lexp_all nodes ctx =
     (loop nodes ctx [])
 ;;
 
-let dummy_decl = Imm(String(dloc, "Dummy"));;
+
 
 let add_rte_def name ctx = 
     (add_rte_variable (Some name) dummy_decl ctx);;
@@ -83,7 +79,9 @@ let eval_until_nth xpr n rctx =
                     print_eval_result nb c;
                     loop tl (nb + 1) rctx in  
         loop xpr 0 rctx
-;; 
+;; *)
+        
+let discard v = ();;
         
 let main () = 
 
@@ -113,8 +111,9 @@ let main () =
         (* get node sexp  *)
         let nodes = sexp_parse_all_to_list default_grammar toks (Some ";") in
         
-        (* get pexp *)
-        let pexps = pexp_parse_all nodes in
+        (* Parse All Declaration *)
+        let pexps = pexp_decls_all nodes in
+        (* let pexps = pexp_parse_all nodes in *)
 
         (* get lexp *)
         let ctx = make_lexp_context in
@@ -122,31 +121,53 @@ let main () =
             let ctx = add_def "_+_" ctx in
             let ctx = add_def "_*_" ctx in
   
-        let lexps, new_ctx = lexp_parse_all pexps ctx in 
-        
+        (* let lexps, new_ctx = lexp_parse_all pexps ctx in *)
+        let lexps, nctx = lexp_decls pexps ctx in
+            
         print_string "\n\n";
         (* Printing *)(*
         print_title "PreTokens";    debug_pretokens_print_all pretoks;
         print_title "Base Sexp";    debug_sexp_print_all toks;  *)
-        print_string (make_title " Node Sexp ");    debug_sexp_print_all nodes;
+        print_string (make_title " Node Sexp "); debug_sexp_print_all nodes;
         print_string "\n";
-        print_string (make_title " Pexp ");         debug_pexp_print_all pexps;
+        print_string (make_title " Pexp ");      debug_pexp_decls pexps;
+        (*debug_pexp_print_all pexps;*)
         print_string "\n";
-        print_string (make_title " Lexp ");         debug_lexp_print_all lexps;
+        print_string (make_title " Lexp ");      debug_lexp_decls lexps;       
+        (* debug_lexp_print_all lexps; *)
+        print_string "\n";
+
+        print_string "\n";
+        lexp_context_print nctx;
         print_string "\n";
         
         (* Eval Each Expression *)
         print_string (make_title " Eval Print ");
         
-        (*  Eval One *)
+        
+        (* Eval declaration *)
         let rctx = make_runtime_ctx in 
-        let rctx = eval_until_nth lexps 500 rctx in 
-            print_string "\n\n";
-            print_rte_ctx rctx; 
+        let rctx = eval_decls lexps rctx in
+          
+        let _ = 
+        try
+            (* Check if main is present *)
+            let main = (senv_lookup "main" nctx) in
+            (* Push main args here if any *)
             
-        print_string "\n";
-        lexp_context_print new_ctx;
-        print_string "\n";
+            (* get main body *)
+            let body = (get_rte_variable main rctx) in
+            (* eval main *)
+            let r, c = (eval body rctx) in
+                print_eval_result 0 r
+                
+        with 
+            Not_found ->  print_string "No declared main\n" in
+            
+        (*  Print info *)
+        print_string "\n\n";
+        print_rte_ctx rctx; 
+            
             
         print_call_trace ();
     end
@@ -154,4 +175,3 @@ let main () =
 
 main ()
 ;;
-

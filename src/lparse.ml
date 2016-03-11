@@ -68,18 +68,6 @@ type print_context = (bool * int * bool)
 (* Vdef is exactly similar to Pvar but need to modify our ctx *)
 let pvar_to_vdef p = p;;
 
-type ltop =
-    | Ltexp of lexp 
-    | Ltdecl of vdef * lexp * ltype
-;;
-
-
-let lexp_location_toplevel ltp = 
-    match ltp with
-        | Ltexp(x) -> lexp_location x
-        | Ltdecl((l, _), _, _) -> l
-;;
-
 (*  PEXP is not giving SEXP types this is why types are always unknown *)
 
 (*
@@ -101,22 +89,8 @@ let lexp_location_toplevel ltp =
  *
  *)
  
-(* Process a top-level expression *)
-let rec lexp_p_toplevel (p: ptop) (ctx: lexp_context) =
-    
-    (*  Identify if the expression is a declaration *)
-    match p with
-        (* Declaration *)
-        | Ptdecl (x, p) -> 
-            let (a, b, c), ctx = lexp_p_decls (x, p, None) ctx in
-                Ltdecl(a, b, c), ctx
-        
-        (* Everything else*)
-        | Ptexp (x) -> let x, ctx = lexp_parse x ctx in
-            Ltexp(x), ctx
-    
-(**)
-and lexp_parse (p: pexp) (ctx: lexp_context): (lexp * lexp_context) =
+
+let rec lexp_parse (p: pexp) (ctx: lexp_context): (lexp * lexp_context) =
     (* So I don't have to extract it *)
     let tloc = pexp_location p in
     match p with
@@ -137,7 +111,7 @@ and lexp_parse (p: pexp) (ctx: lexp_context): (lexp * lexp_context) =
                 
         (*  Let, Variable declaration + local scope *)
         | Plet(loc, decls, body) ->      
-            let decl, nctx = lexp_parse_let decls ctx in
+            let decl, nctx = lexp_decls decls ctx in
             (*  Body cannot modify context *)
             let bdy, _ = lexp_parse body nctx in
             (*  Send back old context as we exit the inner scope *)
@@ -243,7 +217,7 @@ and lexp_call (fname: pexp) (_args: sexp list) ctx =
             | Pcons (_, (loc, nm)) -> nm, loc
             | _ -> raise Not_found in
      
-        let largs, fctx = lexp_p_all pargs ctx in 
+        let largs, fctx = lexp_parse_all pargs ctx in 
         let new_args = List.map (fun g -> (Aexplicit, g)) largs in
     
         try
@@ -262,7 +236,7 @@ and lexp_call (fname: pexp) (_args: sexp list) ctx =
             
     (*  Call to a nameless function *)
     with Not_found ->
-        let largs, fctx = lexp_p_all pargs ctx in 
+        let largs, fctx = lexp_parse_all pargs ctx in 
         let new_args = List.map (fun g -> (Aexplicit, g)) largs in
         (*  I think this should not modify context.
          *  if so, funny things might happen when evaluating *)
@@ -382,7 +356,7 @@ and lexp_p_decls (decl: (pvar * pexp * pexp option)) ctx =
         ((loc, vname), lxp, ltp), nctx
         
 (*  Parse let declaration *)
-and lexp_parse_let decls ctx =
+and lexp_decls decls ctx: (((vdef * lexp * ltype) list) * lexp_context) =
 
     (*  Merge Type info and declaration together                      *)
     (*  We use a list because order matters and Maps reorder elements *)
@@ -455,16 +429,7 @@ and lexp_parse_let decls ctx =
     let acc, ctx = process_var_info decls nctx [] in
         acc, ctx
 
-and lexp_parse_all (p: ptop list) (ctx: lexp_context): 
-                                        (ltop list * lexp_context) =
-    let rec loop (plst: ptop list) ctx (acc: ltop list) = 
-        match plst with
-            | [] -> ((List.rev acc), ctx)
-            | _  -> let lxp, new_ctx = lexp_p_toplevel (List.hd plst) ctx in
-                    (loop (List.tl plst) new_ctx (lxp::acc)) in
-    (loop p ctx [])
-    
-and lexp_p_all (p: pexp list) (ctx: lexp_context): 
+and lexp_parse_all (p: pexp list) (ctx: lexp_context): 
                                         (lexp list * lexp_context) =
     let rec loop (plst: pexp list) ctx (acc: lexp list) = 
         match plst with
@@ -472,7 +437,7 @@ and lexp_p_all (p: pexp list) (ctx: lexp_context):
             | _  -> let lxp, new_ctx = lexp_parse (List.hd plst) ctx in
                     (loop (List.tl plst) new_ctx (lxp::acc)) in
     (loop p ctx [])
-
+    
 (*
  *      Type Inference
  * --------------------- *)
@@ -676,16 +641,7 @@ and lexp_print_var_info ctx =
     done;
 ;;
 
-let lexp_print e =
-    match e with
-        | Ltexp (x) -> lexp_print_adv (false, 0, true) x
-        | Ltdecl ((_, x), lxp, ltp) ->
-            print_string x;
-            print_string " = ";
-            lexp_print_adv (false, 0, true) lxp;
-            print_string " : ";
-            lexp_print_adv (false, 0, true) ltp
-;;  
+let lexp_print e = lexp_print_adv (false, 0, true) e;;  
            
 let lexp_parse_string (str: string) tenv grm limit ctx =
     let pretoks = prelex_string str in

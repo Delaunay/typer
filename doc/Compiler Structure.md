@@ -45,7 +45,7 @@ Functions:
     sexp_parse sexp
     node_parse_string str
         
-* Sexp -> Pexp: ~ Check grammar
+* Sexp -> Pexp: ~ Lexical Analysis
     
 Identify nodes and transform them into language primitives
 
@@ -57,7 +57,7 @@ Functions:
     pexp_p_decls        % For top level declaration
     pexp_p_toplevel     % Parses using the appropriate parsing function
     
-* Pexp -> Lexp: ~ Check scopes/ declaration
+* Pexp -> Lexp: ~ Semantic Analysis
 
 Replace variable name by their (reverse) index in the environment.
 Lexps are very close to pexps

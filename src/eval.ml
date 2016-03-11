@@ -39,10 +39,6 @@ open Fmt
 open Debruijn
 open Grammar
 
-(*  Value type *)
-type value_type =
-    | Void
-    | Val of lexp
 
 let _eval_error loc msg = 
     msg_error "eval" loc msg;
@@ -84,7 +80,7 @@ let get_function_name fname =
 let get_int lxp =
     match lxp with
         | Imm(Integer(_, l)) -> l 
-        | _ -> lexp_print (Ltexp(lxp)); -40
+        | _ -> lexp_print lxp; -40
 ;;
 
 (*  Runtime Environ *)
@@ -92,7 +88,9 @@ type runtime_env = (string option * lexp) myers
 let make_runtime_ctx = nil;;
 let add_rte_variable name x l = (cons (name, x) l);;
 
-let get_rte_variable idx l = let (_, x) = (nth (idx) l) in x;;
+let get_rte_variable (idx: int) (l: runtime_env): lexp = 
+    let (_, x) = (nth idx l) in x
+;;
 
 let print_rte_ctx l = print_myers_list l 
     (fun (n, g) -> 
@@ -100,7 +98,7 @@ let print_rte_ctx l = print_myers_list l
         match n with
             | Some m -> lalign_print_string m 12; print_string "  |  "
             | None -> print_string (make_line ' ' 12); print_string "  |  " in
-        lexp_print (Ltexp(g)); print_string "\n")
+        lexp_print g; print_string "\n")
 ;;
 
 
@@ -113,20 +111,9 @@ let nfirst_rte_var n ctx =
     loop 0 []
 ;;
 
-(* *)
-let rec eval_toplevel ltop ctx: (value_type * runtime_env) =
-    global_trace := []; (*  Clean up trace info *)
-    (*  I have to use a sexp because declaration are not "carried" *)
-    match ltop with
-        (* Eval expression and return results *)
-        | Ltexp(x) -> 
-            let a, b = _eval x ctx 0 in 
-                Val(a), ctx
-        (* Add declaration to environment. return void *)
-        | Ltdecl(a, b, c) -> Void, (eval_decl (a, b, c) ctx)
-    
-(* _eval is an internal definition you should use eval or eval_toplevel *)
-and _eval lxp ctx i: (lexp * runtime_env) = 
+
+(* _eval is an internal definition you should use eval or eval_decls *)
+let rec _eval lxp ctx i: (lexp * runtime_env) = 
     add_call lxp i;
     match lxp with
         (*  This is already a leaf *)
@@ -244,7 +231,7 @@ and _eval lxp ctx i: (lexp * runtime_env) =
                         Not_found ->
                             _eval_error loc "Constructor does not exist" end *)
                             
-                | _ -> lexp_print (Ltexp(target));
+                | _ -> lexp_print target;
                     _eval_error loc "Can't match expression" in
                 
             (*  Check if a default is present *)
@@ -308,17 +295,27 @@ and build_ctx decls ctx i =
                 
 and eval_decl ((l, n), lxp, ltp) ctx =
     add_rte_variable (Some n) lxp ctx
+    
+(*  Eval a declaration if a main is found it is returned *)
+and eval_decls (decls: ((vdef * lexp * ltype) list)) 
+               (ctx: runtime_env): runtime_env =
+    let rec loop decls ctx =
+        match decls with 
+            | [] -> ctx
+            | hd::tl -> 
+                let ((_, n), lxp, ltp) = hd in
+                let nctx = add_rte_variable (Some n) lxp ctx in
+                    loop tl nctx in
+
+    loop decls ctx
       
-and print_eval_result i tlxp =
-     match tlxp with
-        | Void -> ()
-        | Val(lxp) ->
+and print_eval_result i lxp =
     print_string "     Out[";
     ralign_print_int i 2;
     print_string "] >> ";
     match lxp with
         | Imm(v) -> sexp_print v; print_string "\n"
-        | e ->  lexp_print (Ltexp(e)); print_string "\n"
+        | e ->  lexp_print e; print_string "\n"
 ;;
 
 
@@ -353,14 +350,14 @@ let print_call_trace () =
         print_first 20 racc (fun j (i, g) -> 
             _print_ct_tree i; print_string "+- ";
             print_string (lexp_to_string g); print_string ": ";
-            lexp_print (Ltexp(g)); print_string "\n");
+            lexp_print g; print_string "\n");
             
     print_string (make_sep '=');
 ;;
 
 let eval lxp ctx = 
     try
-        let r, c = eval_toplevel lxp ctx in
+        let r, c = _eval lxp ctx 1 in
             (r, c)
     with e -> (
         print_rte_ctx ctx;
@@ -368,10 +365,8 @@ let eval lxp ctx =
         raise e)
 ;;
 
-
-
 let evalprint lxp ctx = 
-    let v, ctx = (eval_toplevel lxp ctx) in
+    let v, ctx = (eval lxp ctx) in
     print_eval_result 0 v;
     ctx
 ;;

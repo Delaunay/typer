@@ -30,6 +30,7 @@ succ = inductive-cons Nat succ;
 v = (succ (succ zero));
 
 % Recursive Let
-let odd  = lambda n -> case n | (zero) => false | (succ y) => (even y);
+let even: Nat -> Nat;
+    odd  = lambda n -> case n | (zero) => false | (succ y) => (even y);
     even = lambda n -> case n | (zero) => true  | (succ y) => (odd y); in
         (odd v)
