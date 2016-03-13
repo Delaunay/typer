@@ -60,6 +60,12 @@ let _global_sections = ref StringMap.empty
  *      let r = eval_string "let a = 2; b = 3; in a + b;" in
  *      let v = (get_int r) in
  *          if v = 5 then success () else failure ()))
+ *
+ *  sname: Section Name
+ *  tname: Test Name
+ *  dcode: Typer's Declarations
+ *  ecode: expression to eval
+ *  tfun : test function (unit -> int)
  *)
 let add_test sname tname tfun = 
         
@@ -89,19 +95,29 @@ let run_all () =
                 else
                     (print_string ("[   FAIL] " ^ sk ^ " - " ^ tk ^ "\n"))
             )
-            sv
+            sv;
+        flush stdout;
         )
         (!_global_sections)
 
  
-let expect_equal_int value expectation =
-    if value = expectation then
+let expect_equal_int value expect =
+    if value = expect then
         success ()
     else(
-        print_string ("[       ]     EXPECTED " ^ (string_of_int expectation) ^ "\n");
-        print_string ("[       ]          GOT " ^ (string_of_int value) ^ "\n");
+        print_string ("[       ]     EXPECTED: " ^ (string_of_int expect)^ "\n");
+        print_string ("[       ]          GOT: " ^ (string_of_int value) ^ "\n");
         failure ())
 ;;
 
+
+let expect_equal_str value expect =
+    if value = expect then
+        success ()
+    else(
+        print_string ("[       ]     EXPECTED: " ^ expect ^ "\n");
+        print_string ("[       ]          GOT: " ^ value ^ "\n");
+        failure ())
+;;
 
 

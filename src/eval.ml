@@ -350,6 +350,7 @@ let eval_all lxps rctx = List.map (fun g -> eval g rctx) lxps;;
 (*  Eval String
  * ---------------------- *)
 let eval_expr_str str lctx rctx =
+    global_trace := [];
     let lxps, lctx = lexp_expr_string str lctx in
         (eval_all lxps rctx)
 ;;
