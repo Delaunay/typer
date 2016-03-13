@@ -92,6 +92,8 @@ let get_rte_variable (idx: int) (l: runtime_env): lexp =
     let (_, x) = (nth idx l) in x
 ;;
 
+let get_rte_size (l: runtime_env): int = length l;;
+
 let print_rte_ctx l = print_myers_list l 
     (fun (n, g) -> 
         let _ = 
@@ -117,6 +119,10 @@ type value_type = lexp
 (* This is an internal definition
  * 'i' is the recursion depth used to print the call trace *)
 let rec _eval lxp ctx i: (value_type) = 
+    
+    (if i > 255 then 
+        raise (internal_error "Recursion Depth exceeded"));
+
     add_call lxp i;
     match lxp with
         (*  This is already a leaf *)
@@ -165,11 +171,12 @@ let rec _eval lxp ctx i: (value_type) =
                     Imm(Integer(dloc, v))
                 
                 (* This is a named function call *)
-                (*  TODO: handle partial application *)
                 | Var((_, name), idx) ->
-                    
+                    (* Check if the call is a constructor call *)
+                
                     (*  get function body *)
                     let body = get_rte_variable idx ctx in
+     
                     (*  Add args in the scope *)
                     let nctx = build_arg_list args ctx i in
                         (* eval body *)
@@ -217,25 +224,42 @@ let rec _eval lxp ctx i: (value_type) =
             (* Eval target *)
             let v = _eval target ctx (i + 1) in
             
-            (*  V must be a constructor Call *)
-            let ctor_name, args = match v with
+            let check_ctor ctor_name type_idx =
+                let info = get_rte_variable type_idx ctx in
+                    match info with
+                        | Inductive(_, _, _, ctor_def) -> SMap.find ctor_name ctor_def
+                        | _ -> _eval_error loc "Target is not a Constructor" in
+
+            (*  'v' must be a constructor *)
+            let ctor_name, args, idx = match v with 
+            
+                (* multi arg constructor are parsed as Call *)
                 | Call(lname, args) -> (match lname with
-                    | Var((_, ctor_name), _) -> ctor_name, args
-                    | _ -> _eval_error loc "Target is not a Constructor" )
-                (*
-                | Cons((_, idx), (_, cname)) -> begin
-                    (*  retrieve type definition *)
-                    let info = get_rte_variable idx ctx in
-                    let Inductive(_, _, _, ctor_def) = info in
-                    try let args = SMap.find cname ctor_def in
-                        cname, args
-                    with 
-                        Not_found ->
-                            _eval_error loc "Constructor does not exist" end *)
-                            
-                | _ -> lexp_print target;
-                    _eval_error loc "Can't match expression" in
+                    | Var((_, ctor_name), idx) -> 
+                        let offset = (get_rte_size ctx) - idx - 1 in
+                        let tidx = idx + offset in
+                            ctor_name, args, tidx
+  
+                    | _ ->  _eval_error loc "Target is not a Constructor" )
                 
+                | Cons((_, idx), (_, cname)) ->
+                    let offset = (get_rte_size ctx) - idx - 1 in
+                    let tidx = idx + offset in
+                        cname, [], tidx
+                            
+                | _ -> lexp_print v;
+                    _eval_error loc "Can't match expression" in
+                    
+            (* Check if the constructor was defined *)
+            let targs = try check_ctor ctor_name idx
+                with Not_found -> _eval_error loc "Constructor does not exist" in
+                
+            (* Check number of args *)
+            let n_targs = List.length targs in
+            let n_args = List.length args in
+                (if n_targs != n_args then
+                    _eval_error loc "Wrong number of arguments");
+            
             (*  Check if a default is present *)
             let run_default df = 
                 match df with
@@ -290,7 +314,7 @@ and build_ctx decls ctx i =
             let (v, exp, tp) = hd in
             let value = _eval exp ctx (i + 1) in
             let nctx = add_rte_variable None value ctx in  
-                build_ctx tl nctx (i + 1)
+                build_ctx tl nctx i
                 
 and eval_decl ((l, n), lxp, ltp) ctx =
     add_rte_variable (Some n) lxp ctx
@@ -315,10 +339,8 @@ and print_eval_result i lxp =
     match lxp with
         | Imm(v) -> sexp_print v; print_string "\n"
         | e ->  lexp_print e; print_string "\n"
-;;
 
-
-let print_call_trace () =
+and print_call_trace () =
     print_string (make_title " CALL TRACE ");
     
     let n = List.length !global_trace in
@@ -326,7 +348,7 @@ let print_call_trace () =
     print_string (make_sep '-');
     
     let racc = List.rev !global_trace in
-        print_first 20 racc (fun j (i, g) -> 
+        print_first 50 racc (fun j (i, g) -> 
             _print_ct_tree i; print_string "+- ";
             print_string (lexp_to_string g); print_string ": ";
             lexp_print g; print_string "\n");
@@ -351,11 +373,11 @@ let eval_all lxps rctx = List.map (fun g -> eval g rctx) lxps;;
  * ---------------------- *)
 let eval_expr_str str lctx rctx =
     global_trace := [];
-    let lxps, lctx = lexp_expr_string str lctx in
+    let lxps, lctx = lexp_expr_str str lctx in
         (eval_all lxps rctx)
 ;;
 
 let eval_decl_str str lctx rctx =
-    let lxps, lctx = lexp_decl_string str lctx in
+    let lxps, lctx = lexp_decl_str str lctx in
         (eval_decls lxps rctx), lctx
 ;;

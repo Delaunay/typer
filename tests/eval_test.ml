@@ -14,7 +14,7 @@ let rctx = make_runtime_ctx
 (*      Let
  * ------------------------ *)
  
-let _ = (add_test "LET" "Base Case" (fun () ->
+let _ = (add_test "EVAL" "Let" (fun () ->
     (* Noise. Makes sure the correct variables are selected *)
     let dcode = "
         c = 3; a = 1; b = 2; d = 4;" in
@@ -34,7 +34,7 @@ let _ = (add_test "LET" "Base Case" (fun () ->
 
 (*      Lambda
  * ------------------------ *)
-let _ = (add_test "LAMBDA" "Base Case" (fun () ->
+let _ = (add_test "EVAL" "Lambda" (fun () ->
     (* Declare lambda *)
     let rctx, lctx = eval_decl_str "sqr = lambda x -> x * x;" lctx rctx in
     
@@ -47,7 +47,7 @@ let _ = (add_test "LAMBDA" "Base Case" (fun () ->
 )
 ;;
 
-let _ = (add_test "LAMBDA" "Nested" (fun () ->
+let _ = (add_test "EVAL" "Nested Lambda" (fun () ->
     let code = "
         sqr = lambda x -> x * x;
         cube = lambda x -> x * (sqr x); " in
@@ -65,9 +65,9 @@ let _ = (add_test "LAMBDA" "Nested" (fun () ->
 ;;
 
 (*      Cases + Inductive types
- * ------------------------ *)
+ * ------------------------ *) (*
  
-let _ = (add_test "Case" "Base Case" (fun () ->
+let _ = (add_test "EVAL" "Case" (fun () ->
     (* Inductive type declaration *)
     let code = "
         idt = inductive_ (idtd) (ctr0) (ctr1 idt) (ctr2 idt) (ctr3 idt);\n
@@ -104,9 +104,9 @@ let _ = (add_test "Case" "Base Case" (fun () ->
                         failure ()
             | _ -> failure ())
 )
-;;
+;; *)
 
-let _ = (add_test "MISC" "Recursive Call" (fun () ->
+let _ = (add_test "EVAL" "Recursive Call" (fun () ->
     (* Inductive type declaration *)
     let code = "
         Nat = inductive_ (dNat) (zero) (succ Nat);
@@ -124,13 +124,13 @@ let _ = (add_test "MISC" "Recursive Call" (fun () ->
                 
     let rctx, lctx = eval_decl_str code lctx rctx in
     
-    let rcode = "(tonum zero)"in
+    let rcode = "(tonum one);"in
                  
     (* Eval defined lambda *)
     let ret = eval_expr_str rcode lctx rctx in
         (* Expect a 3 results *)
         match ret with
-            | [a] -> expect_equal_int (get_int a) 0
+            | [a] -> expect_equal_int (get_int a) 1
                 
             (*| [a; b; c] ->  
                 let t1 = expect_equal_int (get_int a) 1 in 

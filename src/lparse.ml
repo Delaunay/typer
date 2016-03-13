@@ -133,25 +133,28 @@ let rec lexp_parse (p: pexp) (ctx: lexp_context): (lexp * lexp_context) =
         | Plambda (kind, var, Some ptype, body) ->
             (*  Add argument to context *)
             let (loc, vname) = var in
+            let ltp, nctx = lexp_parse ptype ctx in   (*  Get Type *)
+            
             let nctx = senv_add_var vname loc ctx in
-            let ltp, nctx = lexp_parse ptype nctx in   (*  Get Type *)
             let nctx = env_add_var_info (0, (loc, vname), dlxp, ltp) nctx in
 
-            let ltyp, nctx = lexp_parse ptype nctx in
-            let lbody, nctx = lexp_parse body nctx in
+            let lbody, _ = lexp_parse body nctx in
  
             (*  Return old context as we exit lambda scope*)
-            Lambda(kind, var, ltyp, lbody), ctx
+            Lambda(kind, var, ltp, lbody), ctx
             
         | Plambda (kind, var, None, body) ->
             let (loc, vname) = var in
+            
             let nctx = senv_add_var vname loc ctx in
             let nctx = env_add_var_info (0, (loc, vname), dlxp, dltype) nctx in
             
-            let lbody, ctx = lexp_parse body nctx in
+            let lbody, _ = lexp_parse body nctx in
             Lambda(kind, var, UnknownType(tloc), lbody), ctx 
            
-        | Pcall (fname, _args) -> lexp_call fname _args ctx 
+        | Pcall (fname, _args) -> 
+            let r, c = lexp_call fname _args ctx in
+                r, ctx
 
         (* Pinductive *)
         | Pinductive (label, [], ctors) ->
@@ -175,6 +178,7 @@ let rec lexp_parse (p: pexp) (ctx: lexp_context): (lexp * lexp_context) =
             
         (* Pcase *)
         | Pcase (loc, target, patterns) ->
+            
             (*  I need type info HERE *)
             let lxp, nctx = lexp_parse target ctx in
             let ltp = UnknownType(loc) in
@@ -186,9 +190,10 @@ let rec lexp_parse (p: pexp) (ctx: lexp_context): (lexp * lexp_context) =
                     | hd::tl -> 
                         let (pat, exp) = hd in
                         (*  Create pattern context *)
-                        let (name, iloc, arg), nctx = lexp_read_pattern pat exp lxp nctx in
+                        let (name, iloc, arg), nctx2 = 
+                                    lexp_read_pattern pat exp lxp nctx in
                         (*  parse using pattern context *)
-                        let exp, nctx = lexp_parse exp nctx in
+                        let exp, _ = lexp_parse exp nctx2 in
                         
                         if name = "_" then
                             loop tl merged (Some exp)
@@ -251,13 +256,19 @@ and lexp_read_pattern pattern exp target ctx:
         | Ppatany (loc) ->            (* Catch all expression nothing to do  *)
             ("_", loc, []), ctx  
             
-        | Ppatvar (loc, name) ->
-            (* FIXME What if it is a constructor with no arg ? *)
-            
-            (* Create a variable containing target *)
-            let nctx = senv_add_var name loc ctx in 
-            let nctx = env_add_var_info (0, (loc, name), target, dltype) nctx in
-                (name, loc, []), nctx
+        | Ppatvar (loc, name) ->(
+            (* FIXME better check *)
+            try
+                let idx = senv_lookup name ctx in 
+                    (* constructor with no args *)
+                    (name, loc, []), ctx
+                    
+            (* would it not make a default match too? *)
+            with Not_found ->
+                (* Create a variable containing target *)
+                let nctx = senv_add_var name loc ctx in 
+                let nctx = env_add_var_info (0, (loc, name), target, dltype) nctx in
+                    ("_", loc, []), nctx)
 
         | Ppatcons (ctor_name, args) ->
             let (loc, name) = ctor_name in
@@ -268,7 +279,7 @@ and lexp_read_pattern pattern exp target ctx:
             
 (*  Read patterns inside a constructor *)
 and lexp_read_pattern_args args ctx:
-                               (((arg_kind * vdef) option list) * lexp_context)=
+                   (((arg_kind * vdef) option list) * lexp_context)=
 
     let rec loop args acc ctx =
         match args with
@@ -318,58 +329,24 @@ and lexp_parse_constructors ctors ctx =
             end in 
             
     loop ctors SMap.empty ctx
-    
-(*  Merge Type info and variable declaration together *)
-(*  Type info must be first then declaration else type will be inferred *)
-and lexp_merge_info (decls: (pvar * pexp * bool) list) =
-    match decls with
-        | [] -> lexp_fatal dloc "Empty Declaration List"
-        | hd::tl -> (match hd with
-            (*  Declaration without type info *)
-            | ((l, n1), expr, true) -> (
-                match tl with
-                    | [] -> lexp_fatal l "Unused Type info declaration";
-                    | ((_, _), expr2, true)::_ -> lexp_merge_info tl
-                    | ((_, n2), expr2, _)::_ when n2 != n1 ->
-                        (lexp_warning l "Unused Type info declaration";
-                        lexp_merge_info tl)
-                    | ((_, _), expr2, _)::ttl -> 
-                        ((l, n1), expr2, Some expr), (ttl))
-                    
-            (*  Declaration without type info *)
-            | (v, expr, false) -> (v, expr, None), tl)
-
-(*  Add declaration in the environment *)    
-and lexp_p_decls (decl: (pvar * pexp * pexp option)) ctx =
-    let ((loc, vname), pxp, _) = decl in
-    
-    (*  we should add the defined var to ctx *)
-    let nctx = senv_add_var vname loc ctx in 
-            
-    (*let idx = senv_lookup vname nctx in *)
-    let lxp, ltp = lexp_p_infer pxp nctx in
-    
-    (*  Add Var info*)
-    let nctx = env_add_var_info (0, (loc, vname), lxp, ltp) nctx in
-    
-    (* return processed var *)
-        ((loc, vname), lxp, ltp), nctx
         
 (*  Parse let declaration *)
 and lexp_decls decls ctx: (((vdef * lexp * ltype) list) * lexp_context) =
 
     (*  Merge Type info and declaration together                      *)
     (*  We use a list because order matters and Maps reorder elements *)
+    (*  
     let rec is_equal target (p:(vdef * pexp option * pexp option)): bool =
         let ((_, name), _, _) = p in
-            if name == target then true else false in
+            if name == target then true else false in *)
             
-    let rec merge_decls (decls: (pvar * pexp * bool) list) merged: 
-                                    (vdef * pexp option * pexp option) list =
+    (* merge with a map to guarantee uniqueness. *)
+    let rec merge_decls (decls: (pvar * pexp * bool) list) merged acc: 
+                ((location * pexp option * pexp option) SMap.t * string list)  =
                 
         (*  we cant evaluate here because variable are not in the environment *)
         match decls with
-            | [] -> List.rev merged
+            | [] -> merged, (List.rev acc)
             | hd::tl ->
                 match hd with
                 (*  Type Info: Var:Type *)
@@ -377,24 +354,35 @@ and lexp_decls decls ctx: (((vdef * lexp * ltype) list) * lexp_context) =
                     try
                         (*  If found its means the instruction was declared 
                          *  before the type info. Should we allow this? *)
-                        let (vd, inst, _) = List.find (is_equal name) merged in
-                        let new_decl = (vd, inst, Some type_info) in
-                        (merge_decls tl (new_decl::merged))
+                        let (l, inst, _) = SMap.find name merged in
+                        let new_decl = (l, inst, Some type_info) in
+                        let nmerged = SMap.add name new_decl merged in
+                            (merge_decls tl nmerged acc)
                     with Not_found ->
-                        let new_decl = (loc, name), None, Some type_info in
-                        (merge_decls tl (new_decl::merged)) end
+                        let new_decl = (loc, None, Some type_info) in
+                        let nmerged = SMap.add name new_decl merged in
+                        (merge_decls tl nmerged (name::acc)) end
                     
                 (* Instruction: Var = expr *)
                 | ((loc, name), inst, false) -> begin
                     try
-                        let (vd, _, ptyp) = List.find (is_equal name) merged in
-                        let new_decl = (vd, Some inst, ptyp) in
-                        (merge_decls tl (new_decl::merged))
+                        let (l, _, tp) = SMap.find name merged in
+                        let new_decl = (l, Some inst, tp) in
+                        let nmerged = SMap.add name new_decl merged in
+                            (merge_decls tl nmerged acc)
+                            
                     with Not_found ->
-                        let new_decl = ((loc, name), Some inst, None) in
-                        (merge_decls tl (new_decl::merged)) end in
+                        let new_decl = (loc, Some inst, None) in
+                        let nmerged = SMap.add name new_decl merged in
+                        (merge_decls tl nmerged (name::acc)) end in
                         
-    let decls = merge_decls decls [] in
+    let mdecls, ord = merge_decls decls SMap.empty [] in
+    
+    (* cast map to list*)
+    let decls = List.map (fun name ->
+            let (l, inst, tp) = SMap.find name mdecls in
+                ((l, name), inst, tp) ) ord
+        in
     
     (*  Add Each Variable to the environment *)
     let nctx = List.fold_left (fun ctx hd ->
@@ -402,9 +390,11 @@ and lexp_decls decls ctx: (((vdef * lexp * ltype) list) * lexp_context) =
             | (_, None, _) -> ctx   (*  Unused variable: No Instruction *)
             | ((loc, name), _, _) -> senv_add_var name loc ctx)  
         ctx decls in
+        
+    let n_decls = List.length decls in
     
     (*  Add Variable info *)
-    let rec process_var_info dcl_lst _ctx acc =
+    let rec process_var_info dcl_lst _ctx acc i =
         match dcl_lst with
             | [] -> (List.rev acc), _ctx
             | hd::tl ->
@@ -412,21 +402,21 @@ and lexp_decls decls ctx: (((vdef * lexp * ltype) list) * lexp_context) =
                     | ((loc, name), Some pinst, None) ->(
                         let lxp, ltp = lexp_p_infer pinst _ctx in
                         let nacc = ((loc, name), lxp, ltp)::acc in
-                        let ctx2 = env_add_var_info (0, (loc, name), lxp, ltp) _ctx in
-                            process_var_info tl ctx2 nacc)
+                        let ctx2 = env_add_var_info (n_decls - i, (loc, name), lxp, ltp) _ctx in
+                            process_var_info tl ctx2 nacc (i + 1))
                             
                     | ((loc, name), Some pinst, Some ptype) ->(
                         let linst, ctx1 = lexp_parse pinst _ctx in
                         let ltyp, ctx2 = lexp_parse ptype ctx1 in
                         let nacc = ((loc, name), linst, ltyp)::acc in
-                        let ctx3 = env_add_var_info (0, (loc, name), linst, ltyp) ctx2 in
-                            process_var_info tl ctx3 nacc)
+                        let ctx3 = env_add_var_info (n_decls - i, (loc, name), linst, ltyp) ctx2 in
+                            process_var_info tl ctx3 nacc (i + 1))
 
                     (* Skip the variable *)
-                    | ((loc, name), None, _) -> (lexp_warning loc "Unused Variable"; 
-                            process_var_info tl _ctx acc) in
+                    | ((loc, name), None, _) -> (lexp_warning loc ("Unused Variable: " ^ name); 
+                            process_var_info tl _ctx acc i) in
                             
-    let acc, ctx = process_var_info decls nctx [] in
+    let acc, ctx = process_var_info decls nctx [] 0 in
         acc, ctx
 
 and lexp_parse_all (p: pexp list) (ctx: lexp_context): 
@@ -656,7 +646,7 @@ let add_def name ctx =
  * ------------------------ *)
 
 (* Lexp helper *)
-let _lexp_expr_string (str: string) (tenv: bool array) 
+let _lexp_expr_str (str: string) (tenv: bool array) 
             (grm: grammar) (limit: string option) (ctx: lexp_context) =
     let pretoks = prelex_string str in
     let toks = lex tenv pretoks in
@@ -666,12 +656,12 @@ let _lexp_expr_string (str: string) (tenv: bool array)
 ;;
 
 (* specialized version *)
-let lexp_expr_string str lctx = 
-    _lexp_expr_string str default_stt default_grammar (Some ";") lctx
+let lexp_expr_str str lctx = 
+    _lexp_expr_str str default_stt default_grammar (Some ";") lctx
 ;;
 
 
-let _lexp_decl_string (str: string) tenv grm limit ctx =
+let _lexp_decl_str (str: string) tenv grm limit ctx =
     let pretoks = prelex_string str in
     let toks = lex tenv pretoks in
     let sxps = sexp_parse_all_to_list grm toks limit in
@@ -680,7 +670,7 @@ let _lexp_decl_string (str: string) tenv grm limit ctx =
 ;;
 
 (* specialized version *)
-let lexp_decl_string str lctx = 
-    _lexp_decl_string str default_stt default_grammar (Some ";") lctx
+let lexp_decl_str str lctx = 
+    _lexp_decl_str str default_stt default_grammar (Some ";") lctx
 ;;
 
