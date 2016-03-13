@@ -6,14 +6,12 @@ sqr = lambda x -> x * x;
 cube = lambda x -> x * (sqr x); 
 
 
-main = lambda z ->
-    (cube x)
-;
+main = lambda -> (cube x);
 
 
 
 % (sqr x);    % 16
-%(cube x);
+% (cube x);
 % (cube x);   % 64
 % cube = lambda x -> x * x * x;
 % x + x + x; % 12

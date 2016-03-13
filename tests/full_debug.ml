@@ -98,7 +98,6 @@ let main () =
     else
     begin
         let filename = Sys.argv.(1) in
-        
         (* Read additional Args if any *)
 
         print_string (make_title " ERRORS ");
@@ -158,11 +157,11 @@ let main () =
             (* get main body *)
             let body = (get_rte_variable main rctx) in
             (* eval main *)
-            let r, c = (eval body rctx) in
+            let r = (eval body rctx) in
                 print_eval_result 0 r
                 
         with 
-            Not_found ->  print_string "No declared main\n" in
+            Not_found ->  () in
             
         (*  Print info *)
         print_string "\n\n";

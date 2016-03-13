@@ -1,30 +1,49 @@
-
-open Eval
-
-
-(*  How to make macro in ocaml? *)
-
-(*
-let EXPECT_EQUAL a b = 
-    if a = b then(print_string "[     OK]\n"; SUCCESS) 
-    else( print_string "[   FAIL]\n"; FAILURE)
-;;
-
-let EXPECT_THROW a error =
-    try ((a); print_string "[   FAIL]\n"; FAILURE)  
-    with  (print_string "[     OK]\n"; SUCCESS) 
-;; *)
+open Lparse     (* add_def       *)
+open Debruijn   (* make_lexp_context *)
+open Eval       (* make_rte_ctx *)
+open Utest_lib   
 
 
-let main () =
-
-    let ret = easy_eval_string "let a = 3; b = 5; in a + b;" in
-        match ret with
-        | [xpr] -> let v = get_int xpr in
-            if v = 8 then (exit 0) else (exit (-1))
-        | _ -> exit (-1)
+(*      Let
+ * ------------------------ *)
+ 
+let _ = (add_test "LET" "Base Case" (fun () ->
+    let lctx = make_lexp_context in
+        let lctx = add_def "_+_" lctx in
+        let lctx = add_def "_*_" lctx in
+    let rctx = make_runtime_ctx in
     
+    let ret = eval_expr_str "let a = 2; b = 3; in a + b;" lctx rctx in
+        (* Expect a single result *)
+        match ret with
+            | [r] -> expect_equal_int 5 (get_int r)  
+            | _ -> failure ())
+)
 ;;
 
-main ()
+
+(*      Lambda
+ * ------------------------ *)
+let _ = (add_test "LAMBDA" "Base Case" (fun () ->
+    let lctx = make_lexp_context in
+        let lctx = add_def "_+_" lctx in
+        let lctx = add_def "_*_" lctx in
+    let rctx = make_runtime_ctx in
+    
+    (* Declare lambda *)
+    let rctx, lctx = eval_decl_str "sqr = lambda x -> x * x;" lctx rctx in
+    
+    (* Eval defined lambda *)
+    let ret = eval_expr_str "(sqr 4);" lctx rctx in
+        (* Expect a single result *)
+        match ret with
+            | [r] -> expect_equal_int 16 (get_int r)  
+            | _ -> failure ())
+)
 ;;
+
+
+(* run all tests *)
+run_all ()
+;;
+

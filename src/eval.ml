@@ -111,18 +111,21 @@ let nfirst_rte_var n ctx =
     loop 0 []
 ;;
 
+(*  currently, we don't do much *)
+type value_type = lexp
 
-(* _eval is an internal definition you should use eval or eval_decls *)
-let rec _eval lxp ctx i: (lexp * runtime_env) = 
+(* This is an internal definition
+ * 'i' is the recursion depth used to print the call trace *)
+let rec _eval lxp ctx i: (value_type) = 
     add_call lxp i;
     match lxp with
         (*  This is already a leaf *)
-        | Imm(v) -> lxp, ctx
+        | Imm(v) -> lxp
         
         (*  Return a value stored in the environ *)
         | Var((loc, name), idx) -> begin
             try
-                (get_rte_variable idx ctx), ctx
+                (get_rte_variable idx ctx)
             with 
                 Not_found ->
                     print_string ("Variable: " ^ name ^ " was not found | "); 
@@ -131,13 +134,10 @@ let rec _eval lxp ctx i: (lexp * runtime_env) =
                 
         (*  this works for non recursive let *)
         | Let(_, decls, inst) -> begin
-            (*  First we _evaluate all declaration then we eval the instruction *)
-            
+            (* First we _evaluate all declaration *) 
             let nctx = build_ctx decls ctx i in
-            
-            let value, nctx = _eval inst nctx (i + 1) in
-            (*  return old context as we exit let's scope*)
-                value, ctx end
+                (* Then we eval the body *)
+                _eval inst nctx (i + 1) end
                 
         (*  Function call *)
         | Call (lname, args) -> (
@@ -152,7 +152,7 @@ let rec _eval lxp ctx i: (lexp * runtime_env) =
                     
                     let l = get_int (get_rte_variable 0 nctx) in
                     let r = get_int (get_rte_variable 1 nctx) in 
-                    Imm(Integer(dloc, l + r)), ctx 
+                    Imm(Integer(dloc, l + r))
                     
                 (* _*_ is reas as a single function with x args *)
                 | Var((_, name), _) when name = "_*_" ->
@@ -162,7 +162,7 @@ let rec _eval lxp ctx i: (lexp * runtime_env) =
                     let varg = List.map (fun g -> get_int g) vint in
                     let v = List.fold_left (fun a g -> a * g) 1 varg in
 
-                    Imm(Integer(dloc, v)), ctx 
+                    Imm(Integer(dloc, v))
                 
                 (* This is a named function call *)
                 (*  TODO: handle partial application *)
@@ -172,21 +172,24 @@ let rec _eval lxp ctx i: (lexp * runtime_env) =
                     let body = get_rte_variable idx ctx in
                     (*  Add args in the scope *)
                     let nctx = build_arg_list args ctx i in
-                    let e, nctx = (_eval body nctx (i + 1)) in
-                    
-                    (*  we exit function and send back old ctx *)
-                        e, ctx
+                        (* eval body *)
+                        _eval body nctx (i + 1)
     
                 (* TODO Everything else *)
                 (*  Which includes a call to a lambda *)
-                | _ -> Imm(String(dloc, "Funct Not Implemented")), ctx)
+                | _ -> Imm(String(dloc, "Funct Not Implemented")))
                         
+        (* Lambdas have one single mandatory argument *)
+        (* Nested lambda are collapsed then executed  *)
+        (* I am thinking about building a 'get_free_variable' to be able to *)
+        (* handle partial application i.e build a new lambda if Partial App *)
         | Lambda(_, vr, _, body) -> begin 
             let (loc, name) = vr in
             (*  Get first arg *)
             let value = (get_rte_variable 0 ctx) in
             let nctx = add_rte_variable (Some name) value ctx in
             
+            (* Collapse nested lambdas *)
             let rec build_body bd idx nctx = 
                 match bd with
                     | Lambda(_, vr, _, body) ->
@@ -199,21 +202,20 @@ let rec _eval lxp ctx i: (lexp * runtime_env) =
                     | _ -> bd, nctx in
                     
             let body, nctx = build_body body 1 nctx in
-                    
-            let e, nctx = _eval body nctx (i + 1) in
-                e, ctx end
+                (* eval lambda body *)
+                _eval body nctx (i + 1)  end
        
         (*  Inductive is a type declaration. We have nothing to eval *)
-        | Inductive (_, _, _, _) as e -> e, ctx
+        | Inductive (_, _, _, _) as e -> e
         
         (*  inductive-cons build a type too? *)
-        | Cons (_, _) as e -> e, ctx
+        | Cons (_, _) as e -> e
         
         (* Case *) 
         | Case (loc, target, _, pat, dflt) -> begin
             
             (* Eval target *)
-            let v, nctx = _eval target ctx (i + 1) in
+            let v = _eval target ctx (i + 1) in
             
             (*  V must be a constructor Call *)
             let ctor_name, args = match v with
@@ -237,7 +239,7 @@ let rec _eval lxp ctx i: (lexp * runtime_env) =
             (*  Check if a default is present *)
             let run_default df = 
                 match df with
-                | None -> Imm(String(loc, "Match Failure")), ctx
+                | None -> Imm(String(loc, "Match Failure"))
                 | Some lxp -> _eval lxp ctx (i + 1) in
             
             let ctor_n = List.length args in
@@ -266,19 +268,16 @@ let rec _eval lxp ctx i: (lexp * runtime_env) =
                             | Some (_, (_, name)) -> let (_, xp) = cl in
                                 add_rte_variable (Some name) xp nctx) 
                                 
-                        nctx pat_args args in
-                        
-                    let r, nctx = _eval exp nctx (i + 1) in
-                    (* return old context as we exist the case *)
-                        r, ctx end
+                        ctx pat_args args in
+                            (* eval body *)
+                            _eval exp ctx (i + 1)  end
 
-        | _ -> Imm(String(dloc, "eval Not Implemented")), ctx 
+        | _ -> Imm(String(dloc, "eval Not Implemented"))
         
 and build_arg_list args ctx i =
     (*  _eval every args *)
     let arg_val = List.map (
-        fun (k, e) -> 
-            let (v, c) = _eval e ctx (i + 1) in  v) 
+        fun (k, e) -> _eval e ctx (i + 1)) 
         args in
             
     (*  Add args inside context *)
@@ -289,8 +288,8 @@ and build_ctx decls ctx i =
         | [] -> ctx
         | hd::tl -> 
             let (v, exp, tp) = hd in
-            let (value, nctx) = _eval exp ctx (i + 1) in
-            let nctx = add_rte_variable None value nctx in  
+            let value = _eval exp ctx (i + 1) in
+            let nctx = add_rte_variable None value ctx in  
                 build_ctx tl nctx (i + 1)
                 
 and eval_decl ((l, n), lxp, ltp) ctx =
@@ -319,26 +318,6 @@ and print_eval_result i lxp =
 ;;
 
 
-let print_first n l f =
-    let rec loop i l =
-        match l with
-            | [] -> ()
-            | hd::tl -> 
-                if i < n then ((f i hd); loop (i + 1) tl;)
-                else () in
-    loop 0 l
-;;
-
-let _print_ct_tree i =
-    print_string "    ";
-    let rec loop j =
-        if j = i then () else
-        match j with 
-            | _ when (j mod 2) = 0 -> print_char '|'; loop (j + 1)
-            | _ -> print_char ':'; loop (j + 1) in
-    loop 0
-;;  
-
 let print_call_trace () =
     print_string (make_title " CALL TRACE ");
     
@@ -355,53 +334,27 @@ let print_call_trace () =
     print_string (make_sep '=');
 ;;
 
+(* eval_expr *)
 let eval lxp ctx = 
     try
-        let r, c = _eval lxp ctx 1 in
-            (r, c)
+        (_eval lxp ctx 1)
     with e -> (
         print_rte_ctx ctx;
         print_call_trace ();
         raise e)
 ;;
 
-let evalprint lxp ctx = 
-    let v, ctx = (eval lxp ctx) in
-    print_eval_result 0 v;
-    ctx
-;;
-
 (*  Eval a list of lexp *)
-let eval_all lxps rctx =
-    let rec _eval_all lxps acc rctx = 
-        match lxps with
-            | [] -> (List.rev acc), rctx 
-            | hd::tl ->
-                let lxp, rctx = eval hd rctx in
-                    _eval_all tl (lxp::acc) rctx in
-    (_eval_all lxps [] rctx)
+let eval_all lxps rctx = List.map (fun g -> eval g rctx) lxps;;
+
+(*  Eval String
+ * ---------------------- *)
+let eval_expr_str str lctx rctx =
+    let lxps, lctx = lexp_expr_string str lctx in
+        (eval_all lxps rctx)
 ;;
 
-(*  Eval a string given a context *)
-let eval_string (str: string) tenv grm limit lxp_ctx rctx =
-    let lxps, lxp_ctx = lexp_parse_string str tenv grm limit lxp_ctx in
-        (eval_all lxps rctx), lxp_ctx
+let eval_decl_str str lctx rctx =
+    let lxps, lctx = lexp_decl_string str lctx in
+        (eval_decls lxps rctx), lctx
 ;;
-
-(*  EVAL a string. Contexts are discarded *)
-let easy_eval_string str =
-    let tenv = default_stt in
-    let grm = default_grammar in
-    let limit = (Some ";") in
-    let eval_string str clxp rctx = eval_string str tenv grm limit clxp rctx in
-    let clxp = make_lexp_context in
-    (*  Those are hardcoded operation *)
-        let clxp = add_def "_+_" clxp in
-        let clxp = add_def "_*_" clxp in
-        let clxp = add_def "_=_" clxp in
-            
-    let rctx = make_runtime_ctx in
-    let (ret, rctx), clxp = (eval_string str clxp rctx) in
-        ret
-;;
-

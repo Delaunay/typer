@@ -42,6 +42,8 @@ open Lexp
 open Lparse
 open Debruijn
 open Fmt
+open Grammar
+open Eval
 
 (* Print aPretokens *)
 let rec debug_pretokens_print pretoken =
@@ -199,5 +201,24 @@ let debug_lexp_decls decls =
             print_string ";\n"
         )
         decls
+
+      
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
