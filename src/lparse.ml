@@ -379,9 +379,11 @@ and lexp_decls decls ctx: (((vdef * lexp * ltype) list) * lexp_context) =
             | (_, None, _) -> ctx   (*  Unused variable: No Instruction *)
             | ((loc, name), _, _) -> senv_add_var name loc ctx)  
         ctx decls in
+        
+    let n = List.length decls in
     
     (*  Add Variable info *)
-    let rec process_var_info dcl_lst _ctx acc =
+    let rec process_var_info dcl_lst _ctx acc m =
         match dcl_lst with
             | [] -> (List.rev acc), _ctx
             | hd::tl ->
@@ -389,21 +391,21 @@ and lexp_decls decls ctx: (((vdef * lexp * ltype) list) * lexp_context) =
                     | ((loc, name), Some pinst, None) ->(
                         let lxp, ltp = lexp_p_infer pinst _ctx in
                         let nacc = ((loc, name), lxp, ltp)::acc in
-                        let ctx2 = env_add_var_info (0, (loc, name), lxp, ltp) _ctx in
-                            process_var_info tl ctx2 nacc)
+                        let ctx2 = env_add_var_info (m, (loc, name), lxp, ltp) _ctx in
+                            process_var_info tl ctx2 nacc (m - 1))
                             
                     | ((loc, name), Some pinst, Some ptype) ->(
                         let linst, ctx1 = lexp_parse pinst _ctx in
                         let ltyp, ctx2 = lexp_parse ptype ctx1 in
                         let nacc = ((loc, name), linst, ltyp)::acc in
-                        let ctx3 = env_add_var_info (0, (loc, name), linst, ltyp) ctx2 in
-                            process_var_info tl ctx3 nacc)
+                        let ctx3 = env_add_var_info (m, (loc, name), linst, ltyp) ctx2 in
+                            process_var_info tl ctx3 nacc (m - 1))
 
                     (* Skip the variable *)
                     | ((loc, name), None, _) -> (lexp_warning loc "Unused Variable"; 
-                            process_var_info tl _ctx acc) in
+                            process_var_info tl _ctx acc m) in
                             
-    let acc, ctx = process_var_info decls nctx [] in
+    let acc, ctx = process_var_info decls nctx [] n in
         acc, ctx
 
 and lexp_parse_all (p: pexp list) (ctx: lexp_context): 
