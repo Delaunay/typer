@@ -16,7 +16,11 @@ let rctx = add_rte_variable (Some "_-_") dlxp rctx
 let _ = (add_test "EVAL" "Variable Cascade" (fun () ->
     
     let dcode = "
-        a = 10; b = a; c = b; d = c;" in
+        a = 10; 
+        b = a; 
+        c = b; 
+        d = c;" in
+        
     let rctx, lctx = eval_decl_str dcode lctx rctx in
     
     let ecode = "d;" in
@@ -128,19 +132,19 @@ let _ = (add_test "EVAL" "Case" (fun () ->
 )
 ;; 
 
-(*
 
 let _ = (add_test "EVAL" "Recursive Call" (fun () ->
     (* Inductive type declaration *)
     let code = "
-        Nat = inductive_ (dNat) (zero) (succ Nat);
+                                                    a = 1;\n
+        Nat = inductive_ (dNat) (zero) (succ Nat);  b = 2;\n
         
-        zero = inductive-cons Nat zero; 
-        succ = inductive-cons Nat succ;
+        zero = inductive-cons Nat zero;             c = 3;\n
+        succ = inductive-cons Nat succ;             d = 4;\n
         
-        one = (succ zero);
-        two = (succ one);
-        three = (succ three);
+        one = (succ zero);      e = 5;\n
+        two = (succ one);       f = 6;\n
+        three = (succ three);   g = 7;\n
 
         tonum = lambda x -> case x 
             | (succ y) => (1 + (tonum y))
@@ -148,7 +152,7 @@ let _ = (add_test "EVAL" "Recursive Call" (fun () ->
                 
     let rctx, lctx = eval_decl_str code lctx rctx in
     
-    let rcode = "(tonum zero); (tonum one); (tonum two);"in
+    let rcode = "(tonum zero); (tonum zero); (tonum zero);"in
                  
     (* Eval defined lambda *)
     let ret = eval_expr_str rcode lctx rctx in
@@ -165,8 +169,6 @@ let _ = (add_test "EVAL" "Recursive Call" (fun () ->
             | _ -> failure ())
 )
 ;;
-*)
-
 
 (* run all tests *)
 run_all ()

@@ -141,14 +141,10 @@ let rec _eval lxp ctx i: lexp =
                     raise Not_found end
                 
         (*  this works for non recursive let *)
-        | Let(_, decls, inst) -> begin
+        | Let(_, decls, inst) -> 
             (*  First we _evaluate all declaration then we eval the instruction *)
-            
             let nctx = build_ctx decls ctx i in
-            
-            let value = _eval inst nctx (i + 1) in
-            (*  return old context as we exit let's scope*)
-                value end
+                _eval inst nctx (i + 1) 
                 
         (*  Function call *)
         | Call (lname, args) -> (
@@ -227,18 +223,20 @@ let rec _eval lxp ctx i: lexp =
                 | Call(lname, args) -> (match lname with
                     | Var((_, ctor_name), _) -> ctor_name, args
                     | _ -> _eval_error loc "Target is not a Constructor" )
-                (*
+                
                 | Cons((_, idx), (_, cname)) -> begin
                     (*  retrieve type definition *)
+                    print_int idx;
                     let info = get_rte_variable idx ctx in
                     let Inductive(_, _, _, ctor_def) = info in
                     try let args = SMap.find cname ctor_def in
                         cname, args
                     with 
                         Not_found ->
-                            _eval_error loc "Constructor does not exist" end *)
+                            _eval_error loc "Constructor does not exist" end 
                             
-                | _ -> lexp_print target;
+                | _ -> lexp_print target; print_string "\n";
+                    lexp_print v; print_string "\n";
                     _eval_error loc "Can't match expression" in
                 
             (*  Check if a default is present *)
@@ -289,13 +287,12 @@ and build_arg_list args ctx i =
     List.fold_left (fun c v -> add_rte_variable None v c) ctx arg_val
 
 and build_ctx decls ctx i =
-    match decls with
-        | [] -> ctx
-        | hd::tl -> 
-            let (v, exp, tp) = hd in
-            let value = _eval exp ctx (i + 1) in
-            let nctx = add_rte_variable None value ctx in  
-                build_ctx tl nctx (i + 1)
+    let f nctx e = 
+        let (v, exp, tp) = e in
+        let value = _eval exp ctx (i + 1) in
+            add_rte_variable None value nctx in
+
+    List.fold_left f ctx decls
                 
 and eval_decl ((l, n), lxp, ltp) ctx =
     add_rte_variable (Some n) lxp ctx

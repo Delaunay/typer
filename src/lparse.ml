@@ -318,42 +318,6 @@ and lexp_parse_constructors ctors ctx =
             end in 
             
     loop ctors SMap.empty ctx
-    
-(*  Merge Type info and variable declaration together *)
-(*  Type info must be first then declaration else type will be inferred *)
-and lexp_merge_info (decls: (pvar * pexp * bool) list) =
-    match decls with
-        | [] -> lexp_fatal dloc "Empty Declaration List"
-        | hd::tl -> (match hd with
-            (*  Declaration without type info *)
-            | ((l, n1), expr, true) -> (
-                match tl with
-                    | [] -> lexp_fatal l "Unused Type info declaration";
-                    | ((_, _), expr2, true)::_ -> lexp_merge_info tl
-                    | ((_, n2), expr2, _)::_ when n2 != n1 ->
-                        (lexp_warning l "Unused Type info declaration";
-                        lexp_merge_info tl)
-                    | ((_, _), expr2, _)::ttl -> 
-                        ((l, n1), expr2, Some expr), (ttl))
-                    
-            (*  Declaration without type info *)
-            | (v, expr, false) -> (v, expr, None), tl)
-
-(*  Add declaration in the environment *)    
-and lexp_p_decls (decl: (pvar * pexp * pexp option)) ctx =
-    let ((loc, vname), pxp, _) = decl in
-    
-    (*  we should add the defined var to ctx *)
-    let nctx = senv_add_var vname loc ctx in 
-            
-    (*let idx = senv_lookup vname nctx in *)
-    let lxp, ltp = lexp_p_infer pxp nctx in
-    
-    (*  Add Var info*)
-    let nctx = env_add_var_info (0, (loc, vname), lxp, ltp) nctx in
-    
-    (* return processed var *)
-        ((loc, vname), lxp, ltp), nctx
         
 (*  Parse let declaration *)
 and lexp_decls decls ctx: (((vdef * lexp * ltype) list) * lexp_context) =
