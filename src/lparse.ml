@@ -324,16 +324,18 @@ and lexp_decls decls ctx: (((vdef * lexp * ltype) list) * lexp_context) =
 
     (*  Merge Type info and declaration together                      *)
     (*  We use a list because order matters and Maps reorder elements *)
+    (*  
     let rec is_equal target (p:(vdef * pexp option * pexp option)): bool =
         let ((_, name), _, _) = p in
-            if name == target then true else false in
+            if name == target then true else false in *)
             
-    let rec merge_decls (decls: (pvar * pexp * bool) list) merged: 
-                                    (vdef * pexp option * pexp option) list =
+    (* merge with a map to guarantee uniqueness. *)
+    let rec merge_decls (decls: (pvar * pexp * bool) list) merged acc: 
+                ((location * pexp option * pexp option) SMap.t * string list)  =
                 
         (*  we cant evaluate here because variable are not in the environment *)
         match decls with
-            | [] -> List.rev merged
+            | [] -> merged, (List.rev acc)
             | hd::tl ->
                 match hd with
                 (*  Type Info: Var:Type *)
@@ -341,24 +343,35 @@ and lexp_decls decls ctx: (((vdef * lexp * ltype) list) * lexp_context) =
                     try
                         (*  If found its means the instruction was declared 
                          *  before the type info. Should we allow this? *)
-                        let (vd, inst, _) = List.find (is_equal name) merged in
-                        let new_decl = (vd, inst, Some type_info) in
-                        (merge_decls tl (new_decl::merged))
+                        let (l, inst, _) = SMap.find name merged in
+                        let new_decl = (l, inst, Some type_info) in
+                        let nmerged = SMap.add name new_decl merged in
+                            (merge_decls tl nmerged acc)
                     with Not_found ->
-                        let new_decl = (loc, name), None, Some type_info in
-                        (merge_decls tl (new_decl::merged)) end
+                        let new_decl = (loc, None, Some type_info) in
+                        let nmerged = SMap.add name new_decl merged in
+                        (merge_decls tl nmerged (name::acc)) end
                     
                 (* Instruction: Var = expr *)
                 | ((loc, name), inst, false) -> begin
                     try
-                        let (vd, _, ptyp) = List.find (is_equal name) merged in
-                        let new_decl = (vd, Some inst, ptyp) in
-                        (merge_decls tl (new_decl::merged))
+                        let (l, _, tp) = SMap.find name merged in
+                        let new_decl = (l, Some inst, tp) in
+                        let nmerged = SMap.add name new_decl merged in
+                            (merge_decls tl nmerged acc)
+                            
                     with Not_found ->
-                        let new_decl = ((loc, name), Some inst, None) in
-                        (merge_decls tl (new_decl::merged)) end in
+                        let new_decl = (loc, Some inst, None) in
+                        let nmerged = SMap.add name new_decl merged in
+                        (merge_decls tl nmerged (name::acc)) end in
                         
-    let decls = merge_decls decls [] in
+    let mdecls, ord = merge_decls decls SMap.empty [] in
+    
+    (* cast map to list*)
+    let decls = List.map (fun name ->
+            let (l, inst, tp) = SMap.find name mdecls in
+                ((l, name), inst, tp) ) ord
+        in
     
     (*  Add Each Variable to the environment *)
     let nctx = List.fold_left (fun ctx hd ->
