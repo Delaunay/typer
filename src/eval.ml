@@ -113,11 +113,11 @@ let nfirst_rte_var n ctx =
 
 
 (* _eval is an internal definition you should use eval or eval_decls *)
-let rec _eval lxp ctx i: (lexp * runtime_env) = 
+let rec _eval lxp ctx i: lexp = 
     add_call lxp i;
     match lxp with
         (*  This is already a leaf *)
-        | Imm(v) -> lxp, ctx
+        | Imm(v) -> lxp
         
         (*  Return a value stored in the environ *)
         | Var((loc, name), idx) as e -> begin
@@ -133,7 +133,7 @@ let rec _eval lxp ctx i: (lexp * runtime_env) =
                     | _ -> expr in
                     
             try
-                (var_crawling e 0 0), ctx
+                (var_crawling e 0 0)
             with 
                 Not_found ->
                     print_string ("Variable: " ^ name ^ " was not found | "); 
@@ -146,9 +146,9 @@ let rec _eval lxp ctx i: (lexp * runtime_env) =
             
             let nctx = build_ctx decls ctx i in
             
-            let value, nctx = _eval inst nctx (i + 1) in
+            let value = _eval inst nctx (i + 1) in
             (*  return old context as we exit let's scope*)
-                value, ctx end
+                value end
                 
         (*  Function call *)
         | Call (lname, args) -> (
@@ -163,7 +163,7 @@ let rec _eval lxp ctx i: (lexp * runtime_env) =
                     
                     let l = get_int (get_rte_variable 0 nctx) in
                     let r = get_int (get_rte_variable 1 nctx) in 
-                    Imm(Integer(dloc, l + r)), ctx 
+                    Imm(Integer(dloc, l + r))
                     
                 (* _*_ is reas as a single function with x args *)
                 | Var((_, name), _) when name = "_*_" ->
@@ -173,7 +173,7 @@ let rec _eval lxp ctx i: (lexp * runtime_env) =
                     let varg = List.map (fun g -> get_int g) vint in
                     let v = List.fold_left (fun a g -> a * g) 1 varg in
 
-                    Imm(Integer(dloc, v)), ctx 
+                    Imm(Integer(dloc, v))
                 
                 (* This is a named function call *)
                 (*  TODO: handle partial application *)
@@ -183,14 +183,11 @@ let rec _eval lxp ctx i: (lexp * runtime_env) =
                     let body = get_rte_variable idx ctx in
                     (*  Add args in the scope *)
                     let nctx = build_arg_list args ctx i in
-                    let e, nctx = (_eval body nctx (i + 1)) in
-                    
-                    (*  we exit function and send back old ctx *)
-                        e, ctx
+                        _eval body nctx (i + 1)
     
                 (* TODO Everything else *)
                 (*  Which includes a call to a lambda *)
-                | _ -> Imm(String(dloc, "Funct Not Implemented")), ctx)
+                | _ -> Imm(String(dloc, "Funct Not Implemented")))
                         
         | Lambda(_, vr, _, body) -> begin 
             let (loc, name) = vr in
@@ -210,21 +207,20 @@ let rec _eval lxp ctx i: (lexp * runtime_env) =
                     | _ -> bd, nctx in
                     
             let body, nctx = build_body body 1 nctx in
-                    
-            let e, nctx = _eval body nctx (i + 1) in
-                e, ctx end
+                _eval body nctx (i + 1) end
        
         (*  Inductive is a type declaration. We have nothing to eval *)
-        | Inductive (_, _, _, _) as e -> e, ctx
+        | Inductive (_, _, _, _) as e -> e
         
         (*  inductive-cons build a type too? *)
-        | Cons (_, _) as e -> e, ctx
+        | Cons (_, _) as e -> e
         
         (* Case *) 
         | Case (loc, target, _, pat, dflt) -> begin
             
             (* Eval target *)
-            let v, nctx = _eval target ctx (i + 1) in
+            let v = _eval target ctx (i + 1) in
+            let nctx = ctx in
             
             (*  V must be a constructor Call *)
             let ctor_name, args = match v with
@@ -248,7 +244,7 @@ let rec _eval lxp ctx i: (lexp * runtime_env) =
             (*  Check if a default is present *)
             let run_default df = 
                 match df with
-                | None -> Imm(String(loc, "Match Failure")), ctx
+                | None -> Imm(String(loc, "Match Failure"))
                 | Some lxp -> _eval lxp ctx (i + 1) in
             
             let ctor_n = List.length args in
@@ -279,18 +275,15 @@ let rec _eval lxp ctx i: (lexp * runtime_env) =
                                 
                         nctx pat_args args in
                         
-                    let r, nctx = _eval exp nctx (i + 1) in
+                    let r = _eval exp nctx (i + 1) in
                     (* return old context as we exist the case *)
-                        r, ctx end
+                        r end
 
-        | _ -> Imm(String(dloc, "eval Not Implemented")), ctx 
+        | _ -> Imm(String(dloc, "eval Not Implemented"))
         
 and build_arg_list args ctx i =
     (*  _eval every args *)
-    let arg_val = List.map (
-        fun (k, e) -> 
-            let (v, c) = _eval e ctx (i + 1) in  v) 
-        args in
+    let arg_val = List.map (fun (k, e) -> _eval e ctx (i + 1)) args in
             
     (*  Add args inside context *)
     List.fold_left (fun c v -> add_rte_variable None v c) ctx arg_val
@@ -300,8 +293,8 @@ and build_ctx decls ctx i =
         | [] -> ctx
         | hd::tl -> 
             let (v, exp, tp) = hd in
-            let (value, nctx) = _eval exp ctx (i + 1) in
-            let nctx = add_rte_variable None value nctx in  
+            let value = _eval exp ctx (i + 1) in
+            let nctx = add_rte_variable None value ctx in  
                 build_ctx tl nctx (i + 1)
                 
 and eval_decl ((l, n), lxp, ltp) ctx =
@@ -368,30 +361,16 @@ let print_call_trace () =
 
 let eval lxp ctx = 
     try
-        let r, c = _eval lxp ctx 1 in
-            (r, c)
+        _eval lxp ctx 1
     with e -> (
         print_rte_ctx ctx;
         print_call_trace ();
         raise e)
 ;;
 
-let evalprint lxp ctx = 
-    let v, ctx = (eval lxp ctx) in
-    print_eval_result 0 v;
-    ctx
-;;
 
 (*  Eval a list of lexp *)
-let eval_all lxps rctx =
-    let rec _eval_all lxps acc rctx = 
-        match lxps with
-            | [] -> (List.rev acc) 
-            | hd::tl ->
-                let lxp, rctx = eval hd rctx in
-                    _eval_all tl (lxp::acc) rctx in
-    (_eval_all lxps [] rctx)
-;;
+let eval_all lxps rctx = List.map (fun g -> eval g rctx) lxps;;
 
 
 (*  Eval String
