@@ -375,33 +375,25 @@ let evalprint lxp ctx =
 let eval_all lxps rctx =
     let rec _eval_all lxps acc rctx = 
         match lxps with
-            | [] -> (List.rev acc), rctx 
+            | [] -> (List.rev acc) 
             | hd::tl ->
                 let lxp, rctx = eval hd rctx in
                     _eval_all tl (lxp::acc) rctx in
     (_eval_all lxps [] rctx)
 ;;
 
-(*  Eval a string given a context *)
-let eval_string (str: string) tenv grm limit lxp_ctx rctx =
-    let lxps, lxp_ctx = lexp_parse_string str tenv grm limit lxp_ctx in
-        (eval_all lxps rctx), lxp_ctx
+
+(*  Eval String
+ * ---------------------- *)
+let eval_expr_str str lctx rctx =
+    global_trace := [];
+    let lxps, lctx = lexp_expr_str str lctx in
+        (eval_all lxps rctx)
 ;;
 
-(*  EVAL a string. Contexts are discarded *)
-let easy_eval_string str =
-    let tenv = default_stt in
-    let grm = default_grammar in
-    let limit = (Some ";") in
-    let eval_string str clxp rctx = eval_string str tenv grm limit clxp rctx in
-    let clxp = make_lexp_context in
-    (*  Those are hardcoded operation *)
-        let clxp = add_def "_+_" clxp in
-        let clxp = add_def "_*_" clxp in
-        let clxp = add_def "_=_" clxp in
-            
-    let rctx = make_runtime_ctx in
-    let (ret, rctx), clxp = (eval_string str clxp rctx) in
-        ret
+let eval_decl_str str lctx rctx =
+    let lxps, lctx = lexp_decl_str str lctx in
+        (eval_decls lxps rctx), lctx
 ;;
+
 

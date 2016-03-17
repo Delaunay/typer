@@ -59,6 +59,7 @@ let main () =
     let root_folder = (if arg_n > 2 then Sys.argv.(2) else "./") in (* /_build/tests/ *)
     
     for i = 0 to files_n - 1 do
+        flush stdout;
         (* Check if file is a test => if it is run it *)
         (if (Filename.check_suffix files.(i) "_test.byte") ||
             (Filename.check_suffix files.(i) "_test.native") then 
@@ -66,17 +67,8 @@ let main () =
             
             tests_n := !tests_n + 1;
 
-            print_endline ("[RUN    ] TEST: " ^ (cut_name files.(i)));
-            
             exit_code := Sys.command (folder ^ files.(i) ^ " " ^ root_folder);
             
-            if !exit_code <> 0 then begin
-                print_string "[   FAIL]\n" ;
-                print_endline "    =========== TEST FAILURE ===========";
-                failed_test := !failed_test + 1;
-            end
-            else
-                print_string "[     OK]\n" ;
         end)
     done;
     

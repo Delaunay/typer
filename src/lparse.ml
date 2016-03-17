@@ -642,8 +642,21 @@ and lexp_print_var_info ctx =
 ;;
 
 let lexp_print e = lexp_print_adv (false, 0, true) e;;  
-           
-let lexp_parse_string (str: string) tenv grm limit ctx =
+
+
+(* add dummy definition helper *)
+let add_def name ctx = 
+    let ctx = senv_add_var name dloc ctx in
+    env_add_var_info (0, (dloc, name), dlxp, dlxp) ctx
+;;
+
+
+(*      String Parsing
+ * ------------------------ *)
+
+(* Lexp helper *)
+let _lexp_expr_str (str: string) (tenv: bool array) 
+            (grm: grammar) (limit: string option) (ctx: lexp_context) =
     let pretoks = prelex_string str in
     let toks = lex tenv pretoks in
     let sxps = sexp_parse_all_to_list grm toks limit in
@@ -651,8 +664,21 @@ let lexp_parse_string (str: string) tenv grm limit ctx =
         lexp_parse_all pxps ctx
 ;;
 
-(* add dummy definition helper *)
-let add_def name ctx = 
-    let ctx = senv_add_var name dloc ctx in
-    env_add_var_info (0, (dloc, name), dlxp, dlxp) ctx
+(* specialized version *)
+let lexp_expr_str str lctx = 
+    _lexp_expr_str str default_stt default_grammar (Some ";") lctx
+;;
+
+
+let _lexp_decl_str (str: string) tenv grm limit ctx =
+    let pretoks = prelex_string str in
+    let toks = lex tenv pretoks in
+    let sxps = sexp_parse_all_to_list grm toks limit in
+    let pxps = pexp_decls_all sxps in
+        lexp_decls pxps ctx
+;;
+
+(* specialized version *)
+let lexp_decl_str str lctx = 
+    _lexp_decl_str str default_stt default_grammar (Some ";") lctx
 ;;
