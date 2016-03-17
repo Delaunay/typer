@@ -158,7 +158,7 @@ let main () =
             (* get main body *)
             let body = (get_rte_variable main rctx) in
             (* eval main *)
-            let r, c = (eval body rctx) in
+            let r = (eval body rctx) in
                 print_eval_result 0 r
                 
         with 
