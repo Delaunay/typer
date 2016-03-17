@@ -120,9 +120,20 @@ let rec _eval lxp ctx i: (lexp * runtime_env) =
         | Imm(v) -> lxp, ctx
         
         (*  Return a value stored in the environ *)
-        | Var((loc, name), idx) -> begin
+        | Var((loc, name), idx) as e -> begin
+            (* find variable binding i.e we do not want a another variable *)
+            let rec var_crawling expr i k =
+                (if k > 255 then(
+                    lexp_print expr; print_string "\n"; flush stdout;
+                    raise (internal_error "Variable lookup failed")));
+                match expr with
+                    | Var(_, j) -> 
+                        let p = (get_rte_variable (i + j) ctx) in
+                            var_crawling p (i + j) (k + 1)
+                    | _ -> expr in
+                    
             try
-                (get_rte_variable idx ctx), ctx
+                (var_crawling e 0 0), ctx
             with 
                 Not_found ->
                     print_string ("Variable: " ^ name ^ " was not found | "); 
