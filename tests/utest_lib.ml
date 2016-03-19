@@ -54,6 +54,7 @@ let failure () = (-1);;
  *)
 let _global_sections = ref StringMap.empty
 let _insertion_order = ref []
+let _ret_code = ref 0
 
 
 (* USAGE *)
@@ -80,7 +81,7 @@ let add_test sname tname tfun =
                 _insertion_order := sname::(!_insertion_order);
                 StringMap.empty, ref [] in
                 
-    try let v = StringMap.find tname tmap in
+    try let _ = StringMap.find tname tmap in
         print_string "TEST ALREADY EXISTS"
     with
         Not_found ->
@@ -93,12 +94,13 @@ let add_test sname tname tfun =
         
 ;;
 
-let unexpected_throw e =
+let unexpected_throw sk tk e =
+    print_string ("[   FAIL] " ^ sk ^ " - " ^ tk ^ "\n");
     match e with
         | Internal_error msg ->
-            print_string ("[   FAIL]     UNEXPECTED THROW: " ^ msg ^ "\n")
+            print_string ("[       ]     UNEXPECTED THROW: " ^ msg ^ "\n")
         | _ ->
-            print_string ("[   FAIL]     UNEXPECTED THROW \n")
+            print_string ("[       ]     UNEXPECTED THROW \n")
 ;;
     
 (* Run all *)
@@ -123,15 +125,22 @@ let run_all () =
                 let r = tv () in
                     if r = 0 then
                         (print_string ("[     OK] " ^ sk ^ " - " ^ tk ^ "\n"))
-                    else
-                        (print_string ("[   FAIL] " ^ sk ^ " - " ^ tk ^ "\n"))
+                    else(
+                        (print_string ("[   FAIL] " ^ sk ^ " - " ^ tk ^ "\n");
+                        _ret_code := failure ()
+                    ))
             with e 
-                -> unexpected_throw e
+                -> _ret_code := failure ();
+                    unexpected_throw sk tk e
             )
             (!tst);
         
         )
-        (!_insertion_order)
+        (!_insertion_order);
+        
+        (* return success or failure *)
+        exit !_ret_code
+;;
 
  
 let expect_equal_int value expect =
