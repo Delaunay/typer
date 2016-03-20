@@ -99,8 +99,10 @@ let unexpected_throw sk tk e =
     match e with
         | Internal_error msg ->
             print_string ("[       ]     UNEXPECTED THROW: " ^ msg ^ "\n")
-        | _ ->
-            print_string ("[       ]     UNEXPECTED THROW \n")
+        | _ ->(
+            print_string "[       ]     UNEXPECTED THROW: \n";
+            print_string "[       ]  ";
+            print_string (Printexc.to_string e); print_string "\n")
 ;;
     
 (* Run all *)

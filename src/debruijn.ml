@@ -52,6 +52,7 @@ module StringMap
     = Map.Make (struct type t = string let compare = String.compare end)
 ;;
 
+
 (*  Map matching variable name and its distance in the current scope *)        
 type scope = (int) StringMap.t  (*  Map<String, int>*)
 

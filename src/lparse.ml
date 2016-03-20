@@ -62,6 +62,10 @@ let lexp_fatal loc msg =
 ;;
 
 
+module StringSet
+    = Set.Make (struct type t = string let compare = String.compare end)
+;;
+
               (*  pretty ? * indent level * print_type? *)
 type print_context = (bool * int * bool)
 
@@ -446,21 +450,63 @@ and lexp_parse_all (p: pexp list) (ctx: lexp_context) bound:
 (*
  *      Free Variables
  * --------------------- *)
-(** Return a list of all free variables contained in an expression lxp * )
-and free_variable lxp ctx ctxbound =s
-    
-    let rec _fv lxp acc
-        match lxp with
-            (* Check if var is bound *)
-            | Var () ->
-            
-            |  *)
-                
-    
-    
+(** Return a list of all free variables contained in an expression lxp *)
 
- 
+(* Tree Nodes that make reference to declarations are:
+ *  Call/Var/Cons
+ *)
+
+(* free_var should use a lexp since we are going to need free_v during eval *)
+and free_variable pxp =
+(* Expression that can have free variables:
+ *      - Lambda
+ *      - Let
+ *      - Call
+ * Expression that can be free variables:
+ *      - Var/ Function (Call)                                  *)
     
+    let bound = StringSet.empty in       (* bound variables  *)
+    let free = ([], StringSet.empty) in  (* decl order * map *)
+    
+    let rec _fv pxp (bound, free) =
+        match pxp with
+            | Plambda (_, (_, name), _, body) ->
+                let bound = StringSet.add name bound in
+                    _fv body (bound, free)
+                    
+            (*
+            | Plet (_, args, body) ->
+                
+                let bound = List.fold_left
+                    (fun s ((_, name), _, _) -> StringSet.add name s) bound args in
+                        _fv body bound free *)
+                
+            | Pcall (xp, lst) ->
+                (* check if function is declared outside *)
+                let (bound, free) = _fv xp (bound, free) in
+                let pargs = List.map pexp_parse lst in
+                    (* check for fv inside call args *)
+                    List.fold_left (fun a g -> _fv g a) (bound, free) pargs
+                    
+            | Pvar (_, name) ->(
+                try let _ = StringSet.find name bound in
+                    (bound, free)
+                with 
+                    Not_found ->(
+                        let (arr, set) = free in
+                            try let _ = StringSet.find name set in
+                                (bound, free)
+                            with
+                                Not_found ->(
+                                    let set = StringSet.add name set in
+                                    let arr = name :: arr in
+                                        (bound, (arr, set)))))
+            | _ -> (bound, free) in
+            
+    let (bound, (afree, sfree)) = _fv pxp (bound, free) in
+        (bound, (List.rev afree, sfree))
+            
+
 (*
  *      Type Inference
  * --------------------- *)
@@ -488,14 +534,27 @@ and lexp_p_infer (p : pexp) (env : lexp_context) bound: lexp * ltype =
     let lxp = _lexp_parse p env bound in
     
     (* determine type *)
-    match p with
+    match lxp with
         (* Trivial *)
-        | Pimm (sxp) -> (
+        | Imm (sxp) -> (
             match sxp with
                 | Integer _ -> (lxp, type_int)
                 | Float _ -> (lxp, type_float)
                 | _ -> lexp_error tloc "Could not infer type"; 
-                    (lxp, UnknownType(dloc)))
+                    (lxp, UnknownType(tloc)))
+
+                    
+        (* Pcall lookup fname *)
+        (* Pinductive *)
+        (* PCons return its Pinductive type *)
+                  
+        (* Plambda *)
+        (* we need to build (t0 -> ... -> tn) *)
+                    
+        (* PCase *)
+        (* return target type *)
+        
+        (**)
                     
         (* dev catch all *)
         | _ -> (lxp, UnknownType(dloc))
@@ -510,8 +569,7 @@ and lexp_p_check (p : pexp) (t : ltype) (env : lexp_context): lexp =
 (*
  *      Printing
  * --------------------- *)
-(*  Print back in CET (Close Enough Typer) easier to read *)
-(* So print can be called while parsing *)
+(* Print back in CET (Close Enough Typer) easier to read *)
 and lexp_print_adv opt exp =
     let slexp_print = lexp_print_adv opt in (* short_lexp_print *)
     let (pty, indent, prtp) = opt in
