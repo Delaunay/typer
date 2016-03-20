@@ -21,7 +21,7 @@
  *   more details.
  *
  *   You should have received a copy of the GNU General Public License along 
- *   with this program.  If not, see <http://www.gnu.org/licenses/>. 
+ *   with this program. If not, see <http://www.gnu.org/licenses/>. 
  *
  * ---------------------------------------------------------------------------
  *  
@@ -65,13 +65,30 @@ let lexp_fatal loc msg =
               (*  pretty ? * indent level * print_type? *)
 type print_context = (bool * int * bool)
 
-(* Vdef is exactly similar to Pvar but need to modify our ctx *)
-let pvar_to_vdef p = p;;
+(* Built-in list of types/functions *)
+let lexp_builtins = [
+(*    NAME  |     LXP               *)
+    ("Int"  , type_int);        
+    ("Float", type_float);
+    ("_=_"  , type_eq);    (*  t  ->  t  -> bool *)
+    ("_+_"  , iop_binary); (* int -> int -> int  *)
+] 
 
-(*  PEXP is not giving SEXP types this is why types are always unknown *)
+(* Make lxp context with built-in types *)
+let default_lctx = 
+    (* Empty context *)
+    let lctx = make_lexp_context in
+    
+    (* populate ctx *)
+    List.fold_left (fun ctx (name, lxp) ->
+        let ctx = senv_add_var name dloc ctx in
+            env_add_var_info (0, (dloc, name), lxp, lxp) ctx)
+        lctx 
+        lexp_builtins
+;;
 
-(*
- *  The main job of lexp (currently) is to determine variable name (index)
+
+(*  The main job of lexp (currently) is to determine variable name (index)
  *  and to regroup type specification with their variable 
  *
  *  lexp_context is composed of two environment: senv and env.
@@ -89,7 +106,6 @@ let pvar_to_vdef p = p;;
  *
  *)
  
-
 let rec lexp_parse p ctx: lexp =
     _lexp_parse p ctx (0, 0)
 
@@ -130,7 +146,7 @@ and _lexp_parse (p: pexp) (ctx: lexp_context) bound: lexp =
             
         (* ->/=> *)
         | Parrow (kind, Some var, tp, loc, expr) ->
-            let nvar = pvar_to_vdef var in  (* /!\ HERE *)
+            let nvar = var in               (* /!\ HERE *)
             let ltyp = _lexp_parse tp ctx bound in
             let lxp = _lexp_parse expr ctx bound in
                 Arrow(kind, Some nvar, ltyp, tloc, lxp)
@@ -176,12 +192,12 @@ and _lexp_parse (p: pexp) (ctx: lexp_context) bound: lexp =
         | Pcons(vr, sym) -> (
             let (loc, type_name) = vr in
             let (_, ctor_name) = sym in
-            
+            let (isize, rof) = bound in
             (*  An inductive type named type_name must be in the environment *)
             try let idx = senv_lookup type_name ctx in
                 (*  Check if the constructor exists *)
                             (* TODO *)
-                Cons((vr, idx), sym)
+                Cons((vr, idx - rof), sym)
             with Not_found ->
                 lexp_error loc 
                 ("The inductive type: " ^ type_name ^ " was not declared");
@@ -335,13 +351,8 @@ and lexp_parse_constructors ctors ctx bound =
 (*  Parse let declaration *)
 and lexp_decls decls ctx: (((vdef * lexp * ltype) list) * lexp_context) =
 
-    (*  Merge Type info and declaration together                      *)
-    (*  We use a list because order matters and Maps reorder elements *)
-    (*  
-    let rec is_equal target (p:(vdef * pexp option * pexp option)): bool =
-        let ((_, name), _, _) = p in
-            if name == target then true else false in *)
-            
+    (* Merge Type info and declaration together                        *)
+   
     (* merge with a map to guarantee uniqueness. *)
     let rec merge_decls (decls: (pvar * pexp * bool) list) merged acc: 
                 ((location * pexp option * pexp option) SMap.t * string list)  =
@@ -380,7 +391,7 @@ and lexp_decls decls ctx: (((vdef * lexp * ltype) list) * lexp_context) =
                         
     let mdecls, ord = merge_decls decls SMap.empty [] in
     
-    (* cast map to list*)
+    (* cast map to list to preserve declaration order *)
     let decls = List.map (fun name ->
             let (l, inst, tp) = SMap.find name mdecls in
                 ((l, name), inst, tp) ) ord
@@ -433,6 +444,24 @@ and lexp_parse_all (p: pexp list) (ctx: lexp_context) bound:
     (loop p ctx [])
     
 (*
+ *      Free Variables
+ * --------------------- *)
+(** Return a list of all free variables contained in an expression lxp * )
+and free_variable lxp ctx ctxbound =s
+    
+    let rec _fv lxp acc
+        match lxp with
+            (* Check if var is bound *)
+            | Var () ->
+            
+            |  *)
+                
+    
+    
+
+ 
+    
+(*
  *      Type Inference
  * --------------------- *)
 (* Parsing a Pexp into an Lexp is really "elaboration", i.e. it needs to
@@ -453,8 +482,24 @@ and lexp_parse_all (p: pexp list) (ctx: lexp_context) bound:
  *)
  
 and lexp_p_infer (p : pexp) (env : lexp_context) bound: lexp * ltype =
+    
+    (* Parse expr *)
+    let tloc = pexp_location p in
     let lxp = _lexp_parse p env bound in
-        lxp, UnknownType(dummy_location)
+    
+    (* determine type *)
+    match p with
+        (* Trivial *)
+        | Pimm (sxp) -> (
+            match sxp with
+                | Integer _ -> (lxp, type_int)
+                | Float _ -> (lxp, type_float)
+                | _ -> lexp_error tloc "Could not infer type"; 
+                    (lxp, UnknownType(dloc)))
+                    
+        (* dev catch all *)
+        | _ -> (lxp, UnknownType(dloc))
+
 
 and lexp_p_check (p : pexp) (t : ltype) (env : lexp_context): lexp =
   match p with
@@ -554,9 +599,12 @@ and lexp_print_adv opt exp =
                     print_string "| _ -> "; slexp_print df;
                     print_string ";"; if pty then print_string "\n"; end
             
+        | Builtin (tp, name, lxp) ->
+            print_string name;
+           
         (* debug catch all *)
         | UnknownType (loc)      -> print_string "unkwn";
-        | _ -> print_string "Printint Not Implemented"
+        | _ -> print_string "Printing Not Implemented"
         
         
 and lexp_print_ctors opt ctors =
@@ -676,3 +724,8 @@ let _lexp_decl_str (str: string) tenv grm limit ctx =
 let lexp_decl_str str lctx = 
     _lexp_decl_str str default_stt default_grammar (Some ";") lctx
 ;;
+
+
+
+
+

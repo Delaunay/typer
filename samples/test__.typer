@@ -9,6 +9,8 @@
 % main = (a 2)
 
 
+a = 2;
+
 Nat = inductive_ (dNat) (zero) (succ Nat);
         
 zero = inductive-cons Nat zero; 
