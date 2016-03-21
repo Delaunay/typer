@@ -30,6 +30,7 @@
  *
  * --------------------------------------------------------------------------- *)
  
+open Util
 
 
 module StringMap = 
@@ -39,7 +40,7 @@ module StringMap =
  
 type test_fun = (unit -> int)
 type tests = (test_fun) StringMap.t
-type sections = (tests) StringMap.t
+type sections = ((tests) StringMap.t) * string list
 
 let success () = 0;;
 let failure () = (-1);;
@@ -52,6 +53,7 @@ let failure () = (-1);;
  *      "Lambda" - "Nested"
  *)
 let _global_sections = ref StringMap.empty
+let _insertion_order = ref []
 
 
 (* USAGE *)
@@ -60,48 +62,95 @@ let _global_sections = ref StringMap.empty
  *      let r = eval_string "let a = 2; b = 3; in a + b;" in
  *      let v = (get_int r) in
  *          if v = 5 then success () else failure ()))
+ *
+ *  sname: Section Name
+ *  tname: Test Name
+ *  dcode: Typer's Declarations
+ *  ecode: expression to eval
+ *  tfun : test function (unit -> int)
  *)
 let add_test sname tname tfun = 
         
     (* Does Section Exists ? *)
-    let tmap = 
-        try 
+    let (tmap, lst) = 
+        try  
             StringMap.find sname (!_global_sections)
         with
-            Not_found -> StringMap.empty in
+            Not_found -> 
+                _insertion_order := sname::(!_insertion_order);
+                StringMap.empty, ref [] in
+                
+    try let v = StringMap.find tname tmap in
+        print_string "TEST ALREADY EXISTS"
+    with
+        Not_found ->
+                
+    lst := tname::(!lst);
     
     (* add test *)
     let ntmap = StringMap.add tname tfun tmap in
-        _global_sections := StringMap.add sname ntmap (!_global_sections);
+        _global_sections := StringMap.add sname (ntmap, lst) (!_global_sections);
+        
+;;
+
+let unexpected_throw e =
+    match e with
+        | Internal_error msg ->
+            print_string ("[   FAIL]     UNEXPECTED THROW: " ^ msg ^ "\n")
+        | _ ->
+            print_string ("[   FAIL]     UNEXPECTED THROW \n")
 ;;
     
 (* Run all *)
 let run_all () =
+    _insertion_order := List.rev (!_insertion_order);
+
     (* iter over all sections *)
-    StringMap.iter (fun sk sv ->
+    List.iter (fun sk ->
+        
+        let tmap, tst = StringMap.find sk (!_global_sections) in
+        tst := List.rev (!tst);
+        
         print_string ("[RUN    ] " ^ sk ^ " \n");
+        
         (* iter over all tests in the current sections *)
-        StringMap.iter (fun tk tv ->
-            (* RUN TEST*)
-            let r = tv () in
-                if r = 0 then
-                    (print_string ("[     OK] " ^ sk ^ " - " ^ tk ^ "\n"))
-                else
-                    (print_string ("[   FAIL] " ^ sk ^ " - " ^ tk ^ "\n"))
+        List.iter (fun tk ->
+            let tv = StringMap.find tk tmap in
+        
+            (* RUN TEST *)
+            flush stdout;
+            try
+                let r = tv () in
+                    if r = 0 then
+                        (print_string ("[     OK] " ^ sk ^ " - " ^ tk ^ "\n"))
+                    else
+                        (print_string ("[   FAIL] " ^ sk ^ " - " ^ tk ^ "\n"))
+            with e 
+                -> unexpected_throw e
             )
-            sv
+            (!tst);
+        
         )
-        (!_global_sections)
+        (!_insertion_order)
 
  
-let expect_equal_int value expectation =
-    if value = expectation then
+let expect_equal_int value expect =
+    if value = expect then
         success ()
     else(
-        print_string ("[       ]     EXPECTED " ^ (string_of_int expectation) ^ "\n");
-        print_string ("[       ]          GOT " ^ (string_of_int value) ^ "\n");
+        print_string ("[       ]     EXPECTED: " ^ (string_of_int expect)^ "\n");
+        print_string ("[       ]          GOT: " ^ (string_of_int value) ^ "\n");
         failure ())
 ;;
 
+
+let expect_equal_str value expect =
+    if value = expect then
+        success ()
+    else(
+        print_string ("[       ]     EXPECTED: " ^ expect ^ "\n");
+        print_string ("[       ]          GOT: " ^ value ^ "\n");
+        failure ())
+;;
 
 

@@ -43,7 +43,6 @@ open Lparse
 open Debruijn
 open Fmt
 open Grammar
-open Eval
 
 (* Print aPretokens *)
 let rec debug_pretokens_print pretoken =
