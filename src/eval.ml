@@ -334,7 +334,6 @@ and print_eval_result i lxp =
     match lxp with
         | Imm(v) -> sexp_print v; print_string "\n"
         | e ->  lexp_print e; print_string "\n"
-
 and print_call_trace () =
     print_string (make_title " CALL TRACE ");
 
