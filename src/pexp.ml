@@ -353,6 +353,18 @@ and pexp_u_decls ds =
 let pexp_print e = sexp_print (pexp_unparse e)
 
 
+(* Parse All Pexp as a list *)
+let pexp_parse_all (nodes: sexp list) =
+    List.map pexp_parse nodes
+;;
+
+let pexp_parse_string (str: string) tenv grm limit =
+    let pretoks = prelex_string str in
+    let toks = lex tenv pretoks in
+    let sxps = sexp_parse_all_to_list grm toks limit in
+        pexp_parse_all sxps
+;;
+
 let pexp_decls_all (nodes: sexp list): ((pvar * pexp * bool) list) =
     let rec loop nodes acc =
         match nodes with
@@ -364,20 +376,19 @@ let pexp_decls_all (nodes: sexp list): ((pvar * pexp * bool) list) =
     loop nodes []
 ;;
 
-(* Parse All Pexp as a list *)
-let pexp_parse_all (nodes: sexp list) =
-    List.map pexp_parse nodes
-;;
+(*      String Parsing
+ * ------------------------ *)
 
-(* Pexp String
- * ------------------- *)
-let _pexp_expr_str (str: string) tenv grm limit =
+(* Lexp helper *)
+let _pexp_expr_str (str: string) (tenv: bool array) 
+            (grm: grammar) (limit: string option) =
     let pretoks = prelex_string str in
     let toks = lex tenv pretoks in
     let sxps = sexp_parse_all_to_list grm toks limit in
         pexp_parse_all sxps
 ;;
 
+(* specialized version *)
 let pexp_expr_str str = 
     _pexp_expr_str str default_stt default_grammar (Some ";")
 ;;
@@ -390,6 +401,7 @@ let _pexp_decl_str (str: string) tenv grm limit =
         pexp_decls_all sxps
 ;;
 
+(* specialized version *)
 let pexp_decl_str str = 
     _pexp_decl_str str default_stt default_grammar (Some ";")
 ;;

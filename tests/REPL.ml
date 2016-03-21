@@ -54,14 +54,11 @@ type ptop =
 let ipexp_parse p =
     match p with 
         (* Declaration *)
-        | Node (Symbol (_, "_=_"), [Symbol s; t]) ->
-             let (a, b, c)::_ = pexp_p_decls nod in
-                Pdecl(a, b, c)
-        | Node (Symbol (_, "_:_"), [Symbol s; t]) ->
-            let (a, b, c)::_ = pexp_p_decls nod in
+        | Node (Symbol (_, ("_=_" | "_:_")), [Symbol s; t]) ->
+           let (a, b, c)::_ = pexp_p_decls p in
                 Pdecl(a, b, c)
         (* Expression *)
-        | _ -> let a = pexp_parse nod in Pexpr(a)
+        | _ -> let a = pexp_parse p in Pexpr(a)
 ;;
         
 let ipexp_parse_all ps = List.map ipexp_parse ps;;
@@ -72,10 +69,10 @@ type ltop =
     
 let ilexp_parse l lctx =
     match l with
-        | Pdecl(_, _, _) -> let (a, b, c), d = lexp_decls [l] ctx in
+        | Pdecl(x, v, t) -> let [(a, b, c)], d = lexp_decls [(x, v, t)] lctx in
             Ldecl(a, b, c), d
-        | Pexpr(x) -> let v, c = lexp_parse x lctx in
-            Lexpr(v), c
+        | Pexpr(x) -> let v = lexp_parse x lctx in
+            Lexpr(v), lctx
             
 let ilexp_parse_all ls lctx =
     let rec loop lst acc ctx =
@@ -83,8 +80,8 @@ let ilexp_parse_all ls lctx =
             | [] -> List.rev acc, ctx
             | hd::tl ->
                 let x, c = ilexp_parse hd ctx in
-                let nacc = acc::x in
-                    loop tl nacc c in
+                let nacc = x::acc in
+                loop tl nacc c in
     loop ls [] lctx
     
 type ival = 
@@ -93,9 +90,9 @@ type ival =
 
 let ieval xpr rctx =
     match xpr with
-        | Ldecl(_, _, _) -> let r = eval_decls xpr rctx in
+        | Ldecl(x, v, t) -> let r = eval_decls [(x, v, t)] rctx in
             Ivoid, rctx
-        | Lexpr(x) -> let v, _ = eval x rctx in
+        | Lexpr(x) -> let v = eval x rctx in
             Ival(v), rctx
 
 let ieval_all xprs rctx =
@@ -104,7 +101,7 @@ let ieval_all xprs rctx =
             | [] -> List.rev acc, ctx
             | hd::tl ->
                 let x, c = ieval hd ctx in
-                let nacc = acc::x in
+                let nacc = x::acc in
                     loop tl nacc c in
     loop xprs [] rctx
 
@@ -119,13 +116,13 @@ let ieval_string str lctx rctx =
     let v, rctx = ieval_all lxps rctx in
         v, lctx, rctx
 ;;
-                    
+
 (*  Specials commands %[command-name] *)
 let rec repl () = 
     let tenv = default_stt in
     let grm = default_grammar in
     let limit = (Some ";") in
-    let eval_string str clxp rctx = eval_string str tenv grm limit clxp rctx in
+    (* let eval_string str clxp rctx = eval_string str tenv grm limit clxp rctx in *)
     let lxp_ctx = make_lexp_context in
     (*  Those are hardcoded operation *)
         let lxp_ctx = add_def "_+_" lxp_ctx in
@@ -147,7 +144,7 @@ let rec repl () =
             else
                 let (ret, clxp, rctx) = (ieval_string ipt clxp rctx) in
                 
-                let print_e j v = 
+                let print_e _ b = 
                     match b with
                         | Ivoid -> ()
                         | Ival(x) -> print_eval_result i x in

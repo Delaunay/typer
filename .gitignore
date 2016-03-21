@@ -18,3 +18,4 @@ manual.??
 test__.ml
 _temp_hack
 test__.typer
+*.orig

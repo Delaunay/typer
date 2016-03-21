@@ -1,47 +1,64 @@
-open Lparse
+open Lparse     (* add_def       *)
 open Debruijn   (* make_lexp_context *)
-open Lexp 
-open Utest_lib   
+open Lexp
+open Utest_lib
 
 (* default environment *)
 let lctx = make_lexp_context
 let lctx = add_def "_+_" lctx
 let lctx = add_def "_*_" lctx
+
+
+let _ = (add_test "LEXP" "Built-in Inference" (fun () ->
+
+    let dcode = "a = 10; b = 1.12;" in
+
+    let ret, _ = lexp_decl_str dcode lctx in
     
-(* Check if annotation are parsed and kept                  *)
-(* Let and top level declarations are using the same code   *)
-(* We only have to check if let's type parsing is correct   *)
-let _ = (add_test "LEXP" "Type Parsing" (fun () ->
-    
-    (* This is garbage. I just want Nat to be defined *)
-    let dcode = "
-        Nat = inductive_ (dNat) (zero) (succ Nat);\n" in
-        
-    let _, lctx = lexp_decl_str dcode lctx in
-    
-    let ecode = "
-        let a : Nat; a = 1; b : Nat; b = 3; 
-            in 
-                a + b;" in
-        
-    let ret, _ = lexp_expr_str ecode lctx in
         match ret with
-            | [expr] ->(
-            match expr with
-                | Let(_, arg, _) -> match arg with
-                    | [] -> failure ()
-                    | (_, xp, tp)::_ ->(
-                        (* tp must match Nat *)
-                        match tp with
-                            | Var((_, name), _) -> expect_equal_str name "Nat"
-                            | _ -> failure ()
-                      )
-                | _ -> failure ())
-            | [] -> failure ())
-)
+            (* (vdef * lexp * ltype) *)
+            | [(_, _, Builtin(_, "Int", _)); 
+               (_, _, Builtin(_, "Float", _))] -> 
+                success()
+
+            | _ -> failure ())
+);;
+
+open Pexp
+
+
+let set_to_list s =
+    StringSet.fold (fun g a -> g::a) s []
 ;;
 
+let _ = (add_test "LEXP" "Free Variable" (fun () ->
+    
+    let dcode = "
+        a = 2;
+        b = 3;
+        f = lambda n -> (a + n);           % a is a fv
+        g = lambda x -> ((f b) + a + x);   % f,a,b is fv 
+    " in
+
+    let ret = pexp_decl_str dcode in
+    let (_, g, _)::_ = List.rev ret in
+
+    let (bound, free) = free_variable g in
+    
+    let bound = set_to_list bound in
+    let (free, _) = free in
+
+    match bound with
+        | ["x"] ->(
+            match free with
+                | ["_+_"; "f"; "b"; "a"] -> success ()
+                | _ -> failure ())
+        | _ -> failure ()
+
+));;
+    
 
 
+(* run all tests *)
 run_all ()
 ;;

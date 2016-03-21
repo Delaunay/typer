@@ -52,6 +52,7 @@ module StringMap
     = Map.Make (struct type t = string let compare = String.compare end)
 ;;
 
+
 (*  Map matching variable name and its distance in the current scope *)        
 type scope = (int) StringMap.t  (*  Map<String, int>*)
 
@@ -135,11 +136,4 @@ let env_lookup_type ctx (v : vref) =
   with Not_found -> internal_error "DeBruijn index out of bounds!"
 
 let env_lookup_by_index index ctx = Myers.nth index (_get_env ctx);;
-        
-        
-        
-        
-        
-        
-        
         
