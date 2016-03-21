@@ -398,7 +398,7 @@ let _pexp_decl_str (str: string) tenv grm limit =
     let pretoks = prelex_string str in
     let toks = lex tenv pretoks in
     let sxps = sexp_parse_all_to_list grm toks limit in
-        pexp_decls_all sxps 
+        pexp_decls_all sxps
 ;;
 
 (* specialized version *)

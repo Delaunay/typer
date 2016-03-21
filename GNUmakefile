@@ -7,9 +7,7 @@ TEST_FILES := $(wildcard ./tests/*_test.ml)
 CFLAG = -cflag -rectypes -build-dir _build
 
 # This is for windows: windows version is old
-ifeq ($(OS),Windows_NT)
-SHELL=C:/Windows/System32/cmd.exe
-endif
+
 
 all: ityper typer debug tests
 

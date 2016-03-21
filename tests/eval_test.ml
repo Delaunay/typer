@@ -87,7 +87,7 @@ let _ = (add_test "EVAL" "Nested Lambda" (fun () ->
 ;;
 
 (*      Cases + Inductive types
- * ------------------------ *) 
+ * ------------------------ *)
  
 let _ = (add_test "EVAL" "Case" (fun () ->
     (* Inductive type declaration + Noisy declarations *)
@@ -130,7 +130,7 @@ let _ = (add_test "EVAL" "Case" (fun () ->
                         failure ()
             | _ -> failure ())
 )
-;; 
+;;
 
 
 let _ = (add_test "EVAL" "Recursive Call" (fun () ->
@@ -165,10 +165,12 @@ let _ = (add_test "EVAL" "Recursive Call" (fun () ->
                     if t1 = 0 && t2 = 0 && t3 = 0 then
                         success ()
                     else
-                        failure () 
+                        failure ()
             | _ -> failure ())
 )
 ;;
+
+
 
 (* run all tests *)
 run_all ()

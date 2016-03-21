@@ -137,10 +137,3 @@ let env_lookup_type ctx (v : vref) =
 
 let env_lookup_by_index index ctx = Myers.nth index (_get_env ctx);;
         
-        
-        
-        
-        
-        
-        
-        

@@ -98,7 +98,6 @@ let main () =
     else
     begin
         let filename = Sys.argv.(1) in
-        
         (* Read additional Args if any *)
 
         print_string (make_title " ERRORS ");

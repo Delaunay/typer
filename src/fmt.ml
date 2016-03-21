@@ -103,5 +103,27 @@ let make_rheader (head: (((char* int) option  * string) list)) =
 let make_sep c = "    " ^ (make_line c 76) ^ "\n";;
 
 
+(* used to help visualize the call trace *)
+let _print_ct_tree i =
+    print_string "    ";
+    let rec loop j =
+        if j = i then () else
+        match j with 
+            | _ when (j mod 2) = 0 -> print_char '|'; loop (j + 1)
+            | _ -> print_char ':'; loop (j + 1) in
+    loop 0
+;;  
+
+(* iterate of first n of a list l and apply f *)
+let print_first n l f =
+    let rec loop i l =
+        match l with
+            | [] -> ()
+            | hd::tl -> 
+                if i < n then ((f i hd); loop (i + 1) tl;)
+                else () in
+    loop 0 l
+;;
+
     
     
