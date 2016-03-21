@@ -48,6 +48,15 @@ let default_stt =
      stt.(Char.code ')') <- true;
      stt
      
+(* default_grammar is auto-generated from typer-smie-grammar via:
+
+  (dolist (x typer-smie-grammar)
+   (when (stringp (car x))
+     (insert "(\"" (car x) "\", "
+             (if (numberp (nth 1 x)) (format "Some %d" (nth 1 x)) "None") ", "
+             (if (numberp (nth 2 x)) (format "Some %d" (nth 2 x)) "None")
+             ");\n")))
+ *)
 let default_grammar : grammar =
     List.fold_left (fun g (n, ll, rl) -> SMap.add n (ll, rl) g)
         SMap.empty

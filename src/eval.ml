@@ -88,7 +88,8 @@ type runtime_env = (string option * lexp) myers
 let make_runtime_ctx = nil;;
 let add_rte_variable name x l = (cons (name, x) l);;
 
-let get_rte_variable (idx: int) (l: runtime_env): lexp = 
+let get_rte_variable (idx: int) (l: runtime_env): lexp =
+    (* FIXME: Check that the variable's name is right!  *)
     let (_, x) = (nth idx l) in x
 ;;
 
@@ -151,7 +152,10 @@ let rec _eval lxp ctx i: (value_type) =
             let n = List.length args in
             match lname with
                 (*  Hardcoded functions *)
-                
+                (* FIXME: These should not be hardcoded here, but should be
+                 * stuffed into the "initial environment", i.e. the value of
+                 * `ctx` used at top-level.  *)
+
                 (* + is read as a nested binary operator *)
                 | Var((_, name), _) when name = "_+_" ->
                     let nctx = build_arg_list args ctx i in
@@ -294,7 +298,7 @@ let rec _eval lxp ctx i: (value_type) =
                                 
                         ctx pat_args args in
                             (* eval body *)
-                            _eval exp ctx (i + 1)  end
+                            _eval exp nctx (i + 1)  end
 
         | _ -> Imm(String(dloc, "eval Not Implemented"))
         
