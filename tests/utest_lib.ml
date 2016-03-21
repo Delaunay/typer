@@ -74,24 +74,24 @@ let add_test sname tname tfun =
         
     (* Does Section Exists ? *)
     let (tmap, lst) = 
-        try  
+        try
             StringMap.find sname (!_global_sections)
         with
-            Not_found -> 
+            Not_found ->
                 _insertion_order := sname::(!_insertion_order);
                 StringMap.empty, ref [] in
-                
+
     try let _ = StringMap.find tname tmap in
         print_string "TEST ALREADY EXISTS"
     with
         Not_found ->
-                
+
     lst := tname::(!lst);
     
     (* add test *)
     let ntmap = StringMap.add tname tfun tmap in
         _global_sections := StringMap.add sname (ntmap, lst) (!_global_sections);
-        
+
 ;;
 
 let unexpected_throw sk tk e =
@@ -111,16 +111,16 @@ let run_all () =
 
     (* iter over all sections *)
     List.iter (fun sk ->
-        
+
         let tmap, tst = StringMap.find sk (!_global_sections) in
         tst := List.rev (!tst);
-        
+
         print_string ("[RUN    ] " ^ sk ^ " \n");
-        
+
         (* iter over all tests in the current sections *)
         List.iter (fun tk ->
             let tv = StringMap.find tk tmap in
-        
+
             (* RUN TEST *)
             flush stdout;
             try
@@ -136,10 +136,10 @@ let run_all () =
                     unexpected_throw sk tk e
             )
             (!tst);
-        
+
         )
         (!_insertion_order);
-        
+
         (* return success or failure *)
         exit !_ret_code
 ;;

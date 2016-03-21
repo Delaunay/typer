@@ -67,7 +67,7 @@ let main () =
             
             tests_n := !tests_n + 1;
             exit_code := Sys.command (folder ^ files.(i) ^ " " ^ root_folder);
-            
+
             (if !exit_code != 0 then 
                 failed_test := !failed_test + 1)
             

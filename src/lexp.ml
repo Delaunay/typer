@@ -584,7 +584,6 @@ and lexp_unparse e : pexp =
     (* (internal_error "Can't print a Susp") *)
 
 let lexp_print e = sexp_print (pexp_unparse (lexp_unparse e))
-<<<<<<< HEAD
     
 (* let rec lexp_type (env: (lexp option * lexp) VMap.t) e : lexp =
  *   let rec follow e =
