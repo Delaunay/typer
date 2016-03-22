@@ -20,19 +20,19 @@
  *   FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
  *   more details.
  *
- *   You should have received a copy of the GNU General Public License along 
- *   with this program.  If not, see <http://www.gnu.org/licenses/>. 
+ *   You should have received a copy of the GNU General Public License along
+ *   with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
  * ---------------------------------------------------------------------------
- *  
+ *
  *      Description:
- *          Provide helper functions to print out 
+ *          Provide helper functions to print out
  *                  extracted Pretoken
- *                  extracted Sexp 
+ *                  extracted Sexp
  *
  * --------------------------------------------------------------------------- *)
 
-(* removes some warnings *) 
+(* removes some warnings *)
 open Util
 open Prelexer
 open Lexer
@@ -48,18 +48,18 @@ open Grammar
 let rec debug_pretokens_print pretoken =
     print_string " ";
     let print_info msg loc =
-        print_string msg; 
+        print_string msg;
         print_string "["; print_loc loc; print_string "]\t" in
-        
+
     match pretoken with
         | Preblock(loc, pts,_)
          -> print_info "Preblock:  " loc;
             print_string "{";   pretokens_print pts;    print_string " }"
-            
-        | Pretoken(loc, str) 
+
+        | Pretoken(loc, str)
          -> print_info "Pretoken:  " loc;
-                print_string ("'" ^ str ^ "'"); 
-            
+                print_string ("'" ^ str ^ "'");
+
         | Prestring(loc, str)
          -> print_info "Prestring: " loc;
             print_string ("\"" ^ str ^ "\"");
@@ -69,42 +69,42 @@ let rec debug_pretokens_print pretoken =
 let rec debug_pretokens_print_all pretokens =
   List.iter (fun pt -> debug_pretokens_print pt; print_string "\n") pretokens
 ;;
-  
+
 (* Sexp Print *)
 let rec debug_sexp_print sexp =
   let print_info msg loc =
-    print_string msg; 
+    print_string msg;
     print_string "["; print_loc loc; print_string "]\t" in
   match sexp with
-    | Epsilon 
+    | Epsilon
         -> print_string "Epsilon  "  (* "ε" *)
-        
-    | Block(loc, pts, _) 
-        -> print_info "Block:   " loc; 
+
+    | Block(loc, pts, _)
+        -> print_info "Block:   " loc;
            print_string "{"; pretokens_print pts; print_string " }"
-            
-    | Symbol(loc, name) 
+
+    | Symbol(loc, name)
         -> print_info "Symbol:  " loc; print_string name
-            
+
     | String(loc, str)
         -> print_info "String:  " loc;
            print_string "\""; print_string str; print_string "\""
-            
-    | Integer(loc, n) 
+
+    | Integer(loc, n)
         -> print_info "Integer: " loc;   print_int n
-            
-    | Float(loc, x) 
+
+    | Float(loc, x)
         -> print_info "Float:   " loc;   print_float x
-            
-    | Node(f, args) 
+
+    | Node(f, args)
         -> print_info "Node:    " (sexp_location f);
-            sexp_print f; print_string " \t "; 
+            sexp_print f; print_string " \t ";
                 List.iter (fun sexp -> sexp_print sexp; print_string " @ ")
                                  args;
             print_string " "
 ;;
-  
-(* Print a list of sexp *)  
+
+(* Print a list of sexp *)
 let debug_sexp_print_all tokens =
   List.iter (fun pt ->
          print_string " ";
@@ -118,9 +118,9 @@ let debug_sexp_print_all tokens =
 let debug_pexp_print ptop =
     print_string " ";
     let l = pexp_location ptop in
-    let print_info msg loc pex = 
-        print_string msg; print_string "["; 
-        print_loc loc; 
+    let print_info msg loc pex =
+        print_string msg; print_string "[";
+        print_loc loc;
         print_string "]\t";
         pexp_print pex in
     match ptop with
@@ -146,24 +146,24 @@ let debug_pexp_decls decls =
             pexp_print pxp; print_string "\n"
         )
         decls
-        
+
 
 (* Print a list of pexp *)
 let debug_pexp_print_all pexps =
-    List.iter 
-        (fun px -> 
-            debug_pexp_print px; 
-            print_string "\n") 
+    List.iter
+        (fun px ->
+            debug_pexp_print px;
+            print_string "\n")
         pexps
 ;;
 
 (* Print lexp with debug info *)
-let debug_lexp_print tlxp = 
+let debug_lexp_print tlxp =
     print_string " ";
     let dloc = dummy_location in
-    let print_info msg loc lex = 
-        print_string msg; print_string "["; 
-        print_loc loc; 
+    let print_info msg loc lex =
+        print_string msg; print_string "[";
+        print_loc loc;
         print_string "]\t";
         lexp_print lex in
     let tloc = lexp_location tlxp in
@@ -183,10 +183,10 @@ let debug_lexp_print tlxp =
 
 (* Print a list of lexp *)
 let debug_lexp_print_all lexps =
-    List.iter 
-        (fun px -> 
-            debug_lexp_print px; 
-            print_string "\n") 
+    List.iter
+        (fun px ->
+            debug_lexp_print px;
+            print_string "\n")
         lexps
 ;;
 
@@ -200,24 +200,4 @@ let debug_lexp_decls decls =
             print_string ";\n"
         )
         decls
-
-      
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

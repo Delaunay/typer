@@ -100,15 +100,15 @@ type ltype = lexp
  and sort_level =
   | SLn of int
   | SLsucc of lexp
-                                            
+
 
 (* let mk_susp s e = if VMap.is_empty s then e else Susp (s, e)
  * let mk_subst x v e = Susp (VMap.add x v VMap.empty, e) *)
-                                                      
+
 let opt_map f x = match x with None -> None | Some x -> Some (f x)
-                                                      
+
 (**** The builtin elements ****)
-                  
+
 let dloc = dummy_location
 let slevel0 = SortLevel (SLn 0)
 let slevel1 = SortLevel (SLn 1)
@@ -227,7 +227,7 @@ type value = lexp
  *   | UnifyMaybe                      (\* Not clear when.  *\)
  * type unify_csts = (lexp * lexp * unify_cond) list
  * type constraints = unify_csts
- * 
+ *
  * type pending = constraints *)
 let id x = x
 
@@ -276,8 +276,8 @@ let rec lexp_location e =
   | Case (l,_,_,_,_) -> l
   (* | Susp (_, e) -> lexp_location e
    * | Metavar ((l,_),_,_) -> l *)
-   
-   
+
+
 let lexp_to_string e =
   match e with
     | Imm _ -> "Imm"
@@ -290,7 +290,7 @@ let lexp_to_string e =
     | Cons _ -> "Cons"
     | Case _ -> "Case"
 ;;
-    
+
 let builtin_reduce b args arg =
   match b,args,arg with
   | IAdd, [(_,Imm (Integer (_, i1)))], (Imm (Integer (_, i2)))
@@ -385,7 +385,7 @@ let builtin_reduce b args arg =
  *            | Let (_,decls,Var (_, v')) when v = v'
  *              -> let e = List.fold_left (fun e ((_,v'), e', _) ->
  *                                        if v = v' then e' else e)
- *                                       (\* This metavar is just a placeholder 
+ *                                       (\* This metavar is just a placeholder
  *                                        * which should be dropped.  *\)
  *                                       (mk_meta_dummy VMap.empty l) decls
  *                (\* Here we stay in `s' to keep the recursive bindings.  *\)
@@ -520,7 +520,7 @@ let conv_erase = true              (* If true, conv ignores erased terms. *)
 (*
 (* In non-recursion calls, `s' is always empty.  *)
 let lexp_conv_p env = lexp_conv_p env VMap.empty
-    
+
 let lexp_unparse_v (l,v)
   (* FIXME: This only works for bound vars, free vars will need
    * a different treatment!  *)
@@ -584,7 +584,7 @@ and lexp_unparse e : pexp =
     (* (internal_error "Can't print a Susp") *)
 
 let lexp_print e = sexp_print (pexp_unparse (lexp_unparse e))
-    
+
 (* let rec lexp_type (env: (lexp option * lexp) VMap.t) e : lexp =
  *   let rec follow e =
  *     match e with

@@ -62,7 +62,7 @@ type pexp =
                   * (symbol * (arg_kind * pvar option * pexp) list) list
   | Pcons of pvar * symbol
   | Pcase of location * pexp * (ppat * pexp) list
-  
+
 
 let rec pexp_location e =
   match e with
@@ -144,11 +144,11 @@ let rec pexp_parse (s : sexp) : pexp =
           (fun case pcases
            -> match case with
              (* read Constructor name + args => Type ((Symbol * args) list) *)
-             | Node (Symbol s, cases)   
+             | Node (Symbol s, cases)
                -> (s, List.map pexp_p_ind_arg cases)::pcases
              (* This is a constructor with no args *)
              | Symbol s -> (s, [])::pcases
-               
+
              | _ -> pexp_error (sexp_location case)
                              "Unrecognized constructor declaration"; pcases)
           cases [] in
@@ -213,12 +213,12 @@ and pexp_p_id (x : location * string) : (location * string) option =
   match x with
   | (_, "_") -> None
   | _ -> Some x
-                     
+
 and pexp_u_id (x : (location * string) option) : (location * string) =
   match x with
   | None -> (dummy_location, "_")
   | Some x -> x
-                     
+
 and pexp_p_ind_arg s = match s with
   | Node (Symbol (_,"_:_"), [Symbol s; t])
     -> (Aexplicit, pexp_p_id s, pexp_parse t)
@@ -287,7 +287,7 @@ and pexp_p_decls e =
         | (arg :: args) -> pexp_error (sexp_location arg)
                                     "Unknown argument format";
                           mkfun args
-      in [(s, mkfun args, false)] 
+      in [(s, mkfun args, false)]
   | _ -> pexp_error (sexp_location e) ("Unknown declaration"); []
 
 and pexp_unparse (e : pexp) : sexp =
@@ -380,7 +380,7 @@ let pexp_decls_all (nodes: sexp list): ((pvar * pexp * bool) list) =
  * ------------------------ *)
 
 (* Lexp helper *)
-let _pexp_expr_str (str: string) (tenv: bool array) 
+let _pexp_expr_str (str: string) (tenv: bool array)
             (grm: grammar) (limit: string option) =
     let pretoks = prelex_string str in
     let toks = lex tenv pretoks in
@@ -389,7 +389,7 @@ let _pexp_expr_str (str: string) (tenv: bool array)
 ;;
 
 (* specialized version *)
-let pexp_expr_str str = 
+let pexp_expr_str str =
     _pexp_expr_str str default_stt default_grammar (Some ";")
 ;;
 
@@ -402,7 +402,7 @@ let _pexp_decl_str (str: string) tenv grm limit =
 ;;
 
 (* specialized version *)
-let pexp_decl_str str = 
+let pexp_decl_str str =
     _pexp_decl_str str default_stt default_grammar (Some ";")
 ;;
 

@@ -20,11 +20,11 @@
  *   FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
  *   more details.
  *
- *   You should have received a copy of the GNU General Public License along 
- *   with this program.  If not, see <http://www.gnu.org/licenses/>. 
+ *   You should have received a copy of the GNU General Public License along
+ *   with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
  * ---------------------------------------------------------------------------
- *  
+ *
  *      Description:
  *          Specifies recursive data structure for DeBruijn indexing
  *          methods starting with '_' are considered private and should not
@@ -43,21 +43,21 @@ let debruijn_warning = msg_warning "DEBRUIJN"
 (*  Type definitions
  * ---------------------------------- *)
 
-(*  Index -> Variable Info *) 
+(*  Index -> Variable Info *)
 type env_elem = (int * (location * string) * lexp * ltype)
 type env_type = env_elem myers
- 
+
 (* This exist because I don't want that file to depend on anything *)
 module StringMap
     = Map.Make (struct type t = string let compare = String.compare end)
 ;;
 
 
-(*  Map matching variable name and its distance in the current scope *)        
+(*  Map matching variable name and its distance in the current scope *)
 type scope = (int) StringMap.t  (*  Map<String, int>*)
 
 type senv_length = int  (* it is not the map true length *)
-type senv_type = senv_length * scope 
+type senv_type = senv_length * scope
 
              (* name -> index * index -> info *)
 type lexp_context = senv_type * env_type
@@ -89,14 +89,14 @@ let _add_var_env variable ctx =
  * ---------------------------------- *)
 
 let make_lexp_context = (_make_senv_type, _make_myers);;
- 
+
 (*  return its current DeBruijn index *)
 let rec senv_lookup (name: string) (ctx: lexp_context): int =
     let ((n, map), _) = ctx in
         n - (StringMap.find name map) - 1
 ;;
-     
-(*  We first add variable into our map. Later on, we will add them into 
+
+(*  We first add variable into our map. Later on, we will add them into
  *  the environment. The reason for this is that the type info is
  *  known after lexp parsing which need the index fist *)
 let senv_add_var name loc ctx =
@@ -118,7 +118,7 @@ let env_add_var_info var (ctx: lexp_context) =
     (a, cons var env)
 ;;
 
-let env_lookup_type_by_index index ctx = 
+let env_lookup_type_by_index index ctx =
     try
         let (roffset, (_, name), _, t) = Myers.nth index (_get_env ctx) in
             Shift (index - roffset, t)
@@ -136,4 +136,4 @@ let env_lookup_type ctx (v : vref) =
   with Not_found -> internal_error "DeBruijn index out of bounds!"
 
 let env_lookup_by_index index ctx = Myers.nth index (_get_env ctx);;
-        
+

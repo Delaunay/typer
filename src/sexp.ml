@@ -219,7 +219,7 @@ let sexp_u_list (ss : sexp list) : sexp =
   | [] -> Epsilon
   | [s] -> s
   | (s :: ss) -> Node (s, ss)
-  
+
 (*  Parse all the Sexp *)
 let sexp_parse_all_to_list grm tokens limit =
     let rec sexp_parse_impl grm tokens limit acc =

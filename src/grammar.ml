@@ -20,11 +20,11 @@
  *   FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
  *   more details.
  *
- *   You should have received a copy of the GNU General Public License along 
- *   with this program.  If not, see <http://www.gnu.org/licenses/>. 
+ *   You should have received a copy of the GNU General Public License along
+ *   with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
  * ---------------------------------------------------------------------------
- *  
+ *
  *      Description:
  *          Define the default Typer Grammar
  *
@@ -37,7 +37,7 @@
 
 module SMap
   = Map.Make (struct type t = string let compare = String.compare end)
-  
+
 type grammar = (int option * int option) SMap.t
 
 let default_stt =
@@ -47,7 +47,7 @@ let default_stt =
      stt.(Char.code '(') <- true;
      stt.(Char.code ')') <- true;
      stt
-     
+
 (* default_grammar is auto-generated from typer-smie-grammar via:
 
   (dolist (x typer-smie-grammar)

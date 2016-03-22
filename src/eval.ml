@@ -174,7 +174,7 @@ let rec _eval lxp ctx i: (value_type) =
                     let r = get_int (get_rte_variable 1 nctx) in
                     Imm(Integer(dloc, l + r))
 
-                (* _*_ is reas as a single function with x args *)
+                (* _*_ is read as a single function with x args *)
                 | Var((_, name), _) when name = "_*_" ->
                     let nctx = build_arg_list args ctx i in
 
@@ -186,8 +186,6 @@ let rec _eval lxp ctx i: (value_type) =
 
                 (* This is a named function call *)
                 | Var((_, name), idx) ->
-                    (* Check if the call is a constructor call *)
-
                     (*  get function body *)
                     let body = get_rte_variable idx ctx in
 
@@ -314,7 +312,6 @@ and build_ctx decls ctx i =
 and eval_decl ((l, n), lxp, ltp) ctx =
     add_rte_variable (Some n) lxp ctx
 
-(*  Eval a declaration if a main is found it is returned *)
 and eval_decls (decls: ((vdef * lexp * ltype) list))
                (ctx: runtime_env): runtime_env =
     let rec loop decls ctx =
@@ -334,6 +331,7 @@ and print_eval_result i lxp =
     match lxp with
         | Imm(v) -> sexp_print v; print_string "\n"
         | e ->  lexp_print e; print_string "\n"
+
 and print_call_trace () =
     print_string (make_title " CALL TRACE ");
 
@@ -366,7 +364,7 @@ let eval_all lxps rctx = List.map (fun g -> eval g rctx) lxps;;
  * ---------------------- *)
 let eval_expr_str str lctx rctx =
     global_trace := [];
-    let lxps, lctx = lexp_expr_str str lctx in
+    let lxps = lexp_expr_str str lctx in
         (eval_all lxps rctx)
 ;;
 

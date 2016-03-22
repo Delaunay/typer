@@ -20,27 +20,27 @@
  *   FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
  *   more details.
  *
- *   You should have received a copy of the GNU General Public License along 
- *   with this program.  If not, see <http://www.gnu.org/licenses/>. 
+ *   You should have received a copy of the GNU General Public License along
+ *   with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
  * ---------------------------------------------------------------------------
- *  
+ *
  *      Description:
  *          Basic utest program run all tests
  *
  * --------------------------------------------------------------------------- *)
- 
- 
+
+
 let cut_name str =
     String.sub str 0 (String.length str - 12)
 ;;
- 
-(* search *_test.byte executable en run them 
+
+(* search *_test.byte executable en run them
     Usage:
         ./utest_main tests_folder root_folder *)
-let main () = 
+let main () =
     let arg_n = Array.length Sys.argv in
-    
+
     (* read where tests files are*)
     let folder = (if arg_n > 1 then Sys.argv.(1) else "./_build/tests/") in
 
@@ -52,28 +52,28 @@ let main () =
     (* get tests files *)
     let files = Sys.readdir folder in
     let files_n = Array.length files in
-    
+
     let exit_code = ref 0 in
     let failed_test = ref 0 in
     let tests_n = ref 0 in
     let root_folder = (if arg_n > 2 then Sys.argv.(2) else "./") in (* /_build/tests/ *)
-    
+
     for i = 0 to files_n - 1 do
         flush stdout;
         (* Check if file is a test => if it is run it *)
         (if (Filename.check_suffix files.(i) "_test.byte") ||
-            (Filename.check_suffix files.(i) "_test.native") then 
+            (Filename.check_suffix files.(i) "_test.native") then
         begin
-            
+
             tests_n := !tests_n + 1;
             exit_code := Sys.command (folder ^ files.(i) ^ " " ^ root_folder);
 
-            (if !exit_code != 0 then 
+            (if !exit_code != 0 then
                 failed_test := !failed_test + 1)
-            
+
         end)
     done;
-    
+
     print_string   "\n\n\n";
     print_endline  "  =========== Test Summary ===========\n";
     print_string   "    Test Ran    : "; print_int !tests_n;
