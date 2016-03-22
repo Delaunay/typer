@@ -49,7 +49,7 @@ let rec read_input i =
         let line = input_line stdin in
         let s = String.length str in
         let n = String.length line in
-            if s = 0 && n = 0 then read_input (i + 1) else
+            if s = 0 && n = 0 then read_input i else
             (if n = 0 then (
                 print_string "          . ";
                 print_string (make_line ' ' (i * 4));
@@ -63,7 +63,7 @@ let rec read_input i =
                 print_string (make_line ' ' (i * 4));
                 loop str (i + 1))) in
 
-    loop "" 1
+    loop "" i
 ;;
 
 (* Interactive mode is not usual typer
@@ -103,8 +103,8 @@ let ieval lexps rctx =
         vals, rctx
 ;;
 
-let ieval_string str lctx rctx =
-    let pres = prelex_string str in
+let _ieval f str  lctx rctx =
+    let pres = (f str) in
     let sxps = lex default_stt pres in
     let nods = sexp_parse_all_to_list default_grammar sxps (Some ";") in
 
@@ -115,33 +115,47 @@ let ieval_string str lctx rctx =
         v, lctx, rctx
 ;;
 
+let ieval_string = _ieval prelex_string
+let ieval_file = _ieval prelex_file
+
 (*  Specials commands %[command-name] *)
-let rec repl () =
-    let lxp_ctx = make_lexp_context in
-    let rctx = make_runtime_ctx in
-
-    (*  Those are hardcoded operation *)
-        let lxp_ctx = add_def "_+_" lxp_ctx in
-        let lxp_ctx = add_def "_*_" lxp_ctx in
-
-    let rec loop i clxp rctx =
-        let ipt = read_input i in
-            match ipt with
-                (*  Check special keywords *)
-                | "%quit"  -> ()
-                | "%who"   -> (print_rte_ctx rctx;      loop (i + 1) clxp rctx)
-                | "%info"  -> (lexp_context_print clxp; loop (i + 1) clxp rctx)
-                | "%calltrace" -> (print_call_trace (); loop (i + 1) clxp rctx)
-                (* eval input *)
-                | _ -> let (ret, clxp, rctx) = (ieval_string ipt clxp rctx) in
-
-                    List.iter (print_eval_result i) ret;
-                    loop (i + 1) clxp rctx  in
-
-    loop 1 lxp_ctx rctx
+let rec repl i clxp rctx =
+    let ipt = read_input i in
+        match ipt with
+            (*  Check special keywords *)
+            | "%quit"  -> ()
+            | "%who"   -> (print_rte_ctx rctx;      repl (i + 1) clxp rctx)
+            | "%info"  -> (lexp_context_print clxp; repl (i + 1) clxp rctx)
+            | "%calltrace" -> (print_call_trace (); repl (i + 1) clxp rctx)
+            (* eval input *)
+            | _ -> let (ret, clxp, rctx) = (ieval_string ipt clxp rctx) in
+                List.iter (print_eval_result i) ret;
+                repl (i + 1) clxp rctx
 ;;
 
+let arg_files = ref []
+
+
+(* ./ityper [options] files *)
+let arg_defs = [
+    (*"-I",
+        Arg.String (fun f -> searchpath := f::!searchpath),
+        "Append a directory to the search path"*)
+];;
+
+let parse_args () =
+  Arg.parse arg_defs (fun s -> arg_files:= s::!arg_files) ""
+
 let main () =
+    parse_args ();
+
+    let lctx = ref make_lexp_context in
+    let rctx = ref make_runtime_ctx in
+
+    (*  Those are hardcoded operation *)
+    lctx := add_def "_+_" !lctx;
+    lctx := add_def "_*_" !lctx;
+
     print_string (make_title " TYPER REPL ");
     print_string "      %quit      : leave REPL\n";
     print_string "      %who       : print runtime environment\n";
@@ -150,7 +164,25 @@ let main () =
     print_string (make_sep '-');
     flush stdout;
 
-    repl ()
+    let nfiles = List.length !arg_files in
+
+    (* Read specified files *)
+    List.iteri (fun i file ->
+        print_string "  In["; ralign_print_int (i + 1) 2;  print_string "] >> ";
+        print_string ("%readfile " ^ file); print_string "\n";
+
+        let (ret, lctx1, rctx1) = ieval_file file (!lctx) (!rctx) in
+            lctx := lctx1;
+            rctx := rctx1;
+            List.iter (print_eval_result i) ret;
+        )
+
+        !arg_files;
+
+    flush stdout;
+
+    (* Initiate REPL. This will allow us to inspect interpreted code *)
+    repl (nfiles + 1) (!lctx) (!rctx)
 ;;
 
 
