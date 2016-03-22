@@ -40,20 +40,19 @@ open Debruijn
 open Grammar
 
 
-let _eval_error loc msg =
-    msg_error "eval" loc msg;
+let eval_error loc msg =
+    msg_error "EVAL" loc msg;
     raise (internal_error msg)
 ;;
 
 let dloc = dummy_location
-let _eval_warning = msg_warning "eval"
+let eval_warning = msg_warning "EVAL"
 
 type call_trace_type = (int * lexp) list
 let global_trace = ref []
 
 let add_call cll i = global_trace := (i, cll)::!global_trace
 
-let reinit_call_trace () =  global_trace := []
 
 let print_myers_list l print_fun =
     let n = (length l) - 1 in
@@ -71,12 +70,6 @@ let print_myers_list l print_fun =
     print_string (make_sep '=');
 ;;
 
-let get_function_name fname =
-    match fname with
-        | Var(v) -> let ((loc, name), idx) = v in name
-        | _ -> "Name Lookup failure"
-;;
-
 let get_int lxp =
     match lxp with
         | Imm(Integer(_, l)) -> l
@@ -88,9 +81,16 @@ type runtime_env = (string option * lexp) myers
 let make_runtime_ctx = nil;;
 let add_rte_variable name x l = (cons (name, x) l);;
 
-let get_rte_variable (idx: int) (l: runtime_env): lexp =
+let get_rte_variable (*name: string option*) (idx: int) (l: runtime_env): lexp =
     (* FIXME: Check that the variable's name is right!  *)
-    let (_, x) = (nth idx l) in x
+    let (tn, x) = (nth idx l) in x
+
+    (*
+    match (tn, name) with
+        | (Some n1, Some n2) ->
+            if n1 = n2 then x else (eval_error dloc
+                ("Variable lookup failure. Expected: " ^ n2 ^ " got " ^ n1);  x)
+        | _ -> x (* can't check variable's name *) *)
 ;;
 
 let get_rte_size (l: runtime_env): int = length l;;
@@ -207,8 +207,8 @@ let rec _eval lxp ctx i: (value_type) =
             let value = (get_rte_variable 0 ctx) in
             let nctx = add_rte_variable (Some name) value ctx in
 
-            (* Collapse nested lambdas *)
-            let rec build_body bd idx nctx =
+            (* Collapse nested lambdas. Returns body *)
+            let rec collapse bd idx nctx =
                 match bd with
                     | Lambda(_, vr, _, body) ->
                         let (loc, name) = vr in
@@ -216,10 +216,10 @@ let rec _eval lxp ctx i: (value_type) =
                         let value = (get_rte_variable idx ctx) in
                         (*  Build lambda context *)
                         let nctx = add_rte_variable (Some name) value nctx in
-                            (build_body body (idx + 1) nctx)
+                            (collapse body (idx + 1) nctx)
                     | _ -> bd, nctx in
 
-            let body, nctx = build_body body 1 nctx in
+            let body, nctx = collapse body 1 nctx in
                 _eval body nctx (i + 1) end
 
         (*  Inductive is a type declaration. We have nothing to eval *)
@@ -233,28 +233,30 @@ let rec _eval lxp ctx i: (value_type) =
 
             (* Eval target *)
             let v = _eval target ctx (i + 1) in
-            let nctx = ctx in
 
             (*  V must be a constructor Call *)
             let ctor_name, args = match v with
                 | Call(lname, args) -> (match lname with
                     | Var((_, ctor_name), _) -> ctor_name, args
-                    | _ -> _eval_error loc "Target is not a Constructor" )
+                    | _ -> eval_error loc "Target is not a Constructor" )
 
                 | Cons((_, idx), (_, cname)) -> begin
                     (*  retrieve type definition *)
-                    print_int idx;
+
                     let info = get_rte_variable idx ctx in
-                    let Inductive(_, _, _, ctor_def) = info in
+                    let ctor_def = match info with
+                        | Inductive(_, _, _, c) -> c
+                        | _ -> eval_error loc "Not an Inductive Type" in
+
                     try let args = SMap.find cname ctor_def in
                         cname, args
                     with
                         Not_found ->
-                            _eval_error loc "Constructor does not exist" end
+                            eval_error loc "Constructor does not exist" end
 
                 | _ -> lexp_print target; print_string "\n";
                     lexp_print v; print_string "\n";
-                    _eval_error loc "Can't match expression" in
+                    eval_error loc "Can't match expression" in
 
             (*  Check if a default is present *)
             let run_default df =
@@ -336,7 +338,8 @@ and print_call_trace () =
     print_string (make_title " CALL TRACE ");
 
     let n = List.length !global_trace in
-    print_string "        size = "; print_int n; print_string "\n";
+    print_string "        size = "; print_int n;
+    print_string (" max printed = 50" ^ "\n");
     print_string (make_sep '-');
 
     let racc = List.rev !global_trace in

@@ -56,12 +56,15 @@ let _global_sections = ref StringMap.empty
 let _insertion_order = ref []
 let _ret_code = ref 0
 
+(*  Exception *)
+exception Unexpected_result of string
+
 (* Value Checking                                           *)
 (*      USAGE: expect_something_type value expected_value   *)
 (*          return success() if match else failure ()       *)
 let unexpected_throw sk tk e =
     print_string ("[   FAIL] " ^ sk ^ " - " ^ tk ^ "\n");
-    print_string  "[       ]     UNEXPECTED THROW: \n";
+    print_string  "[       ]     UNEXPECTED THROW:\n";
     print_string  "[       ]  "; print_string ((Printexc.to_string e) ^ "\n");
 ;;
 
@@ -101,7 +104,7 @@ let add_section sname =
  *)
 let add_test sname tname tfun =
 
-    (* Does Section Exists ? *)
+    (* Does Section Exist ? *)
     let (tmap, lst) = add_section sname in
 
     try let _ = StringMap.find tname tmap in
@@ -124,8 +127,8 @@ let for_all_tests sk tmap tk =
     flush stdout;
     try
         let r = tv () in
-            if r = 0 then
-                (print_string ("[     OK] " ^ sk ^ " - " ^ tk ^ "\n"))
+            if r = 0 then(
+                print_string ("[     OK] " ^ sk ^ " - " ^ tk ^ "\n"))
             else(
                 print_string ("[   FAIL] " ^ sk ^ " - " ^ tk ^ "\n");
                 _ret_code := failure ())
@@ -151,8 +154,3 @@ let run_all () =
     (* return success or failure *)
     exit !_ret_code
 ;;
-
-
-
-
-

@@ -26,9 +26,8 @@
  * ---------------------------------------------------------------------------
  *
  *      Description:
- *          Provide helper functions to print out
- *                  extracted Pretoken
- *                  extracted Sexp
+ *          Provide helper functions to print out extracted
+ *                      Pretoken, Sexp, pexp and lexp
  *
  * --------------------------------------------------------------------------- *)
 

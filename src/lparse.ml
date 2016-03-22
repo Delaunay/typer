@@ -105,18 +105,9 @@ let default_lctx =
  *  possible for env to hold more variables than senv since senv is a map
  *  which does not allow multiple definition while env does.
  *
- *      a = 1;
- *      let a = 3; b = 5 in a + b;
- *
  *)
 
-let rec lexp_parse p ctx: lexp =
-    _lexp_parse p ctx (0, 0)
-
-(* bound is used to determine if the variable require shifting
- *      bound = (inner_size, r_offset)
- *)
-and _lexp_parse (p: pexp) (ctx: lexp_context) bound: lexp =
+let rec lexp_parse (p: pexp) (ctx: lexp_context): lexp =
     (* So I don't have to extract it *)
     let tloc = pexp_location p in
     match p with
@@ -127,12 +118,8 @@ and _lexp_parse (p: pexp) (ctx: lexp_context) bound: lexp =
         | Pvar (loc, name) -> begin
             try
                 (*  Send Variable loc *)
-                let (isize, rof) = bound in
-                let idx = senv_lookup name ctx in(
-                    if idx > isize then
-                        (make_var name (idx - rof) loc)
-                    else
-                        (make_var name idx loc))
+                let idx = senv_lookup name ctx in
+                    (make_var name idx loc)
 
             with Not_found ->
                 (lexp_error loc ("The Variable: " ^ name ^ " was not declared");
@@ -142,22 +129,19 @@ and _lexp_parse (p: pexp) (ctx: lexp_context) bound: lexp =
         (*  Let, Variable declaration + local scope *)
         | Plet(loc, decls, body) ->
             let decl, nctx = lexp_decls decls ctx in
-            (*  Body cannot modify context *)
-            let (_, rof) = bound in
-            let bound = ((List.length decl), rof) in
-            let bdy = _lexp_parse body nctx bound in
+            let bdy = lexp_parse body (local_scope nctx (get_roffset nctx)) in
             Let(tloc, decl, bdy)
 
         (* ->/=> *)
         | Parrow (kind, Some var, tp, loc, expr) ->
             let nvar = var in               (* /!\ HERE *)
-            let ltyp = _lexp_parse tp ctx bound in
-            let lxp = _lexp_parse expr ctx bound in
+            let ltyp = lexp_parse tp ctx in
+            let lxp = lexp_parse expr ctx in
             Arrow(kind, Some nvar, ltyp, tloc, lxp)
 
         | Parrow (kind, None, tp, loc, expr) ->
-            let ltyp = _lexp_parse tp ctx bound in
-            let lxp = _lexp_parse expr ctx bound in
+            let ltyp = lexp_parse tp ctx in
+            let lxp = lexp_parse expr ctx in
                 Arrow(kind, None, ltyp, tloc, lxp)
 
         (*  *)
@@ -169,10 +153,10 @@ and _lexp_parse (p: pexp) (ctx: lexp_context) bound: lexp =
             let nctx = senv_add_var vname loc ctx in
             let nctx = env_add_var_info (0, (loc, vname), dlxp, ltp) nctx in
 
-            let ltyp = _lexp_parse ptype nctx bound in
-            let (_, rof) = bound in
-            let bound = (1, rof) in
-            let lbody = _lexp_parse body nctx bound in
+            let ltyp = lexp_parse ptype nctx in
+
+            let nctx = (local_scope nctx (get_roffset nctx)) in
+            let lbody = lexp_parse body nctx in
                 Lambda(kind, var, ltyp, lbody)
 
         | Plambda (kind, var, None, body) ->
@@ -181,29 +165,27 @@ and _lexp_parse (p: pexp) (ctx: lexp_context) bound: lexp =
             let nctx = senv_add_var vname loc ctx in
             let nctx = env_add_var_info (0, (loc, vname), dlxp, dltype) nctx in
 
-            let (_, rof) = bound in
-            let bound = (1, rof) in
-            let lbody = _lexp_parse body nctx bound in
+            let nctx = (local_scope nctx (get_roffset nctx)) in
+            let lbody = lexp_parse body nctx in
             Lambda(kind, var, UnknownType(tloc), lbody)
 
         | Pcall (fname, _args) ->
-            lexp_call fname _args ctx bound
+            lexp_call fname _args ctx
 
         (* Pinductive *)
         | Pinductive (label, [], ctors) ->
-            let map_ctor, nctx = lexp_parse_constructors ctors ctx bound in
-            Inductive(tloc, label, [], map_ctor)
+            let map_ctor, nctx = lexp_parse_constructors ctors ctx in
+                Inductive(tloc, label, [], map_ctor)
 
         (* Pcons *)
         | Pcons(vr, sym) -> (
             let (loc, type_name) = vr in
             let (_, ctor_name) = sym in
-            let (isize, rof) = bound in
             (*  An inductive type named type_name must be in the environment *)
             try let idx = senv_lookup type_name ctx in
                 (*  Check if the constructor exists *)
                             (* TODO *)
-                Cons((vr, idx - rof), sym)
+                Cons((vr, idx), sym)
             with Not_found ->
                 lexp_error loc
                 ("The inductive type: " ^ type_name ^ " was not declared");
@@ -213,7 +195,7 @@ and _lexp_parse (p: pexp) (ctx: lexp_context) bound: lexp =
         | Pcase (loc, target, patterns) ->
 
             (*  I need type info HERE *)
-            let lxp = _lexp_parse target ctx bound in
+            let lxp = lexp_parse target ctx in
             let ltp = UnknownType(loc) in
 
             (*  Read patterns one by one *)
@@ -225,7 +207,7 @@ and _lexp_parse (p: pexp) (ctx: lexp_context) bound: lexp =
                         (*  Create pattern context *)
                         let (name, iloc, arg), nctx = lexp_read_pattern pat exp lxp ctx in
                         (*  parse using pattern context *)
-                        let exp = _lexp_parse exp nctx bound in
+                        let exp = lexp_parse exp nctx in
 
                         if name = "_" then
                             loop tl merged (Some exp)
@@ -241,7 +223,7 @@ and _lexp_parse (p: pexp) (ctx: lexp_context) bound: lexp =
             -> UnknownType(tloc)
 
 (*  Identify Call Type and return processed call *)
-and lexp_call (fname: pexp) (_args: sexp list) ctx bound =
+and lexp_call (fname: pexp) (_args: sexp list) ctx =
     (*  Process Arguments *)
     let pargs = List.map pexp_parse _args in
 
@@ -254,30 +236,29 @@ and lexp_call (fname: pexp) (_args: sexp list) ctx bound =
             | Pcons (_, (loc, nm)) -> nm, loc
             | _ -> raise Not_found in
 
-        let largs = lexp_parse_all pargs ctx bound in
+        let largs = lexp_parse_all pargs ctx in
         let new_args = List.map (fun g -> (Aexplicit, g)) largs in
 
         try
             (*  Check if the function was defined *)
             let idx = senv_lookup name ctx in
             let vf = (make_var name idx loc) in
-
-            Call(vf, new_args)
+                Call(vf, new_args)
 
         with Not_found ->
             (*  Don't stop even if an error was found *)
             lexp_error loc ("The function \"" ^ name ^
                                                   "\" was not defined");
             let vf = (make_var name (-1) loc) in
-            Call(vf, new_args) end
+                Call(vf, new_args) end
 
     (*  Call to a nameless function *)
     with Not_found ->
-        let largs = lexp_parse_all pargs ctx bound in
+        let largs = lexp_parse_all pargs ctx in
         let new_args = List.map (fun g -> (Aexplicit, g)) largs in
         (*  I think this should not modify context.
          *  if so, funny things might happen when evaluating *)
-        let fname = _lexp_parse fname ctx bound in
+        let fname = lexp_parse fname ctx in
         Call(fname, new_args) end
 
 (*  Read a pattern and create the equivalent representation *)
@@ -333,7 +314,7 @@ and lexp_read_pattern_args args ctx:
     in loop args [] ctx
 
 (*  Parse inductive constructor *)
-and lexp_parse_constructors ctors ctx bound =
+and lexp_parse_constructors ctors ctx =
 
     let make_args (args:(arg_kind * pvar option * pexp) list):
                                        (arg_kind * ltype) list * lexp_context =
@@ -345,7 +326,7 @@ and lexp_parse_constructors ctors ctx bound =
                         (* What does the optional Pvar do ?
                                         that expression does not exist in LEXP*)
                         | (kind, _, exp) ->
-                        let lxp = _lexp_parse exp ctx bound in
+                        let lxp = lexp_parse exp ctx in
                         loop tl ((kind, lxp)::acc) ctx end in
         loop args [] ctx in
 
@@ -427,18 +408,18 @@ and lexp_decls decls ctx: (((vdef * lexp * ltype) list) * lexp_context) =
             | hd::tl ->
                 match hd with
                     | ((loc, name), Some pinst, None) ->(
-                        let bound = (0, m) in
-                        let lxp, ltp = lexp_p_infer pinst _ctx bound in
+                        let nctx = local_scope _ctx m in
+                        let lxp, ltp = lexp_p_infer pinst nctx in
                         let nacc = ((loc, name), lxp, ltp)::acc in
-                        let ctx2 = env_add_var_info (0, (loc, name), lxp, ltp) _ctx in
+                        let ctx2 = env_add_var_info (0, (loc, name), lxp, ltp) nctx in
                             process_var_info tl ctx2 nacc (m - 1))
 
                     | ((loc, name), Some pinst, Some ptype) ->(
-                        let bound = (0, m) in
-                        let linst  = _lexp_parse pinst _ctx bound in
-                        let ltyp = _lexp_parse ptype _ctx bound in
+                        let nctx = local_scope _ctx m in
+                        let linst  = lexp_parse pinst nctx in
+                        let ltyp = lexp_parse ptype nctx in
                         let nacc = ((loc, name), linst, ltyp)::acc in
-                        let ctx3 = env_add_var_info (0, (loc, name), linst, ltyp) _ctx in
+                        let ctx3 = env_add_var_info (0, (loc, name), linst, ltyp) nctx in
                             process_var_info tl ctx3 nacc (m - 1))
 
                     (* Skip the variable *)
@@ -448,12 +429,12 @@ and lexp_decls decls ctx: (((vdef * lexp * ltype) list) * lexp_context) =
     let acc, ctx = process_var_info decls nctx [] n in
         acc, ctx
 
-and lexp_parse_all (p: pexp list) (ctx: lexp_context) bound: lexp list =
+and lexp_parse_all (p: pexp list) (ctx: lexp_context): lexp list =
 
     let rec loop (plst: pexp list) ctx (acc: lexp list) =
         match plst with
             | [] -> (List.rev acc)
-            | _  -> let lxp = _lexp_parse (List.hd plst) ctx bound in
+            | _  -> let lxp = lexp_parse (List.hd plst) ctx in
                     (loop (List.tl plst) ctx (lxp::acc)) in
 
     (loop p ctx [])
@@ -538,11 +519,11 @@ and free_variable pxp =
  * - use lexp_p_check whenever you can.
  *)
 
-and lexp_p_infer (p : pexp) (env : lexp_context) bound: lexp * ltype =
+and lexp_p_infer (p : pexp) (env : lexp_context): lexp * ltype =
 
     (* Parse expr *)
     let tloc = pexp_location p in
-    let lxp = _lexp_parse p env bound in
+    let lxp = lexp_parse p env in
 
     (* determine type *)
     match lxp with
@@ -555,7 +536,7 @@ and lexp_p_infer (p : pexp) (env : lexp_context) bound: lexp * ltype =
                     (lxp, UnknownType(tloc)))
 
 
-        (* Pcall lookup fname *)
+        (* Pcall lookup fname type *)
         (* Pinductive *)
         (* PCons return its Pinductive type *)
 
@@ -574,14 +555,13 @@ and lexp_p_infer (p : pexp) (env : lexp_context) bound: lexp * ltype =
 and lexp_p_check (p : pexp) (t : ltype) (env : lexp_context): lexp =
   match p with
   | _
-    -> let (e, inferred_t) = lexp_p_infer p env (0, 0) in
+    -> let (e, inferred_t) = lexp_p_infer p env in
       (* FIXME: check that inferred_t = t!  *)
       e
 (*
  *      Printing
  * --------------------- *)
-
-(*  Print back in CET (Close Enough Typer) easier to read *)
+(* FIXME: transform to lexp_to_buffer *)
 and lexp_print_adv opt exp =
     let slexp_print = lexp_print_adv opt in (* short_lexp_print *)
     let (pty, indent, prtp) = opt in
@@ -702,7 +682,7 @@ and lexp_print_decls opt decls =
 
 (*  Print context  *)
 and lexp_context_print ctx =
-    let ((n, map), env) = ctx in
+    let ((n, map), env, f) = ctx in
 
     print_string (make_title " LEXP CONTEXT ");
 
@@ -773,7 +753,7 @@ let _lexp_expr_str (str: string) (tenv: bool array)
     let toks = lex tenv pretoks in
     let sxps = sexp_parse_all_to_list grm toks limit in
     let pxps = pexp_parse_all sxps in
-        lexp_parse_all pxps ctx (0, 0)
+        lexp_parse_all pxps ctx
 ;;
 
 (* specialized version *)

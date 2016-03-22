@@ -75,7 +75,7 @@ type ldecl = vdef * lexp * ltype
 type lexpr = lexp
 
 (* Grouping declaration together will enable us to support mutually recursive
- * declarations *)
+ * declarations while bringing us closer to normal typer *)
 let ipexp_parse (sxps: sexp list): (pdecl list * pexpr list) =
     let rec _pxp_parse sxps dacc pacc =
         match sxps with
@@ -92,7 +92,7 @@ let ipexp_parse (sxps: sexp list): (pdecl list * pexpr list) =
 let ilexp_parse pexps lctx =
     let pdecls, pexprs = pexps in
     let ldecls, lctx = lexp_decls pdecls lctx in
-    let lexprs = lexp_parse_all pexprs lctx (0, 0) in
+    let lexprs = lexp_parse_all pexprs lctx in
         (ldecls, lexprs), lctx
 ;;
 
