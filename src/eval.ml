@@ -339,7 +339,7 @@ and print_call_trace () =
 
     let n = List.length !global_trace in
     print_string "        size = "; print_int n;
-    print_string (" max printed = 50" ^ "\n");
+    print_string (" max_printed = 50" ^ "\n");
     print_string (make_sep '-');
 
     let racc = List.rev !global_trace in
@@ -361,12 +361,13 @@ let eval lxp ctx =
 ;;
 
 (*  Eval a list of lexp *)
-let eval_all lxps rctx = List.map (fun g -> eval g rctx) lxps;;
+let eval_all lxps rctx =
+    global_trace := [];
+    List.map (fun g -> eval g rctx) lxps;;
 
 (*  Eval String
  * ---------------------- *)
 let eval_expr_str str lctx rctx =
-    global_trace := [];
     let lxps = lexp_expr_str str lctx in
         (eval_all lxps rctx)
 ;;

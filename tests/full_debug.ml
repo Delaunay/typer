@@ -20,11 +20,11 @@
  *   FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
  *   more details.
  *
- *   You should have received a copy of the GNU General Public License along 
- *   with this program.  If not, see <http://www.gnu.org/licenses/>. 
+ *   You should have received a copy of the GNU General Public License along
+ *   with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
  * ---------------------------------------------------------------------------
- *  
+ *
  *      Description:
  *          print out each compilation' steps
  *
@@ -38,136 +38,152 @@ open Grammar
 open Pexp
 open Util
 open Fmt
-
-let dloc = dummy_location;;
-
 open Debruijn
 open Myers
 open Lparse
 open Eval
 open Lexp
 
-
+let dloc = dummy_location;;
 let dummy_decl = Imm(String(dloc, "Dummy"));;
 
-(*
-let pexp_lexp_all nodes ctx =
+let discard v = ();;
 
-    let rec loop nodes ctx acc = 
-        match nodes with
-            | [] -> ((List.rev acc), ctx)
-            | hd::tl  -> 
-                let lxp, new_ctx = pexp_lexp_one hd ctx in
-                    (loop tl new_ctx (lxp::acc)) in
-    (loop nodes ctx [])
+(*          Argument parsing        *)
+let arg_print_options = ref SMap.empty;;
+let arg_files = ref []
+
+let add_p_option name () =
+    arg_print_options := SMap.add name true (!arg_print_options);;
+
+let get_p_option name =
+    try let _ = SMap.find name (!arg_print_options) in
+        true
+    with
+        Not_found -> false
 ;;
 
+let arg_defs = [
+    ("-pretok",
+        Arg.Unit (add_p_option "pretok"), " Print pretok debug info");
+    ("-tok",
+        Arg.Unit (add_p_option "tok"), " Print tok debug info");
+    ("-sexp",
+        Arg.Unit (add_p_option "sexp"), " Print sexp debug info");
+    ("-pexp",
+        Arg.Unit (add_p_option "pexp"), " Print pexp debug info");
+    ("-lexp",
+        Arg.Unit (add_p_option "lexp"), " Print lexp debug info");
+    ("-all",
+        Arg.Unit (fun () ->
+            add_p_option "pretok" ();
+            add_p_option "tok" ();
+            add_p_option "sexp" ();
+            add_p_option "pexp" ();
+            add_p_option "lexp" ()),
+        " Print all compilation step with debug info");
+];;
 
+let parse_args () =
+  Arg.parse arg_defs (fun s -> arg_files:= s::!arg_files) ""
 
-let add_rte_def name ctx = 
-    (add_rte_variable (Some name) dummy_decl ctx);;
-    
+let make_default () =
+    arg_print_options := SMap.empty;
+    add_p_option "sexp" ();
+    add_p_option "pexp" ();
+    add_p_option "lexp" ()
+;;
 
-let eval_until_nth xpr n rctx =
-
-    let rec loop xpr nb rctx =
-        match xpr, nb with
-            | [], _ -> rctx
-            | _, nb when nb = n -> rctx
-            | hd::tl, _ -> 
-                let c, rctx = eval_toplevel hd rctx in
-                    print_eval_result nb c;
-                    loop tl (nb + 1) rctx in  
-        loop xpr 0 rctx
-;; *)
-        
-let discard v = ();;
-        
-let main () = 
+let main () =
+    parse_args ();
 
     let arg_n = Array.length Sys.argv in
-    let usage = 
-        "  Usage: \n    " ^ Sys.argv.(0) ^ " <file_name> [options] \n\n" in
-    
+
+    let usage =
+        "\n  Usage:   " ^ Sys.argv.(0) ^ " <file_name> [options]\n" in
+
     (*  Print Usage *)
     if arg_n == 1 then
-        begin
-        print_string usage;
-        print_string "  Options:\n";
-        end
+        (Arg.usage (Arg.align arg_defs) usage)
     else
     begin
-        let filename = Sys.argv.(1) in
-        (* Read additional Args if any *)
+        (if arg_n = 2 then make_default ());
+
+        let filename = List.hd (!arg_files) in
 
         print_string (make_title " ERRORS ");
         (* get pretokens*)
         let pretoks = prelex_file filename in
-        
+
         (* get sexp/tokens *)
         let toks = lex default_stt pretoks in
-        
+
         (* get node sexp  *)
         let nodes = sexp_parse_all_to_list default_grammar toks (Some ";") in
-        
+
         (* Parse All Declaration *)
         let pexps = pexp_decls_all nodes in
-        (* let pexps = pexp_parse_all nodes in *)
 
         (* get lexp *)
         let ctx = make_lexp_context in
         (*  Those are hardcoded operation *)
             let ctx = add_def "_+_" ctx in
             let ctx = add_def "_*_" ctx in
-  
-        (* let lexps, new_ctx = lexp_parse_all pexps ctx in *)
+
         let lexps, nctx = lexp_decls pexps ctx in
-            
+
         print_string "\n\n";
-        (* Printing *)(*
-        print_title "PreTokens";    debug_pretokens_print_all pretoks;
-        print_title "Base Sexp";    debug_sexp_print_all toks;  *)
-        print_string (make_title " Node Sexp "); debug_sexp_print_all nodes;
-        print_string "\n";
-        print_string (make_title " Pexp ");      debug_pexp_decls pexps;
-        (*debug_pexp_print_all pexps;*)
-        print_string "\n";
-        print_string (make_title " Lexp ");      debug_lexp_decls lexps;       
-        (* debug_lexp_print_all lexps; *)
-        print_string "\n";
+        (* Printing *)
+        (if (get_p_option "pretok") then(
+            print_string (make_title " PreTokens");
+            debug_pretokens_print_all pretoks; print_string "\n"));
+
+        (if (get_p_option "tok") then(
+            print_string (make_title " Base Sexp");
+            debug_sexp_print_all toks; print_string "\n"));
+
+        (if (get_p_option "sexp") then(
+            print_string (make_title " Node Sexp ");
+            debug_sexp_print_all nodes; print_string "\n"));
+
+        (if (get_p_option "pexp") then(
+            print_string (make_title " Pexp ");
+            debug_pexp_decls pexps; print_string "\n"));
+
+        (if (get_p_option "lexp") then(
+            print_string (make_title " Lexp ");
+            debug_lexp_decls lexps; print_string "\n"));
 
         print_string "\n";
         lexp_context_print nctx;
         print_string "\n";
-        
+
         (* Eval Each Expression *)
         print_string (make_title " Eval Print ");
-        
-        
+
         (* Eval declaration *)
-        let rctx = make_runtime_ctx in 
+        let rctx = make_runtime_ctx in
         let rctx = eval_decls lexps rctx in
-          
-        let _ = 
+
+        let _ =
         try
             (* Check if main is present *)
             let main = (senv_lookup "main" nctx) in
             (* Push main args here if any *)
-            
+
             (* get main body *)
             let body = (get_rte_variable main rctx) in
             (* eval main *)
             let r = (eval body rctx) in
                 print_eval_result 0 r
-                
-        with 
+
+        with
             Not_found ->  () in
-            
+
         (*  Print info *)
         print_string "\n\n";
-        print_rte_ctx rctx; 
-            
-            
+        print_rte_ctx rctx;
+
         print_call_trace ();
     end
 ;;

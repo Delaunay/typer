@@ -5,7 +5,7 @@
  *
  *      Example:
  *
- *          $./_build/ityper
+ *          $./_build/ityper [files]
  *            In[ 1] >> sqr = lambda x -> x * x;
  *            In[ 2] >> (sqr 4);
  *              Out[ 2] >> 16

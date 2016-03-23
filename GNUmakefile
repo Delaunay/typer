@@ -6,17 +6,14 @@ TEST_FILES := $(wildcard ./tests/*_test.ml)
 
 CFLAG = -cflag -rectypes -build-dir _build
 
-# This is for windows: windows version is old
-
-
 all: ityper typer debug tests
 
-typer: 
+typer:
 	ocamlbuild src/main.native $(CFLAG)
 	@mv _build/src/main.native _build/typer
 
 # debug file eval
-debug: 
+debug:
 	ocamlbuild tests/full_debug.native -I src $(CFLAG)
 	@mv _build/tests/full_debug.native _build/full_debug
 
@@ -25,7 +22,7 @@ ityper:
 	ocamlbuild tests/REPL.native -I src $(CFLAG)
 	@mv _build/tests/REPL.native _build/ityper
 
-tests-build: 
+tests-build:
 	# ============================
 	#           Build tests
 	# ============================
@@ -39,7 +36,9 @@ tests-run:
 	# ============================
 	@./_build/tests/utests
 
-# Make language doc    
+tests: tests-build tests-run
+
+# Make language doc
 doc-tex:
 	texi2pdf ./doc/manual.texi --pdf --build=clean
 
@@ -49,6 +48,6 @@ doc-ocaml:
 
 # everything is expected to be compiled in the "./_build/" folder
 clean:
-	-rm -rf _build 
+	-rm -rf _build
 
 .PHONY: ityper typer debug tests
