@@ -439,10 +439,8 @@ let debug_eval lxp ctx =
 
 (*  Eval a list of lexp *)
 let eval_all lxps rctx silent =
-    if silent then
-        List.map (fun g -> eval g rctx) lxps
-    else
-        List.map (fun g -> debug_eval g rctx) lxps;;
+    let evalfun = if silent then eval else debug_eval in
+    List.map (fun g -> evalfun g rctx) lxps;;
 
 (*  Eval String
  * ---------------------- *)

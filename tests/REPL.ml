@@ -1,3 +1,24 @@
+(* REPL.ml --- Read Eval Print Loop (REPL)
+
+Copyright (C) 2016  Pierre Delaunay
+
+Author: Pierre Delaunay <pierre.delaunay@hec.ca>
+
+This file is part of Typer.
+
+Typer is free software; you can redistribute it and/or modify it under the
+terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any
+later version.
+
+Typer is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+more details.
+
+You should have received a copy of the GNU General Public License along with
+this program.  If not, see <http://www.gnu.org/licenses/>.  *)
+
 (*
  *      Description:
  *          Read Eval Print Loop (REPL). It allows you to eval typer code
@@ -13,7 +34,7 @@
  *                    .     a + b;
  *              Out[ 3] >> 6
  *
- * --------------------------------------------------------------------------- *)
+ * -------------------------------------------------------------------------- *)
 
 
 open Debug
@@ -99,7 +120,7 @@ let ilexp_parse pexps lctx =
 let ieval lexps rctx =
     let (ldecls, lexprs) = lexps in
     let rctx = eval_decls ldecls rctx in
-    let vals = eval_all lexprs rctx in
+    let vals = eval_all lexprs rctx false in
         vals, rctx
 ;;
 
