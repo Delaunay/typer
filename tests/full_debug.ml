@@ -81,7 +81,7 @@ let arg_defs = [
             add_p_option "sexp" ();
             add_p_option "pexp" ();
             add_p_option "lexp" ()),
-        " Print all compilation step with debug info");
+        " Print all debug info");
 ];;
 
 let parse_args () =

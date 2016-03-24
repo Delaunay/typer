@@ -253,6 +253,9 @@ let rec _eval lxp ctx i: (value_type) =
         (* handle partial application i.e build a new lambda if Partial App *)
         | Lambda(_, vr, _, body) -> begin
             let (loc, name) = vr in
+
+            (* This was redundant since we already pushed args
+             * when processing the call expression *)
             (*  Get first arg * )
             let value = (get_rte_variable (Some name) 0 ctx) in
             let nctx = add_rte_variable (Some name) value ctx in
@@ -284,6 +287,10 @@ let rec _eval lxp ctx i: (value_type) =
             (* Eval target *)
             let v = _eval target ctx (i + 1) in
 
+            let (_, (osize, _)) = ctx in
+            let csize = get_rte_size ctx in
+            let offset = csize - osize in
+
             (*  V must be a constructor Call *)
             let ctor_name, args = match v with
                 | Call(lname, args) -> (match lname with
@@ -292,8 +299,7 @@ let rec _eval lxp ctx i: (value_type) =
 
                 | Cons(((_, vname), idx), (_, cname)) -> begin
                     (*  retrieve type definition *)
-
-                    let info = get_rte_variable (Some vname) idx ctx in
+                    let info = get_rte_variable (Some vname) (idx + offset) ctx in
                     let ctor_def = match info with
                         | Inductive(_, _, _, c) -> c
                         | _ -> eval_error loc "Not an Inductive Type" in
@@ -325,6 +331,13 @@ let rec _eval lxp ctx i: (value_type) =
                     else
                         false in
 
+            (* if the argument is a reference to a variable its index need to be
+             * shifted  *)
+            let arg_shift xp offset =
+                match xp with
+                    | Var(a, idx) -> Var(a, idx + offset)
+                    | _ -> xp in
+
             (*  Search for the working pattern *)
             let sol = SMap.filter is_true pat in
                 if SMap.is_empty sol then
@@ -333,12 +346,21 @@ let rec _eval lxp ctx i: (value_type) =
                     (*  Get working pattern *)
                     let key, (_, pat_args, exp) = SMap.min_binding sol in
 
+                    (* count the number of declared variables *)
+                    let case_offset = List.fold_left (fun i g ->
+                        match g with None -> i | _ -> i + 1)
+                        0 pat_args in
+
+                    let toffset = case_offset + offset in
+
                     (* build context *)
-                    let nctx = List.fold_left2 (fun nctx pat cl ->
+                    let nctx = List.fold_left2 (fun nctx pat arg ->
                         match pat with
                             | None -> nctx
-                            | Some (_, (_, name)) -> let (_, xp) = cl in
-                                add_rte_variable (Some name) xp nctx)
+                            | Some (_, (_, name)) ->
+                                let (_, xp) = arg in
+                                let xp = (arg_shift xp toffset) in
+                                    add_rte_variable (Some name) xp nctx)
 
                         ctx pat_args args in
                             (* eval body *)
@@ -402,7 +424,9 @@ and print_call_trace () =
     print_string (make_sep '=');
 ;;
 
-let eval lxp ctx = _eval lxp ctx 1
+let eval lxp ctx =
+    global_trace := [];
+    _eval lxp ctx 1
 
 let debug_eval lxp ctx =
     try
@@ -415,7 +439,6 @@ let debug_eval lxp ctx =
 
 (*  Eval a list of lexp *)
 let eval_all lxps rctx silent =
-    global_trace := [];
     if silent then
         List.map (fun g -> eval g rctx) lxps
     else

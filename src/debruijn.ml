@@ -90,9 +90,9 @@ let temp_scope ctx bound = let (a, b, c) = ctx in (a, b, bound)
 (*  return its current DeBruijn index *)
 let rec senv_lookup (name: string) (ctx: lexp_context): int =
     let ((n, map), _, (csize, rof)) = ctx in
-    let raw_idx =  n - (StringMap.find name map) - 1 in
-        (* if raw_idx > (n - csize) then
-            raw_idx - 0   (* Shift if the variable is not bound *)
+    let raw_idx =  n - (StringMap.find name map) - 1 in (*
+        if raw_idx > (n - csize) then
+            raw_idx - rof   (* Shift if the variable is not bound *)
         else *)
         raw_idx
 ;;

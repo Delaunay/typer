@@ -3,6 +3,7 @@ open Debruijn   (* make_lexp_context *)
 open Eval       (* make_rte_ctx *)
 open Utest_lib
 open Util
+open Lexp
 
 
 (* default environment *)
@@ -10,8 +11,8 @@ let lctx = make_lexp_context
 let lctx = add_def "_+_" lctx
 let lctx = add_def "_*_" lctx
 let rctx = make_runtime_ctx
-let rctx = add_rte_variable (Some "_+_") dlxp rctx
-let rctx = add_rte_variable (Some "_-_") dlxp rctx
+let rctx = add_rte_variable (Some "_+_") iop_binary rctx
+let rctx = add_rte_variable (Some "_-_") iop_binary rctx
 
 let _ = (add_test "EVAL" "Variable Cascade" (fun () ->
 
@@ -95,7 +96,7 @@ let _ = (add_test "EVAL" "Infinite Recursion failure" (fun () ->
     let rctx, lctx = eval_decl_str code lctx rctx in
 
     (* Expect throwing *)
-    try         (*  use the silent version as an error wil be thrown *)
+    try         (*  use the silent version as an error will be thrown *)
         let _ = _eval_expr_str "(infinity 0);" lctx rctx true in
             failure ()
     with
@@ -168,11 +169,11 @@ let _ = (add_test "EVAL" "Recursive Call" (fun () ->
 
         tonum = lambda x -> case x
             | (succ y) => (1 + (tonum y))
-            | _ => 0;" in
+            | zero => 0;" in
 
     let rctx, lctx = eval_decl_str code lctx rctx in
 
-    let rcode = "(tonum zero); (tonum zero); (tonum zero);"in
+    let rcode = "(tonum zero); (tonum one); (tonum two);"in
 
     (* Eval defined lambda *)
     let ret = eval_expr_str rcode lctx rctx in
