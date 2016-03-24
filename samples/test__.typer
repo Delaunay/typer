@@ -1,35 +1,11 @@
 
 
+sqr = lambda x -> x * x;
+cube = lambda x -> x * (sqr x);
 
-%a = lambda x ->
-%    let a1 : Nat; a1 = 2; b1 : Nat; b1 = 3; in
-%        a1 + b1 + x
-%;
-
-% main = (a 2)
+main = (cube 4);
 
 
-a = 2;
-
-Nat = inductive_ (dNat) (zero) (succ Nat);
-        
-zero = inductive-cons Nat zero; 
-succ = inductive-cons Nat succ;
-
-one = (succ zero);
-two = (succ one);
-three = (succ two);
-
-tonum = lambda x -> case x 
-    | (succ y) => (1 + (tonum y))
-    | _ => 0
-;
-    
-x = zero;
-% main = zero; => zero(Nat[1])
-% main = x; => succ(Nat[2])
-
-main = (tonum one);
 
 
 
@@ -38,8 +14,8 @@ main = (tonum one);
 %----------------------------------------------------------------------------
 %|+- Call: (tonum[1] zero[6])
 %|:+- Var: zero[6]
-%|:+- Lambda: lambda (x: unkwn) -> case x[0]: unkwn| succ y -> 1 + (tonum[4] y[0]); | zero -> 0; 
-%|:|+- Case: case x[0]: unkwn| succ y -> 1 + (tonum[4] y[0]); | zero -> 0; 
+%|:+- Lambda: lambda (x: unkwn) -> case x[0]: unkwn| succ y -> 1 + (tonum[4] y[0]); | zero -> 0;
+%|:|+- Case: case x[0]: unkwn| succ y -> 1 + (tonum[4] y[0]); | zero -> 0;
 %|:|:+- Var: x[0]
 %|:|:+- Imm: 0
 %============================================================================

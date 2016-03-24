@@ -172,9 +172,9 @@ let main () =
             (* Push main args here if any *)
 
             (* get main body *)
-            let body = (get_rte_variable main rctx) in
+            let body = (get_rte_variable (Some "main") main rctx) in
             (* eval main *)
-            let r = (eval body rctx) in
+            let r = (debug_eval body rctx) in
                 print_eval_result 0 r
 
         with
