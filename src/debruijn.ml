@@ -76,6 +76,8 @@ let make_lexp_context = (_make_senv_type, _make_myers, (0, 0));;
 
 let get_roffset ctx = let (_, _, (_, rof)) = ctx in rof;;
 
+let get_size ctx = let ((n, _), _, _) = ctx in n;;
+
 (* Enter a local scope such as let *)
 let local_scope ctx pos =
     let ((l, map), b, c) = ctx in
@@ -128,10 +130,15 @@ let env_lookup_type_by_index index ctx =
 ;;
 
 let env_lookup_type ctx (v : vref) =
+  let ((dv_size, _), info_env, _) = ctx in
+  let ti_size = Myers.length info_env in
+  let sync_offset = dv_size - ti_size in
+
   let ((_, rname), dbi) = v in
-  try let (recursion_offset, (_, dname), _, t) = Myers.nth dbi (_get_env ctx) in
+
+  try let (rof, (_, dname), _, t) = Myers.nth (dbi - sync_offset) info_env in
       if dname = rname then
-        t (* Shift (dbi - recursion_offset, t) *)
+        t (* Shift (dbi - roft, t) *)
       else
         internal_error ("DeBruijn index refers to wrong name. Expected: \""
                                 ^ rname ^ "\" got \"" ^ dname ^ "\"")

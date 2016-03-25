@@ -92,7 +92,7 @@ let make_rheader (head: (((char* int) option  * string) list)) =
     List.iter (fun (o, name) ->
         let _ = match o with
             | Some ('r', size) -> ralign_print_string name size
-            | Some ('r', size) -> lalign_print_string name size
+            | Some ('l', size) -> lalign_print_string name size
             | _ -> print_string name in
         print_string " | ")
         head;

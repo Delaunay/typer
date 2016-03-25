@@ -355,7 +355,51 @@ and lexp_parse_constructors ctors ctx i =
 
 (*  Parse let declaration *)
 and lexp_decls decls ctx: (((vdef * lexp * ltype) list) * lexp_context) =
+    (* The new implementation suppose that forward declarations are
+     * used when mutually recursive type are declared               *)
     let lexp_parse p ctx = _lexp_parse p ctx 1 in
+    let m = (List.length decls) + (get_size ctx) in
+
+    (* Make it look like we processed all declarations *)
+    let forge_ctx ctx n =
+        let ((m, map), a, b) = ctx in
+            ((n, map), a, b) in
+
+    let iter_fun (idx, ctx, sset, acc) elem =
+        let ((loc, name), pxp, bl) = elem in (
+            (* Process Type *)
+            if bl then (
+                let ctx = senv_add_var name loc ctx in
+                let ltp = lexp_parse pxp (forge_ctx ctx m) in
+                let sset = StringMap.add name ltp sset in
+                let ctx = env_add_var_info (0, (loc, name), dlxp, ltp) ctx in
+                    (idx + 1, ctx, sset, acc)
+            )
+            (* Process instruction *)
+            else(
+                (* Type annotations was provided *)
+                try
+                    let ltp = StringMap.find name sset in
+                    (* Type check *)
+                    let lxp = lexp_p_check pxp ltp (forge_ctx ctx m) in
+                        (idx + 1, ctx, sset, ((loc, name), lxp, ltp)::acc)
+
+                (* No Type annotations *)
+                with Not_found ->
+                    let ctx = senv_add_var name loc ctx in
+                    let lxp, ltp = lexp_p_infer pxp (forge_ctx ctx m) in
+                    let ctx = env_add_var_info (0, (loc, name), lxp, ltp) ctx in
+                        (idx + 1, ctx, sset, ((loc, name), lxp, ltp)::acc))
+            ) in
+
+    let (n, nctx, _, decls) = List.fold_left iter_fun
+        (0, ctx, StringMap.empty, []) decls in
+        (* TODO: make a cleaner context after first pass *)
+        (List.rev decls), nctx
+
+
+
+    (*
     (*  Merge Type info and declaration together                      *)
     (* merge with a map to guarantee uniqueness. *)
     let rec merge_decls (decls: (pvar * pexp * bool) list) merged acc:
@@ -398,7 +442,7 @@ and lexp_decls decls ctx: (((vdef * lexp * ltype) list) * lexp_context) =
     (* cast map to list to preserve declaration order *)
     let decls = List.map (fun name ->
             let (l, inst, tp) = SMap.find name mdecls in
-                ((l, name), inst, tp) ) ord
+                ((l, name), inst, tp)) ord
         in
 
     (*  Add Each Variable to the environment *)
@@ -436,7 +480,7 @@ and lexp_decls decls ctx: (((vdef * lexp * ltype) list) * lexp_context) =
                             process_var_info tl _ctx acc m) in
 
     let acc, ctx = process_var_info decls nctx [] n in
-        acc, ctx
+        acc, ctx *)
 
 and _lexp_parse_all (p: pexp list) (ctx: lexp_context) i : lexp list =
 
@@ -539,11 +583,15 @@ and lexp_p_infer (p : pexp) (env : lexp_context): lexp * ltype =
         (* Trivial *)
         | Imm (sxp) -> (
             match sxp with
+                (* FIXME use the one that are already in the ctx *)
                 | Integer _ -> (lxp, type_int)
                 | Float _ -> (lxp, type_float)
                 | _ -> lexp_error tloc "Could not infer type";
                     (lxp, UnknownType(tloc)))
 
+        (* This does not work because when it is called
+         *  env and senv are out of sync (lexp_decls is to blame)
+            *)
         | Var v ->
             let ltp = env_lookup_type env v in
                 (lxp, ltp)
@@ -708,35 +756,40 @@ and lexp_print_decls opt decls =
 (*  Print context  *)
 and print_lexp_ctx ctx =
     let ((n, map), env, f) = ctx in
+    let dv_size = n in                (* Number of declared Variables       *)
+    let ti_size = Myers.length env in (* Number of variables with type info *)
+    let sync_offset = dv_size - ti_size in
 
     print_string (make_title " LEXP CONTEXT ");
 
     make_rheader [
-        (Some ('r', 10), "NAME");
-        (Some ('r',  7), "INDEX");
-        (Some ('r', 10), "NAME");
-        (Some ('r', 20), "VALUE:TYPE")];
+        (Some ('l', 10), "NAME");
+        (Some ('l',  7), "INDEX");
+        (Some ('l', 10), "NAME");
+        (Some ('l', 36), "VALUE:TYPE")];
 
     print_string (make_sep '-');
 
     StringMap.iter (fun key idx ->
         (* Print senv info *)
         print_string "    | ";
-        ralign_print_string key 10;
+        lalign_print_string key 10;
         print_string " | ";
-        ralign_print_int (n - idx - 1) 7;
+        lalign_print_int (n - idx - 1) 7;
         print_string " | ";
 
         (*  Print env Info *)
-        try let (_, (_, name), exp, tp) = env_lookup_by_index (n - idx - 1) ctx in
-            ralign_print_string name 10; (*   name must match *)
+        try let (_, (_, name), exp, tp) =
+                        env_lookup_by_index (n - idx - 1 - sync_offset) ctx in
+
+            lalign_print_string name 10; (*   name must match *)
             print_string " | ";
             lexp_print_adv (false, 0, true) exp;
             print_string ": ";
             lexp_print_adv (false, 0, true) tp;
             print_string "\n"
         with
-            Not_found -> print_string "Not_found \n")
+            Not_found -> print_string "Not_found  |\n")
 
         map;
 

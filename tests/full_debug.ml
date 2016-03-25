@@ -105,15 +105,12 @@ let main () =
     (*  Print Usage *)
     if arg_n == 1 then
         (Arg.usage (Arg.align arg_defs) usage)
-    else
-    begin
+    else(
         (if arg_n = 2 then make_default ());
 
         let filename = List.hd (!arg_files) in
 
         print_string (make_title " ERRORS ");
-
-        try(
 
         (* get pretokens*)
         let pretoks = prelex_file filename in
@@ -149,10 +146,13 @@ let main () =
             let ctx = add_def "_+_" ctx in
             let ctx = add_def "_*_" ctx in
 
-            let lexps, nctx = lexp_decls pexps ctx in
-
-        print_string "\n\n";
-        (* Printing *)
+        let lexps, nctx =
+            try lexp_decls pexps ctx
+            with e -> (
+                print_lexp_ctx (!_global_lexp_ctx);
+                print_lexp_trace ();
+                raise e
+            ) in
 
         (if (get_p_option "lexp") then(
             print_string (make_title " Lexp ");
@@ -169,8 +169,7 @@ let main () =
         let rctx = make_runtime_ctx in
         let rctx = eval_decls lexps rctx in
 
-        let _ =
-        try
+        (try
             (* Check if main is present *)
             let main = (senv_lookup "main" nctx) in
             (* Push main args here if any *)
@@ -179,24 +178,12 @@ let main () =
             let body = (get_rte_variable (Some "main") main rctx) in
             (* eval main *)
             let r = (debug_eval body rctx) in
-                print_eval_result 0 r
+                print_eval_result 1 r
 
         with
-            Not_found ->  () in
-
-        (*  Print info *)
-        print_string "\n\n";
-        print_rte_ctx rctx;
-        print_eval_trace ();
-
+            Not_found -> ()
         )
-        with e -> (
-            print_lexp_ctx (!_global_lexp_ctx);
-            print_lexp_trace ();
-            raise e
-        )
-
-    end
+    )
 ;;
 
 main ()

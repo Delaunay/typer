@@ -101,7 +101,8 @@ let get_rte_variable (name: string option) (idx: int) (ctx: runtime_env): lexp =
                 x
             else (
             eval_error dloc
-                ("Variable lookup failure. Expected: \"" ^ n2 ^ "\" got \"" ^ n1 ^ "\"")))
+                ("Variable lookup failure. Expected: \"" ^
+                n2 ^ "[" ^ (string_of_int idx) ^ "]" ^ "\" got \"" ^ n1 ^ "\"")))
 
         | _ -> x (* can't check variable's name (call args do not have names) *)
 ;;
