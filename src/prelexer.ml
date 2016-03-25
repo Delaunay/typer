@@ -134,17 +134,17 @@ let rec prelex (file : string) (fin : in_channel) ln ctx acc
          | ((ln, cpos, _, _) :: ctx) ->
            (prelexer_error {file=file; line=ln; column=cpos}
                       "Unmatched opening brace"; List.rev acc)
-         
-         
+
+
 let prelex_file file =
   let fin = open_in file
   in prelex file fin 1 [] []  (* Traditionally, line numbers start at 1 :-(  *)
-  
+
 (*  Since current implementation is not compatible with stream          *
  *  we write a temporary file and use this file as input.               *
  *  This is a terrible solution but for the things we do it does not    *
  *  really matters. Plus it will make testing easier                    *)
-let prelex_string str = 
+let prelex_string str =
     let fin = open_out "_temp_hack" in
         output_string fin str;
         (flush_all);
@@ -163,7 +163,6 @@ let rec pretokens_print pretokens =
                  -> print_string "\""; print_string str; print_string "\"")
             pretokens
 
-            
-            
-            
-            
+
+
+

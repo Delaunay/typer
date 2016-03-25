@@ -116,13 +116,11 @@ let _ = (add_test "EVAL" "Case" (fun () ->
         i = 90;\n
         idt = inductive_ (idtd) (ctr0) (ctr1 idt) (ctr2 idt) (ctr3 idt);\n
         j = 100;\n
-
                                             d = 10;\n
         ctr0 = inductive-cons idt ctr0;\n   e = 20;\n
         ctr1 = inductive-cons idt ctr1;\n   f = 30;\n
         ctr2 = inductive-cons idt ctr2;\n   g = 40;\n
         ctr3 = inductive-cons idt ctr2;\n   h = 50;\n
-
                                     x = 1;\n
         a = (ctr1 (ctr2 ctr0));\n   y = 2;\n
         b = (ctr2 (ctr2 ctr0));\n   z = 3;\n
@@ -153,23 +151,31 @@ let _ = (add_test "EVAL" "Case" (fun () ->
 )
 ;;
 
+(*  Those wil be used multiple times *)
+let nat_decl = "
+    Nat = inductive_ (dNat) (zero) (succ Nat);
+
+    zero = inductive-cons Nat zero;
+    succ = inductive-cons Nat succ;
+
+    tonum = lambda x -> case x\n
+            | (succ y) => (1 + (tonum y))
+            | zero => 0;"
+;;
+
+let bool_decl = "
+    Bool = inductive (dBool) (true) (false);
+    false = inductive-cons Bool false;
+    true = inductive-cons Bool true;"
+;;
+
 
 let _ = (add_test "EVAL" "Recursive Call" (fun () ->
-    (* Inductive type declaration *)
-    let code = "
-                                                    a = 1;\n
-        Nat = inductive_ (dNat) (zero) (succ Nat);  b = 2;\n
 
-        zero = inductive-cons Nat zero;             c = 3;\n
-        succ = inductive-cons Nat succ;             d = 4;\n
-
-        one = (succ zero);      e = 5;\n
-        two = (succ one);       f = 6;\n
-        three = (succ three);   g = 7;\n
-
-        tonum = lambda x -> case x
-            | (succ y) => (1 + (tonum y))
-            | zero => 0;" in
+    let code = nat_decl ^ "
+        one = (succ zero);
+        two = (succ one);
+        three = (succ three);" in
 
     let rctx, lctx = eval_decl_str code lctx rctx in
 
@@ -190,6 +196,54 @@ let _ = (add_test "EVAL" "Recursive Call" (fun () ->
             | _ -> failure ())
 )
 ;;
+
+let _ = (add_test "EVAL" "Nat Plus" (fun () ->
+
+    let code = nat_decl ^ "
+        one = (succ zero);
+        two = (succ one);
+        three = (succ three);
+
+        plus = lambda x y -> case x
+           | zero => y
+           | succ z => succ (plus z y);
+       " in
+
+    let rctx, lctx = eval_decl_str code lctx rctx in
+
+    let rcode = "
+        (tonum (plus zero two));
+        (tonum (plus two zero));
+        5;"in
+
+    (* Eval defined lambda *)
+    let ret = eval_expr_str rcode lctx rctx in
+        (* Expect a 3 results *)
+        match ret with
+            | [a; b; c] ->
+                let t1 = expect_equal_int (get_int a) 2 in
+                let t2 = expect_equal_int (get_int b) 2 in
+                let t3 = expect_equal_int (get_int c) 5 in
+                    if t1 = 0 && t2 = 0 && t3 = 0 then
+                        success ()
+                    else
+                        failure ()
+            | _ -> failure ())
+)
+;;
+
+(*
+List = inductive (dList (a : Type)) (nil) (cons a (List a));
+
+nil = inductive-cons List nil;
+cons = inductive-cons List cons;
+
+length : (a : Type) => List a -> Nat;
+length = lambda a => lambda (xs : List a) ->
+    case xs
+        | nil => zero
+        | cons x xs => succ (length xs);
+*)
 
 
 

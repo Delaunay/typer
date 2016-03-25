@@ -131,9 +131,11 @@ let env_lookup_type ctx (v : vref) =
   let ((_, rname), dbi) = v in
   try let (recursion_offset, (_, dname), _, t) = Myers.nth dbi (_get_env ctx) in
       if dname = rname then
-        Shift (dbi - recursion_offset, t)
+        t (* Shift (dbi - recursion_offset, t) *)
       else
-        internal_error "DeBruijn index refers to wrong name!"
+        internal_error ("DeBruijn index refers to wrong name. Expected: \""
+                                ^ rname ^ "\" got \"" ^ dname ^ "\"")
+
   with Not_found -> internal_error "DeBruijn index out of bounds!"
 
 let env_lookup_by_index index (ctx: lexp_context): env_elem =

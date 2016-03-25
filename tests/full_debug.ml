@@ -112,17 +112,36 @@ let main () =
         let filename = List.hd (!arg_files) in
 
         print_string (make_title " ERRORS ");
+
+        try(
+
         (* get pretokens*)
         let pretoks = prelex_file filename in
+
+        (if (get_p_option "pretok") then(
+            print_string (make_title " PreTokens");
+            debug_pretokens_print_all pretoks; print_string "\n"));
 
         (* get sexp/tokens *)
         let toks = lex default_stt pretoks in
 
+        (if (get_p_option "tok") then(
+            print_string (make_title " Base Sexp");
+            debug_sexp_print_all toks; print_string "\n"));
+
         (* get node sexp  *)
         let nodes = sexp_parse_all_to_list default_grammar toks (Some ";") in
 
+        (if (get_p_option "sexp") then(
+            print_string (make_title " Node Sexp ");
+            debug_sexp_print_all nodes; print_string "\n"));
+
         (* Parse All Declaration *)
         let pexps = pexp_decls_all nodes in
+
+        (if (get_p_option "pexp") then(
+            print_string (make_title " Pexp ");
+            debug_pexp_decls pexps; print_string "\n"));
 
         (* get lexp *)
         let ctx = make_lexp_context in
@@ -130,32 +149,17 @@ let main () =
             let ctx = add_def "_+_" ctx in
             let ctx = add_def "_*_" ctx in
 
-        let lexps, nctx = lexp_decls pexps ctx in
+            let lexps, nctx = lexp_decls pexps ctx in
 
         print_string "\n\n";
         (* Printing *)
-        (if (get_p_option "pretok") then(
-            print_string (make_title " PreTokens");
-            debug_pretokens_print_all pretoks; print_string "\n"));
-
-        (if (get_p_option "tok") then(
-            print_string (make_title " Base Sexp");
-            debug_sexp_print_all toks; print_string "\n"));
-
-        (if (get_p_option "sexp") then(
-            print_string (make_title " Node Sexp ");
-            debug_sexp_print_all nodes; print_string "\n"));
-
-        (if (get_p_option "pexp") then(
-            print_string (make_title " Pexp ");
-            debug_pexp_decls pexps; print_string "\n"));
 
         (if (get_p_option "lexp") then(
             print_string (make_title " Lexp ");
             debug_lexp_decls lexps; print_string "\n"));
 
         print_string "\n";
-        lexp_context_print nctx;
+        print_lexp_ctx nctx;
         print_string "\n";
 
         (* Eval Each Expression *)
@@ -183,8 +187,15 @@ let main () =
         (*  Print info *)
         print_string "\n\n";
         print_rte_ctx rctx;
+        print_eval_trace ();
 
-        print_call_trace ();
+        )
+        with e -> (
+            print_lexp_ctx (!_global_lexp_ctx);
+            print_lexp_trace ();
+            raise e
+        )
+
     end
 ;;
 

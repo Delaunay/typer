@@ -20,16 +20,16 @@
  *   FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
  *   more details.
  *
- *   You should have received a copy of the GNU General Public License along 
- *   with this program.  If not, see <http://www.gnu.org/licenses/>. 
+ *   You should have received a copy of the GNU General Public License along
+ *   with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
  * ---------------------------------------------------------------------------
- *  
+ *
  *      Description:
  *          Declare new print function which align printed values.
  *
  * ---------------------------------------------------------------------------*)
- 
+
 (*  Compute the number of character needed to print an integer*)
 let str_size_int value =
     (int_of_float (log10 (float value))) + 1
@@ -40,44 +40,44 @@ let rec make_line c n = String.make n c;;
 
 (*  Big numbers are replaced by #### *)
 let cut_int (v:int) (start:int) (len:int): int = 0;;
-     
-(*  LALIGN 
+
+(*  LALIGN
  * ----------------------- *)
 let ralign_generic get_size print_str print_elem cut_elem elem col =
     let n = get_size elem in
-    if n > col then 
+    if n > col then
         print_elem (cut_elem elem 0 col)
     else begin
         print_str (make_line ' ' (col - n));
         print_elem elem; end
 ;;
 
-let ralign_print_string = 
+let ralign_print_string =
     ralign_generic String.length print_string print_string String.sub;;
 
 let ralign_print_int =
     ralign_generic str_size_int print_string print_int cut_int;;
-    
 
-(*  LALIGN 
+
+(*  LALIGN
  * ----------------------- *)
 let lalign_generic get_size print_str print_elem cut_elem elem col =
     let n = get_size elem in
-    if n > col then 
+    if n > col then
         print_elem (cut_elem elem 0 col)
     else begin
-        print_elem elem; 
+        print_elem elem;
         print_str (make_line ' ' (col - n)); end
-;;  
-    
-let lalign_print_string = 
+;;
+
+let lalign_print_string =
     lalign_generic String.length print_string print_string String.sub;;
 
 let lalign_print_int =
     lalign_generic str_size_int print_string print_int cut_int;;
 
 (* Table Printing helper *)
-let make_title title = 
+let make_title title =
     let title_n = String.length title in
     let p = title_n mod 2 in
     let sep_n = (80 - title_n - 4) / 2 in
@@ -88,7 +88,7 @@ let make_title title =
 
 let make_rheader (head: (((char* int) option  * string) list)) =
     print_string "    | ";
-    
+
     List.iter (fun (o, name) ->
         let _ = match o with
             | Some ('r', size) -> ralign_print_string name size
@@ -96,34 +96,32 @@ let make_rheader (head: (((char* int) option  * string) list)) =
             | _ -> print_string name in
         print_string " | ")
         head;
-    
+
     print_string "\n"
 ;;
-    
+
 let make_sep c = "    " ^ (make_line c 76) ^ "\n";;
 
 
 (* used to help visualize the call trace *)
 let _print_ct_tree i =
-    print_string "    ";
     let rec loop j =
         if j = i then () else
-        match j with 
+        match j with
             | _ when (j mod 2) = 0 -> print_char '|'; loop (j + 1)
             | _ -> print_char ':'; loop (j + 1) in
     loop 0
-;;  
+;;
 
 (* iterate of first n of a list l and apply f *)
 let print_first n l f =
     let rec loop i l =
         match l with
             | [] -> ()
-            | hd::tl -> 
+            | hd::tl ->
                 if i < n then ((f i hd); loop (i + 1) tl;)
                 else () in
     loop 0 l
 ;;
 
-    
-    
+

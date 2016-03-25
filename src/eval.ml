@@ -146,13 +146,9 @@ let nfirst_rte_var n ctx =
     loop 0 []
 ;;
 
-type call_trace_type = (int * lexp) list
-
-let global_trace = ref []
-let global_env = ref (nil, (0, 0))
+let _global_eval_trace = ref []
+let _global_eval_ctx = ref (nil, (0, 0))
 let _eval_max_recursion_depth = ref 255
-
-let add_call cll i = global_trace := (i, cll)::!global_trace
 
 (*  currently, we don't do much *)
 type value_type = lexp
@@ -160,12 +156,13 @@ type value_type = lexp
 (* This is an internal definition
  * 'i' is the recursion depth used to print the call trace *)
 let rec _eval lxp ctx i: (value_type) =
+    let tloc = lexp_location lxp in
 
     (if i > (!_eval_max_recursion_depth) then
         raise (internal_error "Recursion Depth exceeded"));
 
-    add_call lxp i;
-    global_env := ctx;  (*  Allow us to print the latest used environment *)
+    _global_eval_ctx := ctx;  (*  Allow us to print the latest used environment *)
+    _global_eval_trace := (i, tloc, lxp)::!_global_eval_trace;
 
     match lxp with
         (*  This is already a leaf *)
@@ -229,7 +226,7 @@ let rec _eval lxp ctx i: (value_type) =
 
                 (* This is a named function call *)
                 | Var((_, name), idx) ->
-                    (*  get function body from current context *)
+                    (*  get function's body from current context *)
                     let body = get_rte_variable (Some name) idx ctx in
 
                     (*  _eval every args using current context *)
@@ -407,33 +404,20 @@ and print_eval_result i lxp =
         | Imm(v) -> sexp_print v; print_string "\n"
         | e ->  lexp_print e; print_string "\n"
 
-and print_call_trace () =
-    print_string (make_title " CALL TRACE ");
-
-    let n = List.length !global_trace in
-    print_string "        size = "; print_int n;
-    print_string (" max_printed = 50" ^ "\n");
-    print_string (make_sep '-');
-
-    let racc = List.rev !global_trace in
-        print_first 50 racc (fun j (i, g) ->
-            _print_ct_tree i; print_string "+- ";
-            print_string (lexp_to_string g); print_string ": ";
-            lexp_print g; print_string "\n");
-
-    print_string (make_sep '=');
+and print_eval_trace () =
+    print_trace " EVAL TRACE " 50 lexp_to_string lexp_print !_global_eval_trace
 ;;
 
 let eval lxp ctx =
-    global_trace := [];
+    _global_eval_trace := [];
     _eval lxp ctx 1
 
 let debug_eval lxp ctx =
     try
         eval lxp ctx
     with e -> (
-        print_rte_ctx (!global_env);
-        print_call_trace ();
+        print_rte_ctx (!_global_eval_ctx);
+        print_eval_trace ();
         raise e)
 ;;
 
