@@ -159,7 +159,6 @@ let debug_pexp_print_all pexps =
 (* Print lexp with debug info *)
 let debug_lexp_print tlxp =
     print_string " ";
-    let dloc = dummy_location in
     let print_info msg loc lex =
         print_string msg; print_string "[";
         print_loc loc;

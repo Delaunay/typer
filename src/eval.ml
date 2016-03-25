@@ -252,7 +252,7 @@ let rec _eval lxp ctx i: (value_type) =
         (* I am thinking about building a 'get_free_variable' to be able to *)
         (* handle partial application i.e build a new lambda if Partial App *)
         | Lambda(_, vr, _, body) -> begin
-            let (loc, name) = vr in
+            (* let (loc, name) = vr in *)
 
             (* This was redundant since we already pushed args
              * when processing the call expression *)
@@ -304,8 +304,9 @@ let rec _eval lxp ctx i: (value_type) =
                         | Inductive(_, _, _, c) -> c
                         | _ -> eval_error loc "Not an Inductive Type" in
 
-                    try let args = SMap.find cname ctor_def in
-                        cname, args
+                    try match SMap.find cname ctor_def with
+                        | [] -> cname, []
+                        | _ -> eval_error loc "Constructor not applied"
                     with
                         Not_found ->
                             eval_error loc "Constructor does not exist" end

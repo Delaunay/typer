@@ -71,7 +71,7 @@ type ltype = lexp
    | Lambda of arg_kind * vdef * ltype * lexp
    | Call of lexp * (arg_kind * lexp) list (* Curried call.  *)
    | Inductive of location * label * ((arg_kind * vdef * ltype) list)
-                  * ((arg_kind * ltype) list) SMap.t
+                  * ((arg_kind * vdef option * ltype) list) SMap.t
    | Cons of vref * symbol (* = Type info * ctor_name*)
    | Case of location * lexp
              * ltype (* The base inductive type over which we switch.  *)
