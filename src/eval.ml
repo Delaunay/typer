@@ -52,7 +52,8 @@ let print_myers_list l print_fun =
     let n = (length l) - 1 in
 
     print_string (make_title " ENVIRONMENT ");
-    make_rheader [(None, "INDEX"); (None, "VARIABLE NAME"); (None, "VALUE")];
+    make_rheader [(None, "INDEX");
+        (None, "VARIABLE NAME"); (Some ('l', 48), "VALUE")];
     print_string (make_sep '-');
 
     for i = 0 to n do
@@ -250,7 +251,7 @@ let rec _eval lxp ctx i: (value_type) =
         (* I am thinking about building a 'get_free_variable' to be able to *)
         (* handle partial application i.e build a new lambda if Partial App *)
         | Lambda(_, vr, _, body) -> begin
-            let (loc, name) = vr in
+            (* let (loc, name) = vr in *)
 
             (* This was redundant since we already pushed args
              * when processing the call expression *)
@@ -292,6 +293,8 @@ let rec _eval lxp ctx i: (value_type) =
             (*  V must be a constructor Call *)
             let ctor_name, args = match v with
                 | Call(lname, args) -> (match lname with
+                    (* FIXME we should check that ctor_name is an existing
+                     * constructor with the correct number of args          *)
                     | Var((_, ctor_name), _) -> ctor_name, args
                     | _ -> eval_error loc "Target is not a Constructor" )
 
@@ -302,8 +305,14 @@ let rec _eval lxp ctx i: (value_type) =
                         | Inductive(_, _, _, c) -> c
                         | _ -> eval_error loc "Not an Inductive Type" in
 
-                    try let args = SMap.find cname ctor_def in
-                        cname, args
+                    try match SMap.find cname ctor_def with
+                        | [] -> cname, []
+                        | carg ->
+                            let ctor_n = List.length carg in
+                            eval_error loc ("Constructor not applied. " ^
+                                 "Constructor name: \"" ^ cname ^
+                                 "\": " ^ (string_of_int ctor_n) ^
+                                 " argument(s) expected")
                     with
                         Not_found ->
                             eval_error loc "Constructor does not exist" end
@@ -424,10 +433,8 @@ let debug_eval lxp ctx =
 
 (*  Eval a list of lexp *)
 let eval_all lxps rctx silent =
-    if silent then
-        List.map (fun g -> eval g rctx) lxps
-    else
-        List.map (fun g -> debug_eval g rctx) lxps;;
+    let evalfun = if silent then eval else debug_eval in
+    List.map (fun g -> evalfun g rctx) lxps;;
 
 (*  Eval String
  * ---------------------- *)

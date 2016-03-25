@@ -1,6 +1,6 @@
 (* prelexer.ml --- First half of lexical analysis of Typer.
 
-Copyright (C) 2011-2012  Free Software Foundation, Inc.
+Copyright (C) 2011-2012, 2016  Free Software Foundation, Inc.
 
 Author: Stefan Monnier <monnier@iro.umontreal.ca>
 Keywords: languages, lisp, dependent types.
@@ -143,11 +143,15 @@ let prelex_file file =
 (*  Since current implementation is not compatible with stream          *
  *  we write a temporary file and use this file as input.               *
  *  This is a terrible solution but for the things we do it does not    *
- *  really matters. Plus it will make testing easier                    *)
+ *  really matters.  Plus it will make testing easier.                  *)
 let prelex_string str =
+    (* FIXME: we should use a proper temp file (e.g. with mktemp).  *)
+    (* "mktemp _temp_typer.XXXX" create a file with an unknown name in /temp
+     * or in $TMPDIR *)
+
     let fin = open_out "_temp_hack" in
         output_string fin str;
-        (flush_all);
+        flush_all ();
         close_out fin;
     let fin = open_in "_temp_hack" in
     prelex "string" fin 1 [] []
@@ -162,7 +166,3 @@ let rec pretokens_print pretokens =
                | Prestring(_, str)
                  -> print_string "\""; print_string str; print_string "\"")
             pretokens
-
-
-
-

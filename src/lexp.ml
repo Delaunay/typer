@@ -71,7 +71,7 @@ type ltype = lexp
    | Lambda of arg_kind * vdef * ltype * lexp
    | Call of lexp * (arg_kind * lexp) list (* Curried call.  *)
    | Inductive of location * label * ((arg_kind * vdef * ltype) list)
-                  * ((arg_kind * ltype) list) SMap.t
+                  * ((arg_kind * vdef option * ltype) list) SMap.t
    | Cons of vref * symbol (* = Type info * ctor_name*)
    | Case of location * lexp
              * ltype (* The base inductive type over which we switch.  *)
@@ -282,13 +282,14 @@ let lexp_to_string e =
   match e with
     | Imm _ -> "Imm"
     | Var _ -> "Var"
-    | Let _ -> "Let"
+    | Let _ -> "let"
     | Arrow _ -> "Arrow"
-    | Lambda _ -> "Lambda"
+    | Lambda _ -> "lambda"
     | Call _ -> "Call"
-    | Inductive _ -> "Inductive"
-    | Cons _ -> "Cons"
-    | Case _ -> "Case"
+    | Inductive _ -> "inductive_"
+    | Cons _ -> "inductive-cons"
+    | Case _ -> "case"
+    | _ -> "unkwn"
 ;;
 
 let builtin_reduce b args arg =

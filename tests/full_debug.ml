@@ -74,13 +74,19 @@ let arg_defs = [
         Arg.Unit (add_p_option "pexp"), " Print pexp debug info");
     ("-lexp",
         Arg.Unit (add_p_option "lexp"), " Print lexp debug info");
+    ("-lctx",
+        Arg.Unit (add_p_option "lctx"), " Print lexp context");
+    ("-rctx",
+        Arg.Unit (add_p_option "rctx"), " Print runtime context");
     ("-all",
         Arg.Unit (fun () ->
             add_p_option "pretok" ();
             add_p_option "tok" ();
             add_p_option "sexp" ();
             add_p_option "pexp" ();
-            add_p_option "lexp" ()),
+            add_p_option "lexp" ();
+            add_p_option "lctx" ();
+            add_p_option "rctx" ();),
         " Print all debug info");
 ];;
 
@@ -141,10 +147,7 @@ let main () =
             debug_pexp_decls pexps; print_string "\n"));
 
         (* get lexp *)
-        let ctx = make_lexp_context in
-        (*  Those are hardcoded operation *)
-            let ctx = add_def "_+_" ctx in
-            let ctx = add_def "_*_" ctx in
+        let ctx = default_lctx () in
 
         let lexps, nctx =
             try lexp_decls pexps ctx
@@ -158,16 +161,20 @@ let main () =
             print_string (make_title " Lexp ");
             debug_lexp_decls lexps; print_string "\n"));
 
-        print_string "\n";
-        print_lexp_ctx nctx;
-        print_string "\n";
+        print_string "\n\n";
 
-        (* Eval Each Expression *)
-        print_string (make_title " Eval Print ");
+        (if (get_p_option "lctx") then(
+            print_lexp_ctx nctx; print_string "\n"));
 
         (* Eval declaration *)
         let rctx = make_runtime_ctx in
         let rctx = eval_decls lexps rctx in
+
+        (if (get_p_option "rctx") then(
+            print_rte_ctx rctx; print_string "\n"));
+
+        (* Eval Each Expression *)
+        print_string (make_title " Eval Print ");
 
         (try
             (* Check if main is present *)

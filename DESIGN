@@ -1616,6 +1616,7 @@ Or almost: with these classical definitions we cannot prove the classical
 axiom of choice as a theorem, so if you need it, you have to add it as an axiom.
 
 * Papers
+** BigBang: Designing a statically typed scripting language
 ** Dependently typed Racket
 ** Dependently typed Haskell
 "My dissertation (github.com/goldfirere/thesis) is about adding dependent

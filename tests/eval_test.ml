@@ -12,7 +12,7 @@ let lctx = add_def "_+_" lctx
 let lctx = add_def "_*_" lctx
 let rctx = make_runtime_ctx
 let rctx = add_rte_variable (Some "_+_") iop_binary rctx
-let rctx = add_rte_variable (Some "_-_") iop_binary rctx
+let rctx = add_rte_variable (Some "_*_") iop_binary rctx
 
 let _ = (add_test "EVAL" "Variable Cascade" (fun () ->
 
@@ -58,6 +58,7 @@ let _ = (add_test "EVAL" "Let" (fun () ->
 (*      Lambda
  * ------------------------ *)
 let _ = (add_test "EVAL" "Lambda" (fun () ->
+
     (* Declare lambda *)
     let rctx, lctx = eval_decl_str "sqr = lambda x -> x * x;" lctx rctx in
 
