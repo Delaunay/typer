@@ -144,10 +144,10 @@ let rec repl i clxp rctx =
     let ipt = read_input i in
         match ipt with
             (*  Check special keywords *)
-            | "%quit"  -> ()
-            | "%who"   -> (print_rte_ctx rctx;      repl (i + 1) clxp rctx)
-            | "%info"  -> (print_lexp_ctx clxp;     repl (i + 1) clxp rctx)
-            | "%calltrace" -> (print_eval_trace (); repl (i + 1) clxp rctx)
+            | "%quit" | "%q" -> ()
+            | "%who"  | "%w" -> (print_rte_ctx rctx;      repl (i + 1) clxp rctx)
+            | "%info" | "%i" -> (print_lexp_ctx clxp;     repl (i + 1) clxp rctx)
+            | "%calltrace" | "%ct" -> (print_eval_trace (); repl (i + 1) clxp rctx)
             (* eval input *)
             | _ -> let (ret, clxp, rctx) = (ieval_string ipt clxp rctx) in
                 List.iter (print_eval_result i) ret;
@@ -170,12 +170,8 @@ let parse_args () =
 let main () =
     parse_args ();
 
-    let lctx = ref make_lexp_context in
+    let lctx = ref (default_lctx ()) in
     let rctx = ref make_runtime_ctx in
-
-    (*  Those are hardcoded operation *)
-    lctx := add_def "_+_" !lctx;
-    lctx := add_def "_*_" !lctx;
 
     print_string (make_title " TYPER REPL ");
     print_string "      %quit      : leave REPL\n";

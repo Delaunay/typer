@@ -7,9 +7,7 @@ open Lexp
 
 
 (* default environment *)
-let lctx = make_lexp_context
-let lctx = add_def "_+_" lctx
-let lctx = add_def "_*_" lctx
+let lctx = default_lctx ()
 let rctx = make_runtime_ctx
 let rctx = add_rte_variable (Some "_+_") iop_binary rctx
 let rctx = add_rte_variable (Some "_*_") iop_binary rctx

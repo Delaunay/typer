@@ -55,25 +55,54 @@ let failure () = (-1);;
 let _global_sections = ref StringMap.empty
 let _insertion_order = ref []
 let _ret_code = ref 0
+let _number_test = ref 0
 
 (*  Exception *)
 exception Unexpected_result of string
+
+(*  Argument Parsing                        *)
+(* ---------------------------------------- *)
+
+(*
+ *  0: Nothing
+ *  1: Print:            (x/N) file_test .................... pass
+ *  2: Print Each composing Test
+ *  3: use debug
+ *)
+let _global_verbose_lvl = ref 0
+let _global_sample_dir = ref ""
+
+let arg_defs = [
+    ("--verbose=",
+        Arg.Int (fun g -> _global_verbose_lvl := g), " Set verbose level");
+    ("--samples=",
+        Arg.String (fun g -> _global_sample_dir := g), " Set sample directory");
+];;
+
+let parse_args () = Arg.parse arg_defs (fun s -> ()) ""
+
+
+(* Utest printing function                  *)
+(* ---------------------------------------- *)
+let ut_string vb msg = if vb <= (!_global_verbose_lvl) then print_string msg else ()
+let ut_string2 = ut_string 2
+
 
 (* Value Checking                                           *)
 (*      USAGE: expect_something_type value expected_value   *)
 (*          return success() if match else failure ()       *)
 let unexpected_throw sk tk e =
-    print_string ("[   FAIL] " ^ sk ^ " - " ^ tk ^ "\n");
-    print_string  "[       ]     UNEXPECTED THROW:\n";
-    print_string  "[       ]  "; print_string ((Printexc.to_string e) ^ "\n");
+    ut_string2 ("[   FAIL] " ^ sk ^ " - " ^ tk ^ "\n");
+    ut_string2  "[       ]     UNEXPECTED THROW:\n";
+    ut_string2  "[       ]  "; ut_string2 ((Printexc.to_string e) ^ "\n");
 ;;
 
 let _expect_equal_t to_string value expect =
     if value = expect then
         success ()
     else(
-        print_string ("[       ]     EXPECTED: " ^ (to_string expect)^ "\n");
-        print_string ("[       ]          GOT: " ^ (to_string value) ^ "\n");
+        ut_string2 ("[       ]     EXPECTED: " ^ (to_string expect)^ "\n");
+        ut_string2 ("[       ]          GOT: " ^ (to_string value) ^ "\n");
         failure ())
 ;;
 
@@ -108,7 +137,7 @@ let add_test sname tname tfun =
     let (tmap, lst) = add_section sname in
 
     try let _ = StringMap.find tname tmap in
-        print_string "TEST ALREADY EXISTS"
+        ut_string2 "TEST ALREADY EXISTS"
     with
         Not_found ->
 
@@ -117,6 +146,8 @@ let add_test sname tname tfun =
     (* add test *)
     let ntmap = StringMap.add tname tfun tmap in
         _global_sections := StringMap.add sname (ntmap, lst) (!_global_sections);
+
+    _number_test := (!_number_test + 1)
 ;;
 
 (*  sk  : Section Key
@@ -128,9 +159,9 @@ let for_all_tests sk tmap tk =
     try
         let r = tv () in
             if r = 0 then(
-                print_string ("[     OK] " ^ sk ^ " - " ^ tk ^ "\n"))
+                ut_string2 ("[     OK] " ^ sk ^ " - " ^ tk ^ "\n"))
             else(
-                print_string ("[   FAIL] " ^ sk ^ " - " ^ tk ^ "\n");
+                ut_string2 ("[   FAIL] " ^ sk ^ " - " ^ tk ^ "\n");
                 _ret_code := failure ())
     with e ->
         _ret_code := failure ();
@@ -139,13 +170,15 @@ let for_all_tests sk tmap tk =
 
 let for_all_sections sk =
     let tmap, tst = StringMap.find sk (!_global_sections) in
-        print_string ("[RUN    ] " ^ sk ^ " \n");
+        ut_string2 ("[RUN    ] " ^ sk ^ " \n");
         tst := List.rev (!tst);
         List.iter (for_all_tests sk tmap) (!tst)
 ;;
 
 (* Run all *)
 let run_all () =
+    parse_args ();
+
     _insertion_order := List.rev (!_insertion_order);
 
     (* iter over all sections *)
