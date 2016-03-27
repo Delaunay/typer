@@ -14,13 +14,13 @@ typer:
 
 # debug file eval
 debug:
-	ocamlbuild tests/full_debug.native -I src $(CFLAG)
-	@mv _build/tests/full_debug.native _build/full_debug
+	ocamlbuild src/full_debug.native -I src $(CFLAG)
+	@mv _build/src/full_debug.native _build/full_debug
 
 # interactive typer
 ityper:
-	ocamlbuild tests/REPL.native -I src $(CFLAG)
-	@mv _build/tests/REPL.native _build/ityper
+	ocamlbuild src/REPL.native -I src $(CFLAG)
+	@mv _build/src/REPL.native _build/ityper
 
 tests-build:
 	# ============================

@@ -146,8 +146,8 @@ let rec repl i clxp rctx =
             (*  Check special keywords *)
             | "%quit"  -> ()
             | "%who"   -> (print_rte_ctx rctx;      repl (i + 1) clxp rctx)
-            | "%info"  -> (lexp_context_print clxp; repl (i + 1) clxp rctx)
-            | "%calltrace" -> (print_call_trace (); repl (i + 1) clxp rctx)
+            | "%info"  -> (print_lexp_ctx clxp;     repl (i + 1) clxp rctx)
+            | "%calltrace" -> (print_eval_trace (); repl (i + 1) clxp rctx)
             (* eval input *)
             | _ -> let (ret, clxp, rctx) = (ieval_string ipt clxp rctx) in
                 List.iter (print_eval_result i) ret;
