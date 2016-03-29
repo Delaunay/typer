@@ -5,10 +5,7 @@ open Pexp
 open Utest_lib
 
 (* default environment *)
-let lctx = make_lexp_context
-let lctx = add_def "_+_" lctx
-let lctx = add_def "_*_" lctx
-
+let lctx = default_lctx ()
 
 let _ = (add_test "LEXP" "Built-in type Inference" (fun () ->
 

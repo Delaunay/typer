@@ -21,7 +21,6 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.  *)
 
 open Util
-open Lexer
 open Sexp
 open Pexp
 open Myers
@@ -274,6 +273,8 @@ let rec lexp_location e =
   | Inductive (l,_,_,_) -> l
   | Cons (_,(l,_)) -> l
   | Case (l,_,_,_,_) -> l
+  | UnknownType l -> l
+  | Shift (_, l) -> lexp_location l
   (* | Susp (_, e) -> lexp_location e
    * | Metavar ((l,_),_,_) -> l *)
 

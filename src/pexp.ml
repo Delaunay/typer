@@ -21,9 +21,8 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.  *)
 
 open Util
-open Sexp
+open Sexp   (* Symbol *)
 open Lexer
-open Prelexer
 open Grammar
 
 let pexp_error = msg_error "PEXP"
@@ -358,13 +357,6 @@ let pexp_parse_all (nodes: sexp list) =
     List.map pexp_parse nodes
 ;;
 
-let pexp_parse_string (str: string) tenv grm limit =
-    let pretoks = prelex_string str in
-    let toks = lex tenv pretoks in
-    let sxps = sexp_parse_all_to_list grm toks limit in
-        pexp_parse_all sxps
-;;
-
 let pexp_decls_all (nodes: sexp list): ((pvar * pexp * bool) list) =
     let rec loop nodes acc =
         match nodes with
@@ -382,9 +374,7 @@ let pexp_decls_all (nodes: sexp list): ((pvar * pexp * bool) list) =
 (* Lexp helper *)
 let _pexp_expr_str (str: string) (tenv: bool array)
             (grm: grammar) (limit: string option) =
-    let pretoks = prelex_string str in
-    let toks = lex tenv pretoks in
-    let sxps = sexp_parse_all_to_list grm toks limit in
+    let sxps = _sexp_parse_str str tenv grm limit in
         pexp_parse_all sxps
 ;;
 
@@ -393,11 +383,8 @@ let pexp_expr_str str =
     _pexp_expr_str str default_stt default_grammar (Some ";")
 ;;
 
-
 let _pexp_decl_str (str: string) tenv grm limit =
-    let pretoks = prelex_string str in
-    let toks = lex tenv pretoks in
-    let sxps = sexp_parse_all_to_list grm toks limit in
+    let sxps = _sexp_parse_str str tenv grm limit in
         pexp_decls_all sxps
 ;;
 

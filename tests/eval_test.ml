@@ -90,7 +90,7 @@ let _ = (add_test "EVAL" "Nested Lambda" (fun () ->
  *  i.e the context should not grow                             *)
 let _ = (add_test "EVAL" "Infinite Recursion failure" (fun () ->
     let code = "
-        infinity = lambda beyond -> (infinity beyond);" in
+        infinity = lambda (beyond : Int) -> (infinity beyond);" in
 
     let rctx, lctx = eval_decl_str code lctx rctx in
 
@@ -109,7 +109,7 @@ let _ = (add_test "EVAL" "Infinite Recursion failure" (fun () ->
 (*      Cases + Inductive types
  * ------------------------ *)
 
-let _ = (add_test "EVAL" "Case" (fun () ->
+let _ = (add_test "EVAL" "Inductive::Case" (fun () ->
     (* Inductive type declaration + Noisy declarations *)
     let code = "
         i = 90;\n
@@ -146,9 +146,8 @@ let _ = (add_test "EVAL" "Case" (fun () ->
                         success ()
                     else
                         failure ()
-            | _ -> failure ())
-)
-;;
+            | _ -> failure ()
+));;
 
 (*  Those wil be used multiple times *)
 let nat_decl = "
@@ -169,7 +168,7 @@ let bool_decl = "
 ;;
 
 
-let _ = (add_test "EVAL" "Recursive Call" (fun () ->
+let _ = (add_test "EVAL" "Inductive::Recursive Call" (fun () ->
 
     let code = nat_decl ^ "
         one = (succ zero);
@@ -196,7 +195,9 @@ let _ = (add_test "EVAL" "Recursive Call" (fun () ->
 )
 ;;
 
-let _ = (add_test "EVAL" "Nat Plus" (fun () ->
+let _ = (add_test "EVAL" "Inductive::Nat Plus" (fun () ->
+
+    _eval_max_recursion_depth := 80000;
 
     let code = nat_decl ^ "
         one = (succ zero);
@@ -213,7 +214,7 @@ let _ = (add_test "EVAL" "Nat Plus" (fun () ->
     let rcode = "
         (tonum (plus zero two));
         (tonum (plus two zero));
-        5;"in
+        (tonum (plus two one));"in
 
     (* Eval defined lambda *)
     let ret = eval_expr_str rcode lctx rctx in
@@ -222,14 +223,76 @@ let _ = (add_test "EVAL" "Nat Plus" (fun () ->
             | [a; b; c] ->
                 let t1 = expect_equal_int (get_int a) 2 in
                 let t2 = expect_equal_int (get_int b) 2 in
-                let t3 = expect_equal_int (get_int c) 5 in
+                let t3 = expect_equal_int (get_int c) 3 in
                     if t1 = 0 && t2 = 0 && t3 = 0 then
                         success ()
                     else
                         failure ()
-            | _ -> failure ())
-)
-;;
+            | _ -> failure ()
+));;
+
+(* TODO *)
+let _ = (add_test "EVAL" "Mutually Recursive Definition" (fun () ->
+
+    let dcode = nat_decl ^ "
+        one = (succ zero);
+        two = (succ one);
+        three = (succ three);
+
+        odd : Int -> Int;
+        even : Int -> Int;
+        odd = lambda n -> case n
+            | zero => 0
+            | succ y => (even y);
+
+        even = lambda n -> case n
+            | zero => 1
+            | succ y => (odd y);" in
+
+    let rctx, lctx = eval_decl_str dcode lctx rctx in
+
+    let rcode = "(odd one); (even one); (odd two); (even two);" in
+
+    (* Eval defined lambda *)
+    let ret = eval_expr_str rcode lctx rctx in
+        (* Expect a 3 results *)
+        match ret with
+            | [a; b; c; d] ->
+                let t1 = expect_equal_int (get_int a) 1 in
+                let t2 = expect_equal_int (get_int b) 0 in
+                let t3 = expect_equal_int (get_int c) 1 in
+                let t4 = expect_equal_int (get_int d) 0 in
+                    if t1 = 0 && t2 = 0 && t3 = 0 && t4 = 0 then
+                        success ()
+                    else
+                        failure ()
+            | _ -> failure ()
+));;
+
+let _ = (add_test "EVAL" "Partial Application" (fun () ->
+
+    let dcode = "
+        mult = lambda x y -> (x * y);
+        twice = (mult 2);" in
+
+    let rctx, lctx = eval_decl_str dcode lctx rctx in
+
+    let rcode = "(twice 1); (twice 2); (twice 3);" in
+
+    (* Eval defined lambda *)
+    let ret = eval_expr_str rcode lctx rctx in
+        (* Expect a 3 results *)
+        match ret with
+            | [a; b; c] ->
+                let t1 = expect_equal_int (get_int a) 2 in
+                let t2 = expect_equal_int (get_int b) 4 in
+                let t3 = expect_equal_int (get_int c) 6 in
+                    if t1 = 0 && t2 = 0 && t3 = 0 then
+                        success ()
+                    else
+                        failure ()
+            | _ -> failure ()
+));;
 
 (*
 List = inductive (dList (a : Type)) (nil) (cons a (List a));

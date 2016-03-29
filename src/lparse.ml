@@ -87,9 +87,7 @@ let default_lctx () =
     (* populate ctx *)
     List.fold_left
       (fun ctx (name, lxp) ->
-        let var = (dloc, name) in
-        let ctx = senv_add_var var ctx in
-        env_add_var_info (0, var, None, lxp) ctx)
+        env_extend ctx (dloc, name) None lxp)
       lctx
       lexp_builtins
 ;;
@@ -477,21 +475,70 @@ and lexp_p_infer (p : pexp) (env : lexp_context): lexp * ltype =
     let tloc = pexp_location p in
     let lxp = lexp_parse p env in
 
-    let rec get_return_type lxp =
+    let consume_args args lxp ctx =
+        let arg_n = List.length args in
+        let rec _implt args lxp i = match args, lxp with
+            (* No args left, return the remaining type *)
+            | [], _ -> lxp
+            | _, UnknownType _ -> lxp
+
+            (* Basic case consume an arg and an arrow *)
+            | hd::tl, Arrow(_, _, ltp, _, ret_type) ->
+                (* FIXME: Check hd and ltp are of the same type *)
+                _implt tl ret_type (i + 1)
+
+            (* We still have args to consume but type is not an arrow *)
+            | (_, hd)::tl, tp ->
+                lexp_error tloc ("Number of Arg mismatch. Expected: " ^
+                    (string_of_int i) ^ " arg(s). Got " ^ (string_of_int arg_n));
+                tp  in
+        _implt args lxp 0 in
+
+    let is_type lxp =
         match lxp with
-            | Arrow(_, _, _, _, ret_type) -> (get_return_type ret_type)
-            | _ -> lxp in
+            | Inductive _ -> true
+            | _ -> false in
 
     let rec get_type lxp ctx =
         match lxp with
             (* Leafs        *)
             (* ------------ *)
-            | Var vrf -> env_lookup_type ctx vrf
-            | Cons (vrf, _) -> env_lookup_type ctx vrf
+
+            (* Why don't we always return tp ? We want to be able to use *)
+            (* type aliases     Nat = inductive_              *)
+            (* We want the type to be inferred as Nat not _inductive... *)
+            (* But sometimes we need tp to be return                    *)
+            | Var vrf -> let tp = env_lookup_type ctx vrf in
+                if (is_type tp) then lxp else tp
+
+            (* I am not sure we should consider a constructor as a function   *)
+            (* Another way to do what is done here is to handle cons in Call  *)
+            | Cons (vrf, (_, n)) ->(
+                let rec build_arrow_type args acc =
+                    match args with
+                        | [] -> acc
+                        | (kind, var, ltp)::tl ->
+                            build_arrow_type tl (Arrow(kind, var, ltp, dloc, acc))
+                            in
+
+                match env_lookup_type ctx vrf with
+                    | Inductive(_, _, _, ctor_map) -> (
+                        try match SMap.find n ctor_map with
+                            (* No Args *)
+                            | [] -> Var(vrf)  (* return its inductive type *)
+                            (* Return a Constructor function *)
+                            | args -> build_arrow_type (List.rev args) (Var(vrf))
+
+                        with Not_found ->
+                            (lexp_error tloc ("Constructor " ^ n ^
+                                                     " does not exist"); dltype))
+                    | _ -> (lexp_error tloc "Inductive type was expected"; dltype))
+
             | Imm sxp -> (match sxp with
-                (* FIXME use the ones that are already in the ctx *)
-                | Integer _ -> type_int
-                | Float _ -> type_float
+                | Integer _ -> let idx = senv_lookup "Int" ctx in
+                        env_lookup_type ctx ((dloc, "Int"), idx)
+                | Float _ -> let idx = senv_lookup "Float" ctx in
+                        env_lookup_type ctx ((dloc, "Float"), idx)
                 | _ -> lexp_error tloc "Could not infer type"; dltype)
 
             (* Types by definition *)
@@ -503,17 +550,29 @@ and lexp_p_infer (p : pexp) (env : lexp_context): lexp * ltype =
             (* Nodes        *)
             (* ------------ *)
             | Let (_, _, body) -> (get_type body ctx)
-            | Call(f, _) ->
-                (* FIXME: check arg and f type are compatible *)
-                (* FIXME: call cannot be partial *)
-                (get_return_type (get_type f ctx))
+            | Call(f, args) ->
+                (consume_args args (get_type f ctx) ctx)
 
-            (* we need to check that all branches return the same type *)
-            | Case (_, _, _, branches, dflt) ->(
-                (* FIXME *)
-                match dflt with
-                    | None -> lexp_error tloc "Could not infer type"; dltype
-                    | Some expr -> (get_type expr ctx))
+
+            | Case (_, _, _, branches, dflt) ->
+                (* we need to check that all branches return the same type *)
+                let lst = SMap.bindings branches in
+                let types = List.map
+                    (fun (_, (_, args, body)) ->
+                        (* FIXME: We need to lookup arg type *)
+                        let nctx = List.fold_left (fun c v ->
+                            match v with
+                                | None -> c
+                                | Some (_, arg) -> env_extend ctx arg None dltype)
+                            ctx args in
+                            get_type body nctx) lst in
+
+                let types = match dflt with
+                    | None -> types
+                    | Some expr -> (get_type expr ctx)::types in
+                let tp = List.hd types in
+                    (* FIXME: do type checking *)
+                    tp
 
             | Lambda (kind, vdef, ltp, lxp) ->
                 let nctx = env_extend ctx vdef (Some ltp) lxp in
@@ -534,6 +593,7 @@ and lexp_p_check (p : pexp) (t : ltype) (env : lexp_context): lexp =
     -> let (e, inferred_t) = lexp_p_infer p env in
       (* FIXME: check that inferred_t = t!  *)
       e
+
 (*
  *      Printing
  * --------------------- *)
@@ -643,7 +703,6 @@ and lexp_print_ctors opt ctors =
         ctors
 
 and lexp_print_type opt ltp =
-    let (_, _, prtp) = opt in
     match ltp with
         | Inductive(_, (_, l), _, _) -> print_string l;
         | _ -> lexp_print_adv opt ltp
@@ -712,7 +771,6 @@ and print_lexp_trace () =
 and lexp_print_var_info ctx =
     let ((m, _), env, _) = ctx in
     let n = Myers.length env in
-    let sync_offset = m - n in
 
     for i = 0 to n - 1 do (
         let (_, (_, name), exp, tp) = Myers.nth i env in

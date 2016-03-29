@@ -36,6 +36,7 @@ this program.  If not, see <http://www.gnu.org/licenses/>.  *)
  *
  * -------------------------------------------------------------------------- *)
 
+(* FIXME: Prevent ityper from crashing when an error is thrown *)
 
 open Debug
 open Prelexer

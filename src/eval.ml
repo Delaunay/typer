@@ -31,6 +31,7 @@
  * --------------------------------------------------------------------------- *)
 
 open Util
+open Pexp       (* Arg_kind *)
 open Lexp
 open Lparse
 open Myers
@@ -197,6 +198,10 @@ let rec _eval lxp ctx i: (value_type) =
             let nctx = build_ctx decls ctx i in
                 _eval inst (local_ctx nctx) (i + 1)
 
+        (* Built-in Function * )
+        | Call(Builtin(v, name, ltp), args) ->
+            let nctx = build_arg_list args ctx i in *)
+
         (*  Function call *)
         | Call (lname, args) -> (
             (* create a clean environment *)
@@ -227,7 +232,7 @@ let rec _eval lxp ctx i: (value_type) =
                         Imm(Integer(dloc, v))
 
                 (* This is a named function call *)
-                | Var((_, name), idx) ->
+                | Var((_, name), idx) -> (
                     (*  get function's body from current context *)
                     let body = get_rte_variable (Some name) idx ctx in
 
@@ -235,12 +240,18 @@ let rec _eval lxp ctx i: (value_type) =
                     let arg_val =
                         List.map (fun (k, e) -> _eval e ctx (i + 1)) args in
 
-                    (*  Add args inside our clean context *)
-                    let clean_ctx =
-                        List.fold_left (fun c v -> add_rte_variable None v c)
-                            clean_ctx arg_val in
+                    match body with
+                        (* If 'cons', build it back with evaluated args *)
+                        | Cons _ ->
+                            Call(lname, (List.map (fun g ->
+                                (Aexplicit, g)) arg_val))
+                        | _ ->
+                        (*  Add args inside our clean context *)
+                        let clean_ctx =
+                            List.fold_left (fun c v -> add_rte_variable None v c)
+                                clean_ctx arg_val in
 
-                        _eval body clean_ctx (i + 1)
+                            _eval body clean_ctx (i + 1))
 
                 (* TODO Everything else *)
                 (*  Which includes a call to a lambda *)

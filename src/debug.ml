@@ -134,7 +134,7 @@ let debug_pexp_print ptop =
         | Pinductive (_, _, _)   -> print_info "Pinductive " l ptop
         | Pcons (_,_)            -> print_info "Pcons      " l ptop
         | Pcase (_, _, _)        -> print_info "Pcase      " l ptop
-        | _                      -> print_info "Not Impl   " l ptop
+      (*| _                      -> print_info "Not Impl   " l ptop *)
 ;;
 
 let debug_pexp_decls decls =

@@ -119,7 +119,9 @@ let main () =
             failed_test := !failed_test + 1)
         else
             (if verbose 1 then print_file_name (!tests_n) files_n file true);
-        )
+        );
+
+        (if verbose 2 then print_newline ());
 
     ) files;
 
@@ -127,7 +129,7 @@ let main () =
     print_string   "    Test Ran    : "; print_int !tests_n;
     print_string "\n    Test Failed : "; print_int !failed_test;
     print_string "\n    Test Passed : "; print_int (!tests_n - !failed_test);
-    print_endline "";
+    print_endline "\n";
 ;;
 
 main ();

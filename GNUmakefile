@@ -6,7 +6,7 @@ TEST_FILES := $(wildcard ./tests/*_test.ml)
 
 CFLAG = -cflag -rectypes -build-dir _build
 
-all: ityper typer debug tests
+all: ityper typer debug tests-build
 
 typer:
 	# ============================
@@ -40,10 +40,7 @@ tests-build:
 	@mv _build/tests/utest_main.native _build/tests/utests
 
 tests-run:
-	# ============================
-	#     Run tests
-	# ============================
-	@./_build/tests/utests --verbose= 3
+	@./_build/tests/utests --verbose= 2
 
 tests: tests-build tests-run
 

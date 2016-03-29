@@ -23,6 +23,7 @@ this program.  If not, see <http://www.gnu.org/licenses/>.  *)
 open Util
 open Prelexer
 open Sexp
+open Grammar
 
 (*************** The Lexer phase *********************)
 
@@ -42,7 +43,7 @@ let digit_p char =
   in Char.code '0' <= code && code <= Char.code '9'
 
 type num_part = | NPint | NPfrac | NPexp
-                              
+
 let nexttoken (stt : token_env) (pts : pretoken list) bpos cpos
     (* The returned Sexp may not be a Node.  *)
     : sexp * pretoken list * bytepos * charpos =
@@ -118,15 +119,19 @@ let lex tenv (pts : pretoken list) : sexp list =
             in gettokens pts bpos cpos (tok :: acc) in
   gettokens pts 0 0 []
 ;;
-  
-let lex_string (str: string) tenv =
+
+let _lex_str (str: string) tenv =
     let pretoks = prelex_string str in
         lex tenv pretoks
 ;;
 
-let node_parse_string (str: string) tenv grm limit =
-    let pretoks = prelex_string str in
-    let toks = lex tenv pretoks in
+let lex_str str = _lex_str str default_stt
+
+let _sexp_parse_str (str: string) tenv grm limit =
+    let toks = _lex_str str tenv in
         sexp_parse_all_to_list grm toks limit
 ;;
-            
+
+let sexp_parse_str str =
+    _sexp_parse_str str default_stt default_grammar (Some ";")
+
