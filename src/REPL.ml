@@ -113,7 +113,7 @@ let ipexp_parse (sxps: sexp list): (pdecl list * pexpr list) =
 
 let ilexp_parse pexps lctx =
     let pdecls, pexprs = pexps in
-    let ldecls, lctx = lexp_decls pdecls lctx in
+    let ldecls, lctx = lexp_p_decls pdecls lctx in
     let lexprs = lexp_parse_all pexprs lctx in
         (ldecls, lexprs), lctx
 ;;

@@ -139,7 +139,7 @@ and _lexp_parse p ctx i: lexp =
 
         (*  Let, Variable declaration + local scope *)
         | Plet(loc, decls, body) ->
-            let decl, nctx = lexp_decls decls ctx in
+            let decl, nctx = _lexp_decls decls ctx i in
             let bdy = lexp_parse body nctx in
             Let(tloc, decl, bdy)
 
@@ -328,56 +328,91 @@ and lexp_parse_inductive ctors ctx i =
       SMap.empty ctors
 
 (*  Parse let declaration *)
-and lexp_decls decls ctx: (((vdef * lexp * ltype) list) * lexp_context) =
-    (* The new implementation suppose that forward declarations are
-     * used when mutually recursive type are declared.
-     * old implementation was going through declaration 4 times
-     * now everything is done by going through them once            *)
-    let lexp_parse p ctx = _lexp_parse p ctx 1 in
-    let m = (List.length decls) + (get_size ctx) in
+and lexp_p_decls decls ctx = _lexp_decls decls ctx 1
+and _lexp_decls decls ctx i: (((vdef * lexp * ltype) list) * lexp_context) =
+    let lexp_parse v c = _lexp_parse v c (i + 1) in
+    (*  Merge Type info and declaration together                      *)
 
-    (* Make it look like we processed all declarations once already*)
-    let forge_ctx ctx n =
-        let ((m, map), a, b) = ctx in
-            ((n, map), a, b) in
+    (* merge with a map to guarantee uniqueness. *)
+    let rec merge_decls (decls: (pvar * pexp * bool) list) merged acc:
+                ((location * pexp option * pexp option) SMap.t * string list)  =
 
-    let iter_fun (idx, ctx, sset, acc) elem =
-        let ((loc, name), pxp, bl) = elem in (
-            (* Process Type *)
-            if bl then (
-                (* Temporary extend *)
-                (* type info must be present for recursive call  *)
-                let tctx = env_extend ctx (loc, name) None dltype in
-                let ltp = lexp_parse pxp (forge_ctx tctx m) in
+        (*  we cant evaluate here because variable are not in the environment *)
+        match decls with
+            | [] -> merged, (List.rev acc)
+            | hd::tl ->
+                match hd with
+                (*  Type Info: Var:Type *)
+                | ((loc, name), type_info, true) -> begin
+                    try
+                        (*  If found its means the instruction was declared
+                         *  before the type info. Should we allow this? *)
+                        let (l, inst, _) = SMap.find name merged in
+                        let new_decl = (l, inst, Some type_info) in
+                        let nmerged = SMap.add name new_decl merged in
+                            (merge_decls tl nmerged acc)
+                    with Not_found ->
+                        let new_decl = (loc, None, Some type_info) in
+                        let nmerged = SMap.add name new_decl merged in
+                        (merge_decls tl nmerged (name::acc)) end
 
-                let ctx = env_extend ctx (loc, name) None ltp in
-                let sset = StringMap.add name ltp sset in
-                    (idx + 1, ctx, sset, acc)
-            )
-            (* Process instruction *)
-            else(
-                (* Type annotations was provided *)
-                try
-                    let ltp = StringMap.find name sset in
-                    (* Type check *)
-                    let lxp = lexp_p_check pxp ltp (forge_ctx ctx m) in
-                        (idx + 1, ctx, sset, ((loc, name), lxp, ltp)::acc)
+                (* Instruction: Var = expr *)
+                | ((loc, name), inst, false) -> begin
+                    try
+                        let (l, _, tp) = SMap.find name merged in
+                        let new_decl = (l, Some inst, tp) in
+                        let nmerged = SMap.add name new_decl merged in
+                            (merge_decls tl nmerged acc)
 
-                (* No Type annotations *)
-                with Not_found ->
-                    let tctx = env_extend ctx (loc, name) None dltype in
-                    let lxp, ltp = lexp_p_infer pxp (forge_ctx tctx m) in
+                    with Not_found ->
+                        let new_decl = (loc, Some inst, None) in
+                        let nmerged = SMap.add name new_decl merged in
+                        (merge_decls tl nmerged (name::acc)) end in
 
-                    let ctx = env_extend ctx (loc, name) (Some lxp) ltp in
-                        (idx + 1, ctx, sset, ((loc, name), lxp, ltp)::acc))
-            ) in
+    let mdecls, ord = merge_decls decls SMap.empty [] in
 
-    let (n, nctx, _, decls) = List.fold_left iter_fun
-        (0, ctx, StringMap.empty, []) decls in
-        (* NB: if some var x was type annotated then it does not have
-         * a "value" in the env. A second pass through the declaration could
-         * solve this. Nevertheless, I not sure if it is truly useful *)
-        (List.rev decls), nctx
+    (* cast map to list to preserve declaration order *)
+    let decls = List.map (fun name ->
+            let (l, inst, tp) = SMap.find name mdecls in
+                ((l, name), inst, tp) ) ord
+        in
+
+    (*  Add Each Variable to the environment *)
+    let nctx = List.fold_left (fun ctx hd ->
+        match hd with
+            | (_, None, _) -> ctx   (*  Unused variable: No Instruction *)
+            | (var, _, _) -> senv_add_var var ctx)
+        ctx decls in
+
+    let n = (List.length decls) - 1 in
+
+    (*  Add Variable info *)
+    let rec process_var_info dcl_lst ctx acc m =
+        match dcl_lst with
+            | [] -> (List.rev acc), ctx
+            | hd::tl ->
+                match hd with
+                    | ((loc, name), Some pinst, None) ->(
+                        let lxp, ltp = lexp_p_infer pinst ctx in
+                        let nacc = ((loc, name), lxp, ltp)::acc in
+                        let ctx = env_add_var_info (0, (loc, name),
+                                                     Some lxp, ltp) ctx in
+                            process_var_info tl ctx nacc (m - 1))
+
+                    | ((loc, name), Some pinst, Some ptype) ->(
+                        let linst  = lexp_parse pinst ctx in
+                        let ltyp = lexp_parse ptype ctx in
+                        let nacc = ((loc, name), linst, ltyp)::acc in
+                        let ctx = env_add_var_info (0, (loc, name),
+                                                     Some linst, ltyp) ctx in
+                            process_var_info tl ctx nacc (m - 1))
+
+                    (* Skip the variable *)
+                    | ((loc, name), None, _) -> (lexp_warning loc "Unused Variable";
+                            process_var_info tl ctx acc m) in
+
+    let acc, ctx = process_var_info decls nctx [] n in
+        acc, ctx
 
 and _lexp_parse_all (p: pexp list) (ctx: lexp_context) i : lexp list =
 
@@ -504,12 +539,14 @@ and lexp_p_infer (p : pexp) (env : lexp_context): lexp * ltype =
             (* Leafs        *)
             (* ------------ *)
 
-            (* Why don't we always return tp ? We want to be able to use *)
-            (* type aliases     Nat = inductive_              *)
-            (* We want the type to be inferred as Nat not _inductive... *)
-            (* But sometimes we need tp to be return                    *)
-            | Var vrf -> let tp = env_lookup_type ctx vrf in
-                if (is_type tp) then lxp else tp
+            (* Why don't we always return tp ? We want to be able to use    *)
+            (* type aliases     Nat = inductive_                            *)
+            (* We want the type to be inferred as 'Nat' not 'inductive_'... *)
+            (* But sometimes we need tp to be returned                      *)
+            | Var vrf -> (try let tp = env_lookup_type ctx vrf in
+                (if (is_type tp) then lxp else tp)
+                with e ->
+                    UnknownType(dloc))
 
             (* I am not sure we should consider a constructor as a function   *)
             (* Another way to do what is done here is to handle cons in Call  *)
@@ -823,7 +860,7 @@ let _lexp_decl_str (str: string) tenv grm limit ctx =
     let toks = lex tenv pretoks in
     let sxps = sexp_parse_all_to_list grm toks limit in
     let pxps = pexp_decls_all sxps in
-        lexp_decls pxps ctx
+        lexp_p_decls pxps ctx
 ;;
 
 (* specialized version *)

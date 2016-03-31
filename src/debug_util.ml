@@ -150,7 +150,7 @@ let main () =
         let ctx = default_lctx () in
 
         let lexps, nctx =
-            try lexp_decls pexps ctx
+            try lexp_p_decls pexps ctx
             with e -> (
                 print_lexp_ctx (!_global_lexp_ctx);
                 print_lexp_trace ();

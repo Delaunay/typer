@@ -4,6 +4,14 @@ open Eval       (* make_rte_ctx *)
 open Utest_lib
 open Util
 open Lexp
+open Sexp
+
+
+let get_int lxp =
+    match lxp with
+        | Imm(Integer(_, l)) -> l
+        | _ -> (-40);
+;;
 
 
 (* default environment *)
@@ -13,6 +21,7 @@ let rctx = add_rte_variable (Some "_+_") iop_binary rctx
 let rctx = add_rte_variable (Some "_*_") iop_binary rctx
 
 let _ = (add_test "EVAL" "Variable Cascade" (fun () ->
+    reset_eval_trace ();
 
     let dcode = "
         a = 10;
@@ -36,6 +45,8 @@ let _ = (add_test "EVAL" "Variable Cascade" (fun () ->
  * ------------------------ *)
 
 let _ = (add_test "EVAL" "Let" (fun () ->
+    reset_eval_trace ();
+
     (* Noise. Makes sure the correct variables are selected *)
     let dcode = "
         c = 3; e = 1; f = 2; d = 4;" in
@@ -56,6 +67,7 @@ let _ = (add_test "EVAL" "Let" (fun () ->
 (*      Lambda
  * ------------------------ *)
 let _ = (add_test "EVAL" "Lambda" (fun () ->
+    reset_eval_trace ();
 
     (* Declare lambda *)
     let rctx, lctx = eval_decl_str "sqr = lambda x -> x * x;" lctx rctx in
@@ -70,6 +82,8 @@ let _ = (add_test "EVAL" "Lambda" (fun () ->
 ;;
 
 let _ = (add_test "EVAL" "Nested Lambda" (fun () ->
+    reset_eval_trace ();
+
     let code = "
         sqr = lambda x -> x * x;
         cube = lambda x -> x * (sqr x);" in
@@ -89,7 +103,10 @@ let _ = (add_test "EVAL" "Nested Lambda" (fun () ->
 (* This makes sure contexts are reinitialized between calls
  *  i.e the context should not grow                             *)
 let _ = (add_test "EVAL" "Infinite Recursion failure" (fun () ->
+    reset_eval_trace ();
+
     let code = "
+        infinity : Int -> Int;
         infinity = lambda (beyond : Int) -> (infinity beyond);" in
 
     let rctx, lctx = eval_decl_str code lctx rctx in
@@ -99,17 +116,19 @@ let _ = (add_test "EVAL" "Infinite Recursion failure" (fun () ->
         let _ = _eval_expr_str "(infinity 0);" lctx rctx true in
             failure ()
     with
-        Internal_error m ->
+        Internal_error m -> (
             if m = "Recursion Depth exceeded" then
                 success ()
             else
-                failure ()
+                failure ())
 ));;
 
 (*      Cases + Inductive types
  * ------------------------ *)
 
 let _ = (add_test "EVAL" "Inductive::Case" (fun () ->
+    reset_eval_trace ();
+
     (* Inductive type declaration + Noisy declarations *)
     let code = "
         i = 90;\n
@@ -167,13 +186,13 @@ let bool_decl = "
     true = inductive-cons Bool true;"
 ;;
 
-
 let _ = (add_test "EVAL" "Inductive::Recursive Call" (fun () ->
+    reset_eval_trace ();
 
     let code = nat_decl ^ "
         one = (succ zero);
         two = (succ one);
-        three = (succ three);" in
+        three = (succ two);" in
 
     let rctx, lctx = eval_decl_str code lctx rctx in
 
@@ -196,17 +215,16 @@ let _ = (add_test "EVAL" "Inductive::Recursive Call" (fun () ->
 ;;
 
 let _ = (add_test "EVAL" "Inductive::Nat Plus" (fun () ->
-
-    _eval_max_recursion_depth := 80000;
+    reset_eval_trace ();
 
     let code = nat_decl ^ "
         one = (succ zero);
         two = (succ one);
-        three = (succ three);
+        three = (succ two);
 
-        plus = lambda x y -> case x
-           | zero => y
-           | succ z => succ (plus z y);
+        plus = lambda (x : Nat) -> lambda (y : Nat) -> case x
+            | zero => y
+            | succ z => succ (plus z y);
        " in
 
     let rctx, lctx = eval_decl_str code lctx rctx in
@@ -231,21 +249,21 @@ let _ = (add_test "EVAL" "Inductive::Nat Plus" (fun () ->
             | _ -> failure ()
 ));;
 
-(* TODO *)
 let _ = (add_test "EVAL" "Mutually Recursive Definition" (fun () ->
+    reset_eval_trace ();
 
     let dcode = nat_decl ^ "
         one = (succ zero);
         two = (succ one);
-        three = (succ three);
+        three = (succ two);
 
-        odd : Int -> Int;
-        even : Int -> Int;
-        odd = lambda n -> case n
+        odd : Nat -> Int;
+        even : Nat -> Int;
+        odd = lambda (n : Nat) -> case n
             | zero => 0
             | succ y => (even y);
 
-        even = lambda n -> case n
+        even = lambda (n : Nat) -> case n
             | zero => 1
             | succ y => (odd y);" in
 
@@ -260,8 +278,8 @@ let _ = (add_test "EVAL" "Mutually Recursive Definition" (fun () ->
             | [a; b; c; d] ->
                 let t1 = expect_equal_int (get_int a) 1 in
                 let t2 = expect_equal_int (get_int b) 0 in
-                let t3 = expect_equal_int (get_int c) 1 in
-                let t4 = expect_equal_int (get_int d) 0 in
+                let t3 = expect_equal_int (get_int c) 0 in
+                let t4 = expect_equal_int (get_int d) 1 in
                     if t1 = 0 && t2 = 0 && t3 = 0 && t4 = 0 then
                         success ()
                     else
@@ -270,14 +288,19 @@ let _ = (add_test "EVAL" "Mutually Recursive Definition" (fun () ->
 ));;
 
 let _ = (add_test "EVAL" "Partial Application" (fun () ->
+    reset_eval_trace ();
+
 
     let dcode = "
-        mult = lambda x y -> (x * y);
-        twice = (mult 2);" in
+        add : Int -> Int -> Int;
+        add = lambda x y -> (x + y);
+
+        inc : Int -> Int;
+        inc = (add 1);" in
 
     let rctx, lctx = eval_decl_str dcode lctx rctx in
 
-    let rcode = "(twice 1); (twice 2); (twice 3);" in
+    let rcode = "(inc 1); (inc 2); (inc 3);" in
 
     (* Eval defined lambda *)
     let ret = eval_expr_str rcode lctx rctx in

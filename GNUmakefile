@@ -20,8 +20,8 @@ debug:
 	# ============================
 	#     Build debug utils
 	# ============================
-	ocamlbuild src/full_debug.native -I src $(CFLAG)
-	@mv _build/src/full_debug.native _build/full_debug
+	ocamlbuild src/debug_util.native -I src $(CFLAG)
+	@mv _build/src/debug_util.native _build/debug_util
 
 # interactive typer
 ityper:

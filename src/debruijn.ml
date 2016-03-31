@@ -136,10 +136,10 @@ let env_lookup_type ctx (v : vref) =
         t (* Shift (dbi - roft, t) *)
       else (
         let (rof, (_, dname), _, t) = Myers.nth (dbi - sync_offset) info_env in
-        print_string (" DBI: " ^ dname);
+        print_string (" DBI: " ^ dname ^ " " ^ rname);
         print_int (dbi - sync_offset); print_string "\n";
         internal_error ("DeBruijn index refers to wrong name. Expected: \""
-                                ^ rname ^ "\" got \"" ^ dname ^ "\"") )
+                                ^ rname ^ "\" got \"" ^ dname ^ "\""))
 
   with Not_found -> internal_error "DeBruijn index out of bounds!"
 
