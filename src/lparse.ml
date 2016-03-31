@@ -175,10 +175,22 @@ and _lexp_parse p ctx i: lexp =
         (* Pcons *)
         | Pcons(vr, sym) -> (
             let (loc, type_name) = vr in
+            let (_, cname) = sym in
+
             (*  An inductive type named type_name must be in the environment *)
             try let idx = senv_lookup type_name ctx in
                 (*  Check if the constructor exists *)
-                            (* TODO *)
+                let idt = env_lookup_type ctx (vr, idx) in
+
+                let _ = match idt with
+                    | Inductive(_, _, _, ctor_def) -> (
+                        try let _ = (SMap.find cname ctor_def) in ()
+                        with Not_found ->
+                            lexp_error loc
+                                ("Constructor \"" ^ cname ^ "\" does not exist"))
+
+                    | _ -> lexp_error loc "Not an Inductive Type" in
+
                 Cons((vr, idx), sym)
             with Not_found ->
                 lexp_error loc
@@ -188,9 +200,16 @@ and _lexp_parse p ctx i: lexp =
         (* Pcase *)
         | Pcase (loc, target, patterns) ->
 
-            (*  I need type info HERE *)
             let lxp = lexp_parse target ctx in
             let ltp = UnknownType(loc) in
+
+            let uniqueness_warn name =
+                lexp_warning loc ("Pattern " ^ name ^ " is a duplicate." ^
+                                       " It will override previous pattern.") in
+
+            let check_uniqueness loc name map = (
+                try let _ = SMap.find name map in uniqueness_warn name
+                with e -> ()) in
 
             (*  Read patterns one by one *)
             let rec loop ptrns merged dflt =
@@ -203,11 +222,13 @@ and _lexp_parse p ctx i: lexp =
                         (*  parse using pattern context *)
                         let exp = lexp_parse exp nctx in
 
-                        if name = "_" then
-                            loop tl merged (Some exp)
-                        else
+                        if name = "_" then (
+                            (if dflt != None then uniqueness_warn name);
+                            loop tl merged (Some exp))
+                        else (
+                            check_uniqueness iloc name merged;
                             let merged = SMap.add name (iloc, arg, exp) merged in
-                            loop tl merged dflt in
+                            loop tl merged dflt) in
 
             let (lpattern, dflt) = loop patterns SMap.empty None in
             Case(loc, lxp, ltp, lpattern, dflt)
@@ -261,11 +282,18 @@ and lexp_read_pattern pattern exp target ctx:
             ("_", loc, []), ctx
 
         | Ppatvar ((loc, name) as var) ->(
-            (* FIXME better check *)
-            try
-                let _ = senv_lookup name ctx in
-                    (* constructor with no args *)
-                    (name, loc, []), ctx
+            try(
+                let idx = senv_lookup name ctx in
+                match (env_lookup_expr ctx ((loc, name), idx)) with
+                    (* We are matching a constructor *)
+                    | Some Cons _ ->
+                        (name, loc, []), ctx
+
+                    (* name is defined but is not a constructor  *)
+                    (* it technically could be ... (expr option) *)
+                    (* What about Var -> Cons ?                  *)
+                    | _ -> let nctx = env_extend ctx var (Some target) dltype in
+                        (name, loc, []), nctx)
 
             (* would it not make a default match too? *)
             with Not_found ->

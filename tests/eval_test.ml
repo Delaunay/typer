@@ -20,6 +20,7 @@ let rctx = make_runtime_ctx
 let rctx = add_rte_variable (Some "_+_") iop_binary rctx
 let rctx = add_rte_variable (Some "_*_") iop_binary rctx
 
+
 let _ = (add_test "EVAL" "Variable Cascade" (fun () ->
     reset_eval_trace ();
 
@@ -287,9 +288,9 @@ let _ = (add_test "EVAL" "Mutually Recursive Definition" (fun () ->
             | _ -> failure ()
 ));;
 
+
 let _ = (add_test "EVAL" "Partial Application" (fun () ->
     reset_eval_trace ();
-
 
     let dcode = "
         add : Int -> Int -> Int;
@@ -308,8 +309,8 @@ let _ = (add_test "EVAL" "Partial Application" (fun () ->
         match ret with
             | [a; b; c] ->
                 let t1 = expect_equal_int (get_int a) 2 in
-                let t2 = expect_equal_int (get_int b) 4 in
-                let t3 = expect_equal_int (get_int c) 6 in
+                let t2 = expect_equal_int (get_int b) 3 in
+                let t3 = expect_equal_int (get_int c) 4 in
                     if t1 = 0 && t2 = 0 && t3 = 0 then
                         success ()
                     else

@@ -48,6 +48,7 @@ let eval_error loc msg =
 
 let dloc = dummy_location
 let eval_warning = msg_warning "EVAL"
+let str_idx idx = "[" ^ (string_of_int idx) ^ "]"
 
 let print_myers_list l print_fun =
     let n = (length l) - 1 in
@@ -93,15 +94,23 @@ type runtime_env = ((string option * lexp) myers) * (int * int * decls_offset)
 
 let make_runtime_ctx = (nil, (0, 0, 0));;
 
+let get_rte_size (ctx: runtime_env): int = let (l, _) = ctx in length l;;
+
 let add_rte_variable name x ctx =
     let (l, b) = ctx in
     let lst = (cons (name, x) l) in
         (lst, b);;
 
+let is_free_var idx ctx =
+    let (l, (osize, _, offset)) = ctx in
+    let tsize = (get_rte_size ctx) - osize in
+        if idx > tsize then true else false
+;;
+
 let get_rte_variable (name: string option) (idx: int) (ctx: runtime_env): lexp =
     let (l, (_, _, offset)) = ctx in
-    let idx = if idx >= offset then idx - offset else idx in
-    let (tn, x) = (nth idx l) in
+    let idx = if (is_free_var idx ctx) then idx - offset else idx in
+    try (let (tn, x) = (nth idx l) in
     match (tn, name) with
         | (Some n1, Some n2) -> (
             if n1 = n2 then
@@ -111,13 +120,18 @@ let get_rte_variable (name: string option) (idx: int) (ctx: runtime_env): lexp =
                 ("Variable lookup failure. Expected: \"" ^
                 n2 ^ "[" ^ (string_of_int idx) ^ "]" ^ "\" got \"" ^ n1 ^ "\"")))
 
-        | _ -> x (* can't check variable's name (call args do not have names) *)
+        | _ -> x)
+    with Not_found ->
+        let n = match name with Some n -> n | None -> "" in
+        eval_error dloc ("Variable lookup failure. Var: \"" ^
+            n ^ "\" idx: " ^ (str_idx idx) ^ " offset: " ^ (str_idx offset) ^
+            " free_var? " ^ (string_of_bool (is_free_var idx ctx)))
 ;;
 
-let get_rte_size (ctx: runtime_env): int = let (l, _) = ctx in length l;;
 
-(* This function is used when we enter a new scope *)
-(* it allow us to removed temporary variables when we enter temporary scope *)
+(* This function is used when we enter a new scope                         *)
+(* it saves the size of the environment before temp var are added          *)
+(* it allow us to remove temporary variables when we enter a new scope     *)
 let local_ctx ctx =
     let (l, (_, _, off)) = ctx in
     let osize = length l in
@@ -140,12 +154,13 @@ let temp_ctx ctx =
     let tsize = length l in
         (* Check if temporary variables are present *)
         if tsize != osize then
-            (* remove temp var *)
+            (* remove them *)
             (select_n ctx osize)
         else
             ctx
 ;;
 
+(* Select the n first variable present in the env *)
 let nfirst_rte_var n ctx =
     let rec loop i acc =
         if i < n then
@@ -167,12 +182,11 @@ type value_type = lexp
  * 'i' is the recursion depth used to print the call trace *)
 let rec _eval lxp ctx i: (value_type) =
     let tloc = lexp_location lxp in
-    let str_idx idx = "[" ^ (string_of_int idx) ^ "]" in
 
     (if i > (!_eval_max_recursion_depth) then
         raise (internal_error "Recursion Depth exceeded"));
 
-    _global_eval_ctx := ctx;  (*  Allow us to print the latest used environment *)
+    _global_eval_ctx := ctx; (*  Allow us to print the latest used environment *)
     _global_eval_trace := (i, tloc, lxp)::!_global_eval_trace;
 
     match lxp with
@@ -182,48 +196,49 @@ let rec _eval lxp ctx i: (value_type) =
         | Inductive (_, _, _, _) as e -> e
         | Cons (_, _) as e -> e
 
-        (* Lambda's body is evaluated when called *)
+        (* Lambda's body is evaluated when called   *)
         | Lambda _ -> lxp
 
-        (*  Return a value stored in the environ *)
-        | Var((loc, name), idx) as e ->(
-            (* find variable binding i.e we do not want a another variable *)
-             (* (-3) represent a variable which should not be replaced *)
-            let rec var_crawling expr k =
-                (if k > 255 then(
-                    lexp_print expr; print_string "\n"; flush stdout;
-                    eval_error tloc "Variable lookup failed"));
-                match expr with
-                    | Var(_, j) when j = (-3)-> e
-                    | Var((_, name2), j) ->
-                        let p = (get_rte_variable (Some name2) j ctx) in
-                            var_crawling p (k + 1)
-                    | _ -> expr in
-
-            try (var_crawling e 0)
-            with Not_found ->
-                eval_error tloc ("Variable: " ^
-                                      name ^ (str_idx idx) ^ " was not found "))
+        (*  Return a value stored in the env        *)
+        | Var((loc, name), idx) as e -> eval_var ctx e ((loc, name), idx)
 
         (*  Nodes           *)
         (* ---------------- *)
-        (*  this works for non recursive let *)
         | Let(_, decls, inst) ->
-            (*  First we _evaluate all declaration then we eval the instruction *)
-            let nctx = build_ctx decls ctx i in
-                _eval inst (local_ctx nctx) (i + 1)
+            let nctx = _eval_decls decls ctx i in
+                _eval inst nctx (i + 1)
 
         (* Built-in Function * )
         | Call(Builtin(v, name, ltp), args) ->
             let nctx = build_arg_list args ctx i in *)
 
-        (*  Function call *)
+        (* Function call *)
         | Call (lname, args) -> eval_call ctx i lname args
 
         (* Case *)
         | Case (loc, target, _, pat, dflt) -> (eval_case ctx i loc target pat dflt)
 
         | _ -> Imm(String(dloc, "eval Not Implemented"))
+
+and eval_var ctx lxp v =
+    let ((loc, name), idx) = v in
+
+    (* find variable binding i.e we do not want a another variable  *)
+    (* (-3) represent a variable that should not be replaced        *)
+    let rec var_crawling expr k =
+        (if k > 255 then(
+            lexp_print expr; print_string "\n"; flush stdout;
+            eval_error loc "Variable lookup failed"));
+
+        match expr with
+            | Var(_, j) when j = (-3) -> lxp
+            | Var((_, name2), j) ->
+                var_crawling (get_rte_variable (Some name2) j ctx) (k + 1)
+            | _ -> expr in
+
+    try var_crawling lxp 0
+    with Not_found ->
+        eval_error loc ("Variable: " ^ name ^ (str_idx idx) ^ " was not found ")
 
 and eval_call ctx i lname args =
     (* create a clean environment *)
@@ -232,7 +247,7 @@ and eval_call ctx i lname args =
     let args_n = List.length args in
 
     (*  To handle partial call we need to consume args and   *)
-    (*  lambdas together an return the remaining lambda      *)
+    (*  lambdas together and return the remaining lambda     *)
     (*  Call by name: replace variables then eval            *)
     let rec consume_args (ctx: runtime_env) (lxp: lexp) args (k: int): value_type =
         match lxp, args with
@@ -244,10 +259,11 @@ and eval_call ctx i lname args =
             (* Partial Application *)
             (* In truth we don't really stop here. We push missing args *)
             (* as such that missing args will be replaced by themselves *)
-            (* when the full eval will be called                        *)
+            (* when the full eval branch will be called                 *)
             | Lambda(kind, (loc, name), l, body), [] ->
                 let ctx = add_rte_variable (Some name) (Var((loc, name), -3)) ctx in
                 let b = consume_args ctx body [] (k + 1) in
+                (* Build a new lambda *)
                     Lambda(kind, (loc, name), l, b)
 
             (* Full Eval *)
@@ -256,9 +272,9 @@ and eval_call ctx i lname args =
 
             (* Too many args *)
             | _, _ ->
-                eval_error tloc ("Wrong Number of arguments. " ^
-                        " Got:" ^ (string_of_int args_n) ^ " arg(s) " ^
-                        " Expected: " ^ (string_of_int k) ^ " arg(s) ") in
+                eval_error tloc ("Wrong Number of arguments." ^
+                        " Got:" ^ (string_of_int args_n) ^ " arg(s)." ^
+                        " Expected: " ^ (string_of_int k) ^ " arg(s)") in
 
     match lname with
         (*  Hardcoded functions *)
@@ -291,12 +307,17 @@ and eval_call ctx i lname args =
             let vint = (nfirst_rte_var args_n nctx) in
             let varg = List.map (fun g -> get_int g) vint in
 
+            (* check for partial eval and compute product *)
             let (partial, prod) = List.fold_left (fun a g ->
                 let (partial, prod) = a in
                     match g with
                         | Some v  -> (partial, v * prod)
-                        | None -> (true, 0))
+                        | None -> (true, 1))
                 (false, 1) varg in
+
+            (* we could partially eval partial call         *)
+            (* i.e (a * 2 * 2 * b * 4) => (a * b * 16)      *)
+            (* but we don't here                            *)
 
             if partial then
                 let args = List.map (fun g -> (Aexplicit, g)) vint in
@@ -327,7 +348,8 @@ and eval_call ctx i lname args =
                     clean_ctx arg_val in
                     _eval body nctx (i + 1))
 
-        (* TODO Everything else                 *)
+        (* if lname is not a Var them it is the body itself *)
+        (* FIXME:TODO Everything else                 *)
         (*  Which includes a call to a lambda   *)
         | _ -> Imm(String(dloc, "Funct Not Implemented"))
 
@@ -335,45 +357,60 @@ and eval_case ctx i loc target pat dflt =
     (* Eval target *)
     let v = _eval target ctx (i + 1) in
 
-    let (_, (osize, _, _)) = ctx in
-    let csize = get_rte_size ctx in
+    let (_, (osize, _, _)) = ctx in (* number of variable declared outside *)
+    let csize = get_rte_size ctx in (* current size                        *)
     let offset = csize - osize in
 
-    (*  V must be a constructor Call *)
+    (* Get inductive type from a constructor *)
+    let get_inductive_ref lxp =
+        match lxp with
+            | Cons(((_, vname), idx), (_, cname)) ->(
+                let info = get_rte_variable (Some vname) (idx + offset) ctx in
+                let ctor_def = match info with
+                    | Inductive(_, _, _, c) -> c
+                    | _ -> eval_error loc "Not an Inductive Type" in
+                    info, ctor_def)
+            | _ -> eval_error loc "Target is not a Constructor" in
+
+    (* I think checks should be in lexp not done during eval *)
+    (* check if a constructor 'cname' exist                  *)
+    let check_ctor cname cargs ctor_def =
+        try let targs = (SMap.find cname ctor_def) in
+            let n_targs = List.length targs in
+            let n_cargs = List.length cargs in
+
+            match (n_targs - n_cargs) with
+                | 0 -> cname, cargs
+                | _ -> eval_error loc ("Constructor not applied. " ^
+                    cname ^ " expected " ^ (string_of_int n_targs) ^ " arg(s)." ^
+                    " Given " ^ (string_of_int n_cargs) ^ " arg(s).")
+
+        with Not_found ->
+            eval_error loc ("Constructor \"" ^ cname ^ "\" does not exist") in
+
+    (* extract constructor name and check its validity *)
     let ctor_name, args = match v with
-        | Call(lname, args) -> (match lname with
-            (* FIXME we should check that ctor_name is an existing
-             * constructor with the correct number of args          *)
-            | Var((_, ctor_name), _) -> ctor_name, args
-            | _ -> eval_error loc "Target is not a Constructor" )
+        | Call(Var((_, cname), tp), args) ->(
+            (* get constructor *)
+            try let ctor = get_rte_variable None (tp + offset) ctx in
+                let idt, ctor_def = get_inductive_ref ctor in
+                    check_ctor cname args ctor_def
 
-        | Cons(((_, vname), idx), (_, cname)) -> begin
-            (*  retrieve type definition *)
-            let info = get_rte_variable (Some vname) (idx + offset) ctx in
-            let ctor_def = match info with
-                | Inductive(_, _, _, c) -> c
-                | _ -> eval_error loc "Not an Inductive Type" in
+            (* currently we have a little bug with ctor checking *)
+            with e -> cname, args)
 
-            try match SMap.find cname ctor_def with
-                | [] -> cname, []
-                | carg ->
-                    let ctor_n = List.length carg in
-                    eval_error loc ("Constructor not applied. " ^
-                         "Constructor name: \"" ^ cname ^
-                         "\": " ^ (string_of_int ctor_n) ^
-                         " argument(s) expected")
-            with
-                Not_found ->
-                    eval_error loc "Constructor does not exist" end
+        | Cons(((_, vname), idx), (_, cname)) as ctor ->
+            let idt, ctor_def = get_inductive_ref ctor in
+                check_ctor cname [] ctor_def
 
         | _ -> lexp_print target; print_string "\n";
             lexp_print v; print_string "\n";
-            eval_error loc "Can't match expression" in
+            eval_error loc "Target is not a Constructor" in
 
     (*  Check if a default is present *)
     let run_default df =
         match df with
-        | None -> Imm(String(loc, "Match Failure"))
+        | None -> eval_error loc "Match Failure"
         | Some lxp -> _eval lxp ctx (i + 1) in
 
     let ctor_n = List.length args in
@@ -382,6 +419,7 @@ and eval_case ctx i loc target pat dflt =
     let is_true key value =
         let (_, pat_args, _) = value in
         let pat_n = List.length pat_args in
+            (* FIXME: Shouldn't pat_n != ctor_n cause an error ? *)
             if pat_n = ctor_n && ctor_name = key then
                 true
             else
@@ -429,14 +467,6 @@ and build_arg_list args ctx i =
     (*  Add args inside context *)
     List.fold_left (fun c v -> add_rte_variable None v c) ctx arg_val
 
-and build_ctx decls ctx i =
-    let f nctx e =
-        let (v, exp, tp) = e in
-        let value = _eval exp ctx (i + 1) in
-            add_rte_variable None value nctx in
-
-    List.fold_left f ctx decls
-
 and eval_decls decls ctx = _eval_decls decls ctx 1
 and _eval_decls (decls: ((vdef * lexp * ltype) list))
                (ctx: runtime_env) i: runtime_env =
@@ -447,25 +477,16 @@ and _eval_decls (decls: ((vdef * lexp * ltype) list))
 
     let n = (List.length decls) - 1 in
 
-    try
-
     let dctx, _ = List.fold_left (fun (ctx, k) g ->
         let ((_, name), lxp, _) = g in
         let lxp = _eval lxp ctx (i + 1) in
-        let ctx = set_offset ctx (n - k) in
         let ctx = add_rte_variable (Some name) lxp ctx in
-            (ctx, k + 1))
-        (ctx, 0) decls in
+        let ctx = set_offset ctx (n - k) in
+            (local_ctx ctx, k + 1))
+        (local_ctx ctx, 0) decls in
 
     let dctx = set_offset dctx 0 in
         (local_ctx dctx)
-
-    with e ->(
-        print_rte_ctx (!_global_eval_ctx);
-        print_eval_trace ();
-        raise e
-    )
-
 
 and print_eval_result i lxp =
     print_string "     Out[";

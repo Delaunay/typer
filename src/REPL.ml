@@ -36,8 +36,6 @@ this program.  If not, see <http://www.gnu.org/licenses/>.  *)
  *
  * -------------------------------------------------------------------------- *)
 
-(* FIXME: Prevent ityper from crashing when an error is thrown *)
-
 open Debug
 open Prelexer
 open Lexer
@@ -56,6 +54,10 @@ let print_input_line i =
     print_string "  In[";
     ralign_print_int i 2;
     print_string "] >> "
+;;
+
+let ieval_error loc msg =
+    msg_error "IEVAL" loc msg;
 ;;
 
 (*  Read stdin for input. Returns only when the last char is ';'
@@ -134,25 +136,102 @@ let _ieval f str  lctx rctx =
     let pxps = ipexp_parse nods in
     let lxps, lctx = ilexp_parse pxps lctx in
     let v, rctx = ieval lxps rctx in
-        v, lctx, rctx
+        v, lctx, (local_ctx rctx)
 ;;
 
 let ieval_string = _ieval prelex_string
 let ieval_file = _ieval prelex_file
 
-(*  Specials commands %[command-name] *)
+
+let _welcome_msg =
+"      Typer 0.0.0 - Interpreter - (c) 2016
+
+      %quit         (%q) : leave REPL
+      %help         (%h) : print help
+";;
+
+let _help_msg =
+"      %quit         (%q) : leave REPL
+      %who          (%w) : print runtime environment
+      %info         (%i) : print elaboration environment
+      %calltrace    (%ct): print call trace of last call
+      %readfile          : read a typer/ityper file
+      %help         (%h) : print help
+";;
+
+
+let str_split str sep =
+    let str = String.trim str in
+    let n = String.length str in
+
+    if n = 0 then []
+    else (
+
+        let ret = ref [] in
+        let buffer = Buffer.create 10 in
+            Buffer.add_char buffer (str.[0]);
+
+        for i = 1 to n - 1 do
+            if str.[i] = sep then (
+                ret := (Buffer.contents buffer)::(!ret);
+                Buffer.reset buffer)
+            else
+                Buffer.add_char buffer (str.[i]);
+        done;
+        (if (Buffer.length buffer) > 0 then
+            ret := (Buffer.contents buffer)::(!ret));
+
+        List.rev (!ret));;
+
+
+let readfiles files (i, lctx, rctx) prt =
+    (* Read specified files *)
+    List.fold_left (fun (i, lctx, rctx) file ->
+
+        (if prt then (
+        print_string "  In["; ralign_print_int i 2;  print_string "] >> ";
+        print_string ("%readfile " ^ file); print_string "\n";));
+
+        try let (ret, lctx, rctx) = ieval_file file lctx rctx in
+            (List.iter (print_eval_result i) ret; (i + 1, lctx, rctx))
+        with
+            Sys_error _ -> (
+                 ieval_error dloc ("file \"" ^ file ^ "\" does not exist.");
+                (i, lctx, rctx))
+        )
+        (i, lctx, rctx)  files;;
+
+
+(*  Specials commands %[command-name] [args] *)
 let rec repl i clxp rctx =
+    let repl = repl (i + 1) in
     let ipt = read_input i in
         match ipt with
             (*  Check special keywords *)
             | "%quit" | "%q" -> ()
-            | "%who"  | "%w" -> (print_rte_ctx rctx;      repl (i + 1) clxp rctx)
-            | "%info" | "%i" -> (print_lexp_ctx clxp;     repl (i + 1) clxp rctx)
-            | "%calltrace" | "%ct" -> (print_eval_trace (); repl (i + 1) clxp rctx)
+            | "%help" | "%h" -> (print_string _help_msg;  repl clxp rctx)
+            | "%who"  | "%w" -> (print_rte_ctx rctx;      repl clxp rctx)
+            | "%info" | "%i" -> (print_lexp_ctx clxp;     repl clxp rctx)
+            | "%calltrace" | "%ct" -> (print_eval_trace (); repl clxp rctx)
+
+            (* command with arguments *)
+            | _ when (ipt.[0] = '%' && ipt.[1] != ' ') -> (
+                match (str_split ipt ' ') with
+                    | "%readfile"::args ->
+                        let (i, clxp, rctx) = readfiles args (i, clxp, rctx) false in
+                            repl clxp rctx;
+                    | cmd::_ ->
+                        ieval_error dloc (" \"" ^ cmd ^ "\" is not a correct repl command");
+                        repl clxp rctx
+                    | _ -> repl clxp rctx)
+
             (* eval input *)
-            | _ -> let (ret, clxp, rctx) = (ieval_string ipt clxp rctx) in
-                List.iter (print_eval_result i) ret;
-                repl (i + 1) clxp rctx
+            | _ -> (
+                try let (ret, clxp, rctx) = (ieval_string ipt clxp rctx) in
+                    List.iter (print_eval_result i) ret;
+                    repl clxp rctx
+                with e ->
+                    repl clxp rctx)
 ;;
 
 let arg_files = ref []
@@ -171,36 +250,20 @@ let parse_args () =
 let main () =
     parse_args ();
 
-    let lctx = ref (default_lctx ()) in
-    let rctx = ref make_runtime_ctx in
+    let lctx = (default_lctx ()) in
+    let rctx = make_runtime_ctx in
 
     print_string (make_title " TYPER REPL ");
-    print_string "      %quit      : leave REPL\n";
-    print_string "      %who       : print runtime environment\n";
-    print_string "      %info      : print elaboration environment\n";
-    print_string "      %calltrace : print call trace of last call \n";
+    print_string _welcome_msg;
     print_string (make_sep '-');
     flush stdout;
 
-    let nfiles = List.length !arg_files in
-
-    (* Read specified files *)
-    List.iteri (fun i file ->
-        print_string "  In["; ralign_print_int (i + 1) 2;  print_string "] >> ";
-        print_string ("%readfile " ^ file); print_string "\n";
-
-        let (ret, lctx1, rctx1) = ieval_file file (!lctx) (!rctx) in
-            lctx := lctx1;
-            rctx := rctx1;
-            List.iter (print_eval_result i) ret;
-        )
-
-        !arg_files;
+    let (i, lctx, rctx) = readfiles (!arg_files) (1, lctx, rctx) true in
 
     flush stdout;
 
     (* Initiate REPL. This will allow us to inspect interpreted code *)
-    repl (nfiles + 1) (!lctx) (!rctx)
+    repl i lctx rctx
 ;;
 
 

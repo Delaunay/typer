@@ -123,7 +123,9 @@ let env_add_var_info var (ctx: lexp_context) =
 let env_extend (ctx:lexp_context) (def:vdef) (v: lexp option) (t:lexp) =
   env_add_var_info (0, def, v, t) (senv_add_var def ctx)
 
-let env_lookup_type ctx (v : vref) =
+
+(* generic lookup *)
+let _env_lookup ctx (v : vref) =
   let ((dv_size, _), info_env, _) = ctx in
   let ti_size = Myers.length info_env in
   let sync_offset = dv_size - ti_size in
@@ -131,17 +133,20 @@ let env_lookup_type ctx (v : vref) =
   let ((_, rname), dbi) = v in
   let idx = (dbi - sync_offset) in
 
-  try let (rof, (_, dname), _, t) = Myers.nth idx info_env in
-      if dname = rname then
-        t (* Shift (dbi - roft, t) *)
-      else (
-        let (rof, (_, dname), _, t) = Myers.nth (dbi - sync_offset) info_env in
-        print_string (" DBI: " ^ dname ^ " " ^ rname);
-        print_int (dbi - sync_offset); print_string "\n";
-        internal_error ("DeBruijn index refers to wrong name. Expected: \""
-                                ^ rname ^ "\" got \"" ^ dname ^ "\""))
+  let ret = try Myers.nth idx info_env
+    with Not_found -> internal_error "DeBruijn index out of bounds!" in
 
-  with Not_found -> internal_error "DeBruijn index out of bounds!"
+  let (_, (_, dname), _, _) = ret in
+    if dname = rname then ret
+    else
+      internal_error ("DeBruijn index refers to wrong name. " ^
+                      "Expected: \"" ^ rname ^ "\" got \"" ^ dname ^ "\"")
+
+let env_lookup_type ctx (v : vref) =
+    let (_, (_, _), _, t) =  _env_lookup ctx v in t
+
+let env_lookup_expr ctx (v : vref) =
+    let (_, (_, _), lxp, _) =  _env_lookup ctx v in lxp
 
 let env_lookup_by_index index (ctx: lexp_context): env_elem =
     Myers.nth index (_get_env ctx)
