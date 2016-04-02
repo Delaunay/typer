@@ -33,11 +33,14 @@
 open Util
 open Pexp       (* Arg_kind *)
 open Lexp
-open Myers
+
 open Sexp
 open Fmt
 open Debruijn
 open Grammar
+
+open Env
+open Builtin
 
 
 let eval_error loc msg =
@@ -47,130 +50,9 @@ let eval_error loc msg =
 
 let dloc = dummy_location
 let eval_warning = msg_warning "EVAL"
-let str_idx idx = "[" ^ (string_of_int idx) ^ "]"
-
-let print_myers_list l print_fun =
-    let n = (length l) - 1 in
-
-    print_string (make_title " ENVIRONMENT ");
-    make_rheader [(None, "INDEX");
-        (None, "VARIABLE NAME"); (Some ('l', 48), "VALUE")];
-    print_string (make_sep '-');
-
-    for i = 0 to n do
-    print_string "    | ";
-        ralign_print_int (n - i) 5;
-        print_string " | ";
-        print_fun (nth (n - i) l);
-    done;
-    print_string (make_sep '=');
-;;
-
-let print_rte_ctx ctx =
-    let (l, b) = ctx in
-    print_myers_list l
-    (fun (n, g) ->
-        let _ =
-        match n with
-            | Some m -> lalign_print_string m 12; print_string "  |  "
-            | None -> print_string (make_line ' ' 12); print_string "  |  " in
-        lexp_print g; print_string "\n")
-;;
-
-
-let get_int lxp =
-    match lxp with
-        | Imm(Integer(_, l)) -> Some l
-        | _ -> None
-;;
-
-(* Offset is used when we eval declaration one by one                    *)
-(* i.e not everything is present so we need to account for missing decls *)
-type decls_offset = int
-
-(*  Runtime Environ *)
-type runtime_env = ((string option * lexp) myers) * (int * int * decls_offset)
-
-let make_runtime_ctx = (nil, (0, 0, 0));;
-
-let get_rte_size (ctx: runtime_env): int = let (l, _) = ctx in length l;;
-
-let add_rte_variable name x ctx =
-    let (l, b) = ctx in
-    let lst = (cons (name, x) l) in
-        (lst, b);;
-
-let is_free_var idx ctx =
-    let (l, (osize, _, offset)) = ctx in
-    let tsize = (get_rte_size ctx) - osize in
-        if idx > tsize then true else false
-;;
-
-let get_rte_variable (name: string option) (idx: int) (ctx: runtime_env): lexp =
-    let (l, (_, _, offset)) = ctx in
-    let idx = if (is_free_var idx ctx) then idx - offset else idx in
-    try (let (tn, x) = (nth idx l) in
-    match (tn, name) with
-        | (Some n1, Some n2) -> (
-            if n1 = n2 then
-                x
-            else (
-            eval_error dloc
-                ("Variable lookup failure. Expected: \"" ^
-                n2 ^ "[" ^ (string_of_int idx) ^ "]" ^ "\" got \"" ^ n1 ^ "\"")))
-
-        | _ -> x)
-    with Not_found ->
-        let n = match name with Some n -> n | None -> "" in
-        eval_error dloc ("Variable lookup failure. Var: \"" ^
-            n ^ "\" idx: " ^ (str_idx idx) ^ " offset: " ^ (str_idx offset) ^
-            " free_var? " ^ (string_of_bool (is_free_var idx ctx)))
-;;
-
-
-(* This function is used when we enter a new scope                         *)
-(* it saves the size of the environment before temp var are added          *)
-(* it allow us to remove temporary variables when we enter a new scope     *)
-let local_ctx ctx =
-    let (l, (_, _, off)) = ctx in
-    let osize = length l in
-        (l, (osize, 0, off))
-;;
-
-let select_n ctx n =
-    let (l, a) = ctx in
-    let r = ref nil in
-    let s = (length l) - 1 in
-
-    for i = 0 to n - 1 do
-        r := (cons (nth (s - i) l) (!r));
-    done;
-
-    ((!r), a)
-
-let temp_ctx ctx =
-    let (l, (osize, _, _)) = ctx in
-    let tsize = length l in
-        (* Check if temporary variables are present *)
-        if tsize != osize then
-            (* remove them *)
-            (select_n ctx osize)
-        else
-            ctx
-;;
-
-(* Select the n first variable present in the env *)
-let nfirst_rte_var n ctx =
-    let rec loop i acc =
-        if i < n then
-            loop (i + 1) ((get_rte_variable None i ctx)::acc)
-        else
-            List.rev acc in
-    loop 0 []
-;;
 
 let _global_eval_trace = ref []
-let _global_eval_ctx = ref (nil, (0, 0, 0))
+let _global_eval_ctx = ref make_runtime_ctx
 let _eval_max_recursion_depth = ref 255
 let reset_eval_trace () = _global_eval_trace := []
 
@@ -390,13 +272,16 @@ and eval_case ctx i loc target pat dflt =
     (* extract constructor name and check its validity *)
     let ctor_name, args = match v with
         | Call(Var((_, cname), tp), args) ->(
-            (* get constructor *)
+            (* Don't check the constructor this job will be done in lexping *)
+                cname, args)
+
+            (* get constructor * )
             try let ctor = get_rte_variable None (tp + offset) ctx in
                 let idt, ctor_def = get_inductive_ref ctor in
                     check_ctor cname args ctor_def
 
             (* currently we have a little bug with ctor checking *)
-            with e -> cname, args)
+            with e -> cname, args) *)
 
         | Cons(((_, vname), idx), (_, cname)) as ctor ->
             let idt, ctor_def = get_inductive_ref ctor in

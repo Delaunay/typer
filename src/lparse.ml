@@ -38,9 +38,7 @@ open Grammar
 open Debruijn
 open Fmt
 open Eval
-
-open Lexer
-open Prelexer
+open Builtin
 
 (* Shortcut => Create a Var *)
 let make_var name index loc =
@@ -62,32 +60,6 @@ let lexp_fatal loc msg =
     raise (internal_error msg)
 ;;
 
-module StringSet
-    = Set.Make (struct type t = string let compare = String.compare end)
-;;
-
-(* Built-in list of types/functions *)
-let lexp_builtins = [
-(*    NAME  |     LXP         | impl      *)
-    ("Int"  , type_int);
-    ("Float", type_float);
-    ("_=_"  , type_eq);    (*  t  ->  t  -> bool *)
-    ("_+_"  , iop_binary); (* int -> int -> int  *)
-    ("_*_"  , iop_binary); (* int -> int -> int  *)
-]
-
-(* Make lxp context with built-in types *)
-let default_lctx () =
-    (* Empty context *)
-    let lctx = make_lexp_context in
-
-    (* populate ctx *)
-    List.fold_left
-      (fun ctx (name, lxp) ->
-        env_extend ctx (dloc, name) None lxp)
-      lctx
-      lexp_builtins
-;;
 
 let _global_lexp_ctx = ref make_lexp_context;;
 let _global_lexp_trace = ref []
@@ -237,6 +209,9 @@ and _lexp_parse p ctx i: lexp =
 and lexp_call (fname: pexp) (_args: sexp list) ctx i =
     (*  Process Arguments *)
     let pargs = List.map pexp_parse _args in
+    (*
+     *  Lookup name in environment and replace the name by its builtin type
+     *)
 
     (*  Call to named function which must have been defined earlier  *
      *          i.e they must be in the context                      *)
@@ -448,66 +423,6 @@ and _lexp_parse_all (p: pexp list) (ctx: lexp_context) i : lexp list =
                     (loop (List.tl plst) ctx (lxp::acc)) in
 
     (loop p ctx [])
-
-(*
- *      Free Variables
- * --------------------- *)
-(** Return a list of all free variables contained in an expression lxp *)
-
-(* Tree Nodes that make reference to declarations are:
- *  Call/Var/Cons
- *)
-
-(* free_var should use a lexp since we are going to need free_v during eval *)
-and free_variable pxp =
-(* Expression that can have free variables:
- *      - Lambda
- *      - Let
- *      - Call
- * Expression that can be free variables:
- *      - Var/ Function (Call)                                  *)
-
-    let bound = StringSet.empty in       (* bound variables  *)
-    let free = ([], StringSet.empty) in  (* decl order * map *)
-
-    let rec _fv pxp (bound, free) =
-        match pxp with
-            | Plambda (_, (_, name), _, body) ->
-                let bound = StringSet.add name bound in
-                    _fv body (bound, free)
-
-            (*
-            | Plet (_, args, body) ->
-
-                let bound = List.fold_left
-                    (fun s ((_, name), _, _) -> StringSet.add name s) bound args in
-                        _fv body bound free *)
-
-            | Pcall (xp, lst) ->
-                (* check if function is declared outside *)
-                let (bound, free) = _fv xp (bound, free) in
-                let pargs = List.map pexp_parse lst in
-                    (* check for fv inside call args *)
-                    List.fold_left (fun a g -> _fv g a) (bound, free) pargs
-
-            | Pvar (_, name) ->(
-                try let _ = StringSet.find name bound in
-                    (bound, free)
-                with
-                    Not_found ->(
-                        let (arr, set) = free in
-                            try let _ = StringSet.find name set in
-                                (bound, free)
-                            with
-                                Not_found ->(
-                                    let set = StringSet.add name set in
-                                    let arr = name :: arr in
-                                        (bound, (arr, set)))))
-            | _ -> (bound, free) in
-
-    let (bound, (afree, sfree)) = _fv pxp (bound, free) in
-        (bound, (List.rev afree, sfree))
-
 
 (*
  *      Type Inference

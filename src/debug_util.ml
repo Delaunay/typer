@@ -30,19 +30,32 @@
  *
  * --------------------------------------------------------------------------- *)
 
+(* Utilities *)
+open Util
+open Fmt
 open Debug
+
+(* ASTs *)
 open Prelexer
 open Lexer
 open Sexp
-open Grammar
 open Pexp
-open Util
-open Fmt
-open Debruijn
-open Myers
+open Lexp
+
 open Lparse
 open Eval
-open Lexp
+
+(* definitions *)
+open Grammar
+open Builtin
+
+(* environments *)
+open Debruijn
+open Env
+
+
+
+
 
 let dloc = dummy_location;;
 let dummy_decl = Imm(String(dloc, "Dummy"));;

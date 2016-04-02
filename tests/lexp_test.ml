@@ -1,8 +1,37 @@
-open Lparse     (* add_def       *)
-open Debruijn   (* make_lexp_context *)
-open Lexp
-open Pexp
+(*
+ *      Typer Compiler
+ *
+ * ---------------------------------------------------------------------------
+ *
+ *      Copyright (C) 2011-2016  Free Software Foundation, Inc.
+ *
+ *   Author: Pierre Delaunay <pierre.delaunay@hec.ca>
+ *   Keywords: languages, lisp, dependent types.
+ *
+ *   This file is part of Typer.
+ *
+ *   Typer is free software; you can redistribute it and/or modify it under the
+ *   terms of the GNU General Public License as published by the Free Software
+ *   Foundation, either version 3 of the License, or (at your option) any
+ *   later version.
+ *
+ *   Typer is distributed in the hope that it will be useful, but WITHOUT ANY
+ *   WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ *   FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ *   more details.
+ *
+ *   You should have received a copy of the GNU General Public License along
+ *   with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ * --------------------------------------------------------------------------- *)
+
 open Utest_lib
+
+open Pexp
+open Lexp
+open Lparse     (* add_def       *)
+
+open Builtin
 
 (* default environment *)
 let lctx = default_lctx ()
@@ -22,7 +51,7 @@ let _ = (add_test "LEXP" "Built-in type Inference" (fun () ->
             | _ -> failure ())
 );;
 
-
+(*
 let set_to_list s =
     StringSet.fold (fun g a -> g::a) s []
 ;;
@@ -53,7 +82,7 @@ let _ = (add_test "LEXP" "Free Variable" (fun () ->
                 | _ -> failure ())
         | _ -> failure ()
 
-));;
+));; *)
 
 (* run all tests *)
 run_all ()

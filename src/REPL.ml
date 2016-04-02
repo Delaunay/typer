@@ -36,19 +36,25 @@ this program.  If not, see <http://www.gnu.org/licenses/>.  *)
  *
  * -------------------------------------------------------------------------- *)
 
+open Util
+open Fmt
 open Debug
+
 open Prelexer
 open Lexer
 open Sexp
-open Grammar
 open Pexp
-open Debruijn
-open Lparse
-open Myers
-open Eval
-open Util
 open Lexp
-open Fmt
+
+open Lparse
+open Eval
+
+open Grammar
+open Builtin
+
+open Env
+open Debruijn
+
 
 
 let print_input_line i =

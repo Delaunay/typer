@@ -50,6 +50,7 @@ type builtin =
   | SexpType
   | LexpType
   | IAdd
+  | IMult
   | EqType
   | LevelType
 
@@ -108,32 +109,7 @@ type ltype = lexp
 let opt_map f x = match x with None -> None | Some x -> Some (f x)
 
 (**** The builtin elements ****)
-
-let dloc = dummy_location
-let slevel0 = SortLevel (SLn 0)
-let slevel1 = SortLevel (SLn 1)
-let type0 = Sort (dloc, Stype slevel0)
-let type1 = Sort (dloc, Stype slevel1)
-let type_level = Sort (dloc, StypeLevel)
-let type_omega = Sort (dloc, StypeOmega)
-let type_int = Builtin (IntType, "Int", type0)
-let type_float = Builtin (FloatType, "Float", type0)
-let type_level = Builtin (LevelType, "TypeLevel", type_level)
-let type_eq
-  = Builtin
-      (EqType, "_₌_",
-       let lv = (dloc, "ℓ") in
-       let tv = (dloc, "t") in
-       Arrow (Aerasable, Some lv, type_level, dloc,
-              Arrow (Aerasable, Some tv,
-                     Sort (dloc, Stype (Var (lv, 0))), dloc,
-                     Arrow (Aexplicit, None, Var (tv, 0), dloc,
-                            Arrow (Aexplicit, None, Var (tv, 1), dloc,
-                                   type0)))))
-let iop_binary = Arrow (Aexplicit, None, type_int, dummy_location,
-                        Arrow (Aexplicit, None, type_int, dummy_location,
-                               type_int))
-let builtin_iadd = Builtin (IAdd, "_+_", iop_binary)
+(*
 let builtins =
   (* let l = dloc in *)
   [ (* (0,"%type1%", Some (type1),	Lsort (l, 2)) *)
@@ -152,7 +128,7 @@ let builtins =
              [type_level; type_int; type_float; type_eq]
 (* let var_bottom = Var (dloc, -1) *)
 
-(* let (senv_builtin,venv_builtin)
+ * let (senv_builtin,venv_builtin)
  *   = List.fold_left (fun (senv,venv) (name,e,t) ->
  *                     let v = name in
  *                     (SMap.add name v senv,
