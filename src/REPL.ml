@@ -50,6 +50,7 @@ open Util
 open Lexp
 open Fmt
 
+
 let print_input_line i =
     print_string "  In[";
     ralign_print_int i 2;
@@ -158,30 +159,6 @@ let _help_msg =
       %readfile          : read a typer/ityper file
       %help         (%h) : print help
 ";;
-
-
-let str_split str sep =
-    let str = String.trim str in
-    let n = String.length str in
-
-    if n = 0 then []
-    else (
-
-        let ret = ref [] in
-        let buffer = Buffer.create 10 in
-            Buffer.add_char buffer (str.[0]);
-
-        for i = 1 to n - 1 do
-            if str.[i] = sep then (
-                ret := (Buffer.contents buffer)::(!ret);
-                Buffer.reset buffer)
-            else
-                Buffer.add_char buffer (str.[i]);
-        done;
-        (if (Buffer.length buffer) > 0 then
-            ret := (Buffer.contents buffer)::(!ret));
-
-        List.rev (!ret));;
 
 
 let readfiles files (i, lctx, rctx) prt =

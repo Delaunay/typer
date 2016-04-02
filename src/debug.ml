@@ -38,7 +38,6 @@ open Lexer
 open Sexp
 open Pexp
 open Lexp
-open Lparse
 open Debruijn
 open Fmt
 open Grammar
@@ -139,10 +138,16 @@ let debug_pexp_print ptop =
 
 let debug_pexp_decls decls =
     List.iter (fun e ->
-            let ((_, name), pxp, tp) = e in
-            print_string name;
-                if tp then print_string " : " else print_string " = ";
-            pexp_print pxp; print_string "\n"
+        let ((loc, name), pxp, tp) = e in
+
+        print_string " ";
+        lalign_print_string (pexp_to_string pxp) 15;
+        print_string "["; print_loc loc; print_string "]  ";
+
+        print_string name;
+            if tp then print_string " : " else print_string " = ";
+        pexp_print pxp; print_string "\n"
+
         )
         decls
 
@@ -156,46 +161,51 @@ let debug_pexp_print_all pexps =
         pexps
 ;;
 
-(* Print lexp with debug info *)
-let debug_lexp_print tlxp =
-    print_string " ";
-    let print_info msg loc lex =
-        print_string msg; print_string "[";
-        print_loc loc;
-        print_string "]\t";
-        lexp_print lex in
-    let tloc = lexp_location tlxp in
-    match tlxp with
-        | Var((loc, _), _)          -> print_info "Var         " tloc tlxp
-        | Imm(s)                    -> print_info "Imm         " tloc tlxp
-        | Let(loc, _, _)            -> print_info "Let         " tloc tlxp
-        | Arrow(_, _, _, loc, _)    -> print_info "Arrow       " tloc tlxp
-        | Lambda(_, (loc, _), _, _) -> print_info "Lambda      " tloc tlxp
-        | Call(_, _)                -> print_info "Call        " tloc tlxp
-        | Inductive(loc, _, _, _)   -> print_info "Inductive   " tloc tlxp
-        | UnknownType(loc)          -> print_info "UnknownType " tloc tlxp
-        | Case(loc, _, _, _, _)     -> print_info "Case        " tloc tlxp
-        | Cons (rf, sym)            -> print_info "Cons        " tloc tlxp
-        | _ -> print_string "Debug Printing Not Implemented";
-;;
 
-(* Print a list of lexp *)
-let debug_lexp_print_all lexps =
-    List.iter
-        (fun px ->
-            debug_lexp_print px;
-            print_string "\n")
-        lexps
-;;
+let str_split str sep =
+    let str = String.trim str in
+    let n = String.length str in
+
+    if n = 0 then []
+    else (
+
+        let ret = ref [] in
+        let buffer = Buffer.create 10 in
+            Buffer.add_char buffer (str.[0]);
+
+        for i = 1 to n - 1 do
+            if str.[i] = sep then (
+                ret := (Buffer.contents buffer)::(!ret);
+                Buffer.reset buffer)
+            else
+                Buffer.add_char buffer (str.[i]);
+        done;
+        (if (Buffer.length buffer) > 0 then
+            ret := (Buffer.contents buffer)::(!ret));
+
+        List.rev (!ret));;
 
 let debug_lexp_decls decls =
-    List.iter (fun e ->
-            let ((_, name), lxp, ltp) = e in
-            print_string name; print_string " : ";
-                lexp_print ltp;
-                print_string " = ";
-                lexp_print lxp;
-            print_string ";\n"
-        )
-        decls
 
+    List.iter (fun e ->
+            let ((loc, name), lxp, ltp) = e in
+
+            print_string " ";
+            lalign_print_string (lexp_to_string lxp) 15;
+            print_string "["; print_loc loc; print_string "]  ";
+
+            let str = _lexp_str_decls (!debug_ppctx) [e] in
+
+            let str = match str with
+                | hd::tl -> print_string hd; print_string "\n"; tl
+                | _ -> [] in
+
+            (* inefficient but makes things pretty iff -fmt-pretty=on *)
+            let str = List.flatten (List.map (fun g -> str_split g '\n') str) in
+
+            List.iter (fun g ->
+                print_string (make_line ' ' 34);
+                print_string g; print_string "\n")
+                str;
+
+        ) decls

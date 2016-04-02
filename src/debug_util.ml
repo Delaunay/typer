@@ -52,8 +52,10 @@ let discard v = ();;
 (*          Argument parsing        *)
 let arg_print_options = ref SMap.empty;;
 let arg_files = ref []
+let debug_arg = ref 0
 
 let add_p_option name () =
+    debug_arg := (!debug_arg) + 1;
     arg_print_options := SMap.add name true (!arg_print_options);;
 
 let get_p_option name =
@@ -63,7 +65,78 @@ let get_p_option name =
         Not_found -> false
 ;;
 
+(*
+    pretty ?        (print with new lines and indents)
+    indent level
+    print_type?     (print inferred Type)
+    print_index     (print dbi index)
+    separate decl   (print extra newline between declarations)
+    indent size      4
+    highlight       (use console color to display hints)
+*)
+
+let _format_mode = ref false
+let _ppctx  = ref (true , 0, true, false, true,  2, true)
+let _format_dest = ref ""
+let _write_file = ref false
+
+
+let _set_print_pretty ctx v =
+    let (a, b, c, d, e, f, g) = !ctx in ctx := (v, b, c, d, e, f, g)
+
+let _set_print_type ctx v =
+    let (a, b, c, d, e, f, g) = !ctx in ctx := (a, b, v, d, e, f, g)
+
+let _set_print_index ctx v =
+    let (a, b, c, d, e, f, g) = !ctx in ctx := (a, b, c, v, e, f, g)
+
+let _set_print_indent_size ctx v =
+    let (a, b, c, d, e, f, g) = !ctx in ctx := (a, b, c, d, e, v, g)
+
+let _set_highlight ctx v =
+    let (a, b, c, d, e, f, g) = !ctx in ctx := (a, b, c, d, e, f, v)
+
+
+let mod_ctx f v = f _ppctx v; f debug_ppctx v
+let set_print_type v () = mod_ctx _set_print_type v
+let set_print_index v () = mod_ctx _set_print_index v
+let set_print_indent_size v =  mod_ctx _set_print_indent_size v
+let set_highlight v () =  mod_ctx _set_highlight v
+let set_print_pretty v () = mod_ctx _set_print_pretty v
+
+
+let output_to_file str =
+    _write_file := true;
+    _format_dest := str;
+    set_highlight false ()
+
+
 let arg_defs = [
+    (* format *)
+    ("--format",
+        Arg.Unit (fun () -> _format_mode := true), " format a typer source code");
+    ("-fmt-type=on",
+        Arg.Unit (set_print_type true), " Print type info");
+    ("-fmt-pretty=on",
+        Arg.Unit (set_print_pretty true), " Print with indentation");
+    ("-fmt-pretty=off",
+        Arg.Unit (set_print_pretty false), " Print expression in one line");
+    ("-fmt-type=off",
+        Arg.Unit (set_print_type false), " Don't print type info");
+    ("-fmt-index=on",
+        Arg.Unit (set_print_index true), " Print DBI index");
+    ("-fmt-index=off",
+        Arg.Unit (set_print_index false), " Don't print DBI index");
+    ("-fmt-indent-size",
+        Arg.Int set_print_indent_size, " Indent size");
+    ("-fmt-highlight=on",
+        Arg.Unit (set_highlight true), " Enable Highlighting for typer code");
+    ("-fmt-highlight=off",
+        Arg.Unit (set_highlight false), " Disable Highlighting for typer code");
+    ("-fmt-file",
+        Arg.String output_to_file, " Output formatted code to a file");
+
+    (*  Debug *)
     ("-pretok",
         Arg.Unit (add_p_option "pretok"), " Print pretok debug info");
     ("-tok",
@@ -100,6 +173,35 @@ let make_default () =
     add_p_option "lexp" ()
 ;;
 
+
+let format_source () =
+    print_string (make_title " ERRORS ");
+
+    let filename = List.hd (!arg_files) in
+    let pretoks = prelex_file filename in
+    let toks = lex default_stt pretoks in
+    let nodes = sexp_parse_all_to_list default_grammar toks (Some ";") in
+    let pexps = pexp_decls_all nodes in
+    let ctx = default_lctx () in
+    let lexps, _ = lexp_p_decls pexps ctx in
+
+    print_string (make_sep '-'); print_string "\n";
+
+    let result = _lexp_str_decls (!_ppctx) lexps in
+
+    if (!_write_file) then (
+        print_string ("    " ^ " Writing output file: " ^ (!_format_dest) ^ "\n");
+        let file = open_out (!_format_dest) in
+
+        List.iter (fun str -> output_string file str) result;
+
+        flush_all ();
+        close_out file;
+
+    ) else (List.iter (fun str ->
+        print_string str; print_string "\n") result;)
+;;
+
 let main () =
     parse_args ();
 
@@ -111,8 +213,12 @@ let main () =
     (*  Print Usage *)
     if arg_n == 1 then
         (Arg.usage (Arg.align arg_defs) usage)
+
+    else if (!_format_mode) then (
+        format_source ()
+    )
     else(
-        (if arg_n = 2 then make_default ());
+        (if (!debug_arg) = 0 then make_default ());
 
         let filename = List.hd (!arg_files) in
 
@@ -160,8 +266,6 @@ let main () =
         (if (get_p_option "lexp") then(
             print_string (make_title " Lexp ");
             debug_lexp_decls lexps; print_string "\n"));
-
-        print_string "\n\n";
 
         (if (get_p_option "lctx") then(
             print_lexp_ctx nctx; print_string "\n"));

@@ -33,7 +33,6 @@
 open Util
 open Pexp       (* Arg_kind *)
 open Lexp
-open Lparse
 open Myers
 open Sexp
 open Fmt
@@ -518,16 +517,4 @@ let eval_all lxps rctx silent =
     let evalfun = if silent then eval else debug_eval in
     List.map (fun g -> evalfun g rctx) lxps;;
 
-(*  Eval String
- * ---------------------- *)
-let _eval_expr_str str lctx rctx silent =
-    let lxps = lexp_expr_str str lctx in
-        (eval_all lxps rctx silent)
-;;
 
-let eval_expr_str str lctx rctx = _eval_expr_str str lctx rctx false
-
-let eval_decl_str str lctx rctx =
-    let lxps, lctx = lexp_decl_str str lctx in
-        (eval_decls lxps rctx), lctx
-;;

@@ -124,4 +124,10 @@ let print_first n l f =
     loop 0 l
 ;;
 
-
+(* Colors *)
+let red     = "\x1b[31m"
+let green   = "\x1b[32m"
+let yellow  = "\x1b[33m"
+let magenta = "\x1b[35m"
+let cyan    = "\x1b[36m"
+let reset   = "\x1b[0m"

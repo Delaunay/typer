@@ -31,7 +31,7 @@
  * --------------------------------------------------------------------------- *)
 
 open Util
-
+open Fmt
 
 module StringMap =
     Map.Make (struct type t = string let compare = String.compare end)
@@ -92,17 +92,17 @@ let ut_string2 = ut_string 2
 (*      USAGE: expect_something_type value expected_value   *)
 (*          return success() if match else failure ()       *)
 let unexpected_throw sk tk e =
-    ut_string2 ("[   FAIL] " ^ sk ^ " - " ^ tk ^ "\n");
-    ut_string2  "[       ]     UNEXPECTED THROW:\n";
-    ut_string2  "[       ]  "; ut_string2 ((Printexc.to_string e) ^ "\n");
+    ut_string2 (red ^ "[   FAIL] " ^ sk ^ " - " ^ tk ^ "\n");
+    ut_string2        "[       ]     UNEXPECTED THROW:\n";
+    ut_string2        "[       ]  "; ut_string2 ((Printexc.to_string e) ^ "\n" ^ reset);
 ;;
 
 let _expect_equal_t to_string value expect =
     if value = expect then
         success ()
     else(
-        ut_string2 ("[       ]     EXPECTED: " ^ (to_string expect)^ "\n");
-        ut_string2 ("[       ]          GOT: " ^ (to_string value) ^ "\n");
+        ut_string2 (red ^ "[       ]     EXPECTED: " ^ (to_string expect)^ "\n");
+        ut_string2 (      "[       ]          GOT: " ^ (to_string value) ^ "\n" ^ reset);
         failure ())
 ;;
 
@@ -159,9 +159,9 @@ let for_all_tests sk tmap tk =
     try
         let r = tv () in
             if r = 0 then(
-                ut_string2 ("[     OK] " ^ sk ^ " - " ^ tk ^ "\n"))
+                ut_string2 (green ^ "[     OK] " ^ sk ^ " - " ^ tk ^ "\n" ^ reset))
             else(
-                ut_string2 ("[   FAIL] " ^ sk ^ " - " ^ tk ^ "\n");
+                ut_string2 (red ^ "[   FAIL] " ^ sk ^ " - " ^ tk ^ "\n" ^ reset);
                 _ret_code := failure ())
     with e ->
         _ret_code := failure ();

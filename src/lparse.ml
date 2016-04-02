@@ -37,6 +37,7 @@ open Lexp
 open Grammar
 open Debruijn
 open Fmt
+open Eval
 
 open Lexer
 open Prelexer
@@ -61,17 +62,13 @@ let lexp_fatal loc msg =
     raise (internal_error msg)
 ;;
 
-
 module StringSet
     = Set.Make (struct type t = string let compare = String.compare end)
 ;;
 
-              (*  pretty ? * indent level * print_type? *)
-type print_context = (bool * int * bool)
-
 (* Built-in list of types/functions *)
 let lexp_builtins = [
-(*    NAME  |     LXP               *)
+(*    NAME  |     LXP         | impl      *)
     ("Int"  , type_int);
     ("Float", type_float);
     ("_=_"  , type_eq);    (*  t  ->  t  -> bool *)
@@ -133,7 +130,7 @@ and _lexp_parse p ctx i: lexp =
                     (make_var name idx loc)
 
             with Not_found ->
-                (lexp_error loc ("The Variable: " ^ name ^ " was not declared");
+                (lexp_error loc ("The Variable: \"" ^ name ^ "\" was not declared");
                 (* Error recovery. The -1 index will raise an error later on *)
                 (make_var name (-1) loc))  end
 
@@ -532,6 +529,11 @@ and free_variable pxp =
  * - use lexp_p_check whenever you can.
  *)
 
+(*
+ * Infer: Imm, bultin, var, let, arrow, call, inductive, cons, case
+ *
+ * check: lambda
+ *)
 and lexp_p_infer (p : pexp) (env : lexp_context): lexp * ltype =
 
     (* Parse expr *)
@@ -618,7 +620,6 @@ and lexp_p_infer (p : pexp) (env : lexp_context): lexp * ltype =
             | Call(f, args) ->
                 (consume_args args (get_type f ctx) ctx)
 
-
             | Case (_, _, _, branches, dflt) ->
                 (* we need to check that all branches return the same type *)
                 let lst = SMap.bindings branches in
@@ -659,134 +660,6 @@ and lexp_p_check (p : pexp) (t : ltype) (env : lexp_context): lexp =
       (* FIXME: check that inferred_t = t!  *)
       e
 
-(*
- *      Printing
- * --------------------- *)
-(* FIXME: transform to lexp_to_buffer *)
-and lexp_print_adv opt exp =
-
-    let slexp_print = lexp_print_adv opt in (* short_lexp_print *)
-    let (pty, indent, prtp) = opt in
-    match exp with
-        | Imm(value)             -> sexp_print value
-        | Var ((loc, name), idx) ->
-            print_string name;
-            print_string "["; print_int idx; print_string "]"
-
-        | Let (_, decls, body)   ->
-            print_string "let"; lexp_print_decls (pty, indent + 1, prtp) decls;
-            if pty then print_string (make_line ' ' (indent * 4 + 4));
-            print_string " in "; lexp_print_adv (pty, indent + 2, prtp) body
-
-        | Arrow(kind, Some (_, name), tp, loc, expr) -> print_string "(";
-            lexp_print_type opt tp; print_string ": "; print_string name; print_string ")";
-            print_string " -> "; lexp_print_type opt expr;
-
-        | Arrow(kind, None, tp, loc, expr) ->
-            lexp_print_type opt tp; print_string " -> "; lexp_print_type opt expr;
-
-        | Lambda(kind, (loc, name), ltype, lbody) ->
-            print_string "lambda ("; print_string (name ^ ": ");
-            slexp_print ltype; print_string ") -> "; slexp_print lbody;
-
-        | Cons(vf, symbol) ->
-            let (loc, name) = symbol in
-            let ((loc, vname), idx) = vf in
-                print_string (name ^ "("); print_string vname;
-                print_string "["; print_int idx; print_string "])"
-
-        | Call(fname, args) -> begin  (*  /!\ Partial Print *)
-            (*  get function name *)
-            let str, idx = match fname with
-                | Var((_, name), idx) -> name, idx
-                | _ -> "unkwn", -1 in
-
-            let print_arg arg = match arg with | (kind, lxp) ->
-                 lexp_print_adv (pty, 0, prtp) lxp in
-
-            let print_binop op lhs rhs =
-                print_arg lhs; print_string op; print_arg rhs in
-
-            match (str, args) with
-                (* Special Operator *)
-                | ("_=_", [lhs; rhs]) -> print_binop " = " lhs rhs
-                | ("_+_", [lhs; rhs]) -> print_binop " + " lhs rhs
-                | ("_-_", [lhs; rhs]) -> print_binop " - " lhs rhs
-                | ("_/_", [lhs; rhs]) -> print_binop " / " lhs rhs
-                | ("_*_", [lhs; rhs]) -> print_binop " * " lhs rhs
-                (* not an operator *)
-                | _ ->
-                    print_string ("(" ^ str ^ "["); print_int idx; print_string "]";
-                    List.iter (fun arg -> print_string " "; print_arg arg) args;
-                    print_string ")" end
-
-        | Inductive (_, (_, name), _, ctors) ->
-            print_string ("inductive_ " ^ name ^ " ");
-            lexp_print_ctors opt ctors;
-
-        | Case (_, target, tpe, map, dflt) -> begin
-            print_string "case "; slexp_print target;
-            print_string ": "; slexp_print tpe;
-
-            if pty then print_string "\n";
-
-            let print_arg arg =
-                 List.iter (fun v ->
-                    match v with
-                        | None -> print_string " _"
-                        | Some (kind, (l, n)) -> print_string (" " ^ n)) arg in
-
-            SMap.iter (fun key (loc, arg, exp) ->
-                print_string (make_line ' ' (indent * 4));
-                print_string ("| " ^ key); print_arg arg;
-                print_string " -> ";
-                slexp_print exp; print_string "; ";
-                if pty then print_string "\n";)
-                map;
-
-            match dflt with
-                | None -> ()
-                | Some df ->
-                    print_string (make_line ' ' (indent * 4));
-                    print_string "| _ -> "; slexp_print df;
-                    print_string ";"; if pty then print_string "\n"; end
-
-        | Builtin (tp, name, lxp) ->
-            print_string name;
-
-        (* debug catch all *)
-        | UnknownType (loc)      -> print_string "unkwn";
-        | _ -> print_string "Printing Not Implemented"
-
-
-and lexp_print_ctors opt ctors =
-    SMap.iter (fun key value ->
-            print_string ("(" ^ key ^ ": ");
-            List.iter (fun (kind, _, arg) ->
-                lexp_print_adv opt arg; print_string " ") value;
-            print_string ")")
-        ctors
-
-and lexp_print_type opt ltp =
-    match ltp with
-        | Inductive(_, (_, l), _, _) -> print_string l;
-        | _ -> lexp_print_adv opt ltp
-
-and lexp_print_decls opt decls =
-    let (pty, indent, prtp) = opt in
-    let print_type nm tp =
-        print_string (" " ^ nm ^  ": "); lexp_print_type opt tp;
-        print_string ";"; in
-
-    List.iteri (fun idx g -> match g with
-        | ((loc, name), expr, ltyp) ->
-            if pty && idx > 0 then print_string (make_line ' ' (indent * 4));
-            if prtp then print_type name ltyp; print_string " ";
-            print_string (name ^ " = ");
-            lexp_print_adv opt expr; print_string ";";
-            if pty then print_string "\n")
-        decls
-
 (*  Print context  *)
 and print_lexp_ctx ctx =
     let ((n, map), env, f) = ctx in
@@ -818,9 +691,9 @@ and print_lexp_ctx ctx =
             print_string " | ";
             (match exp with
              | None -> print_string "<var>"
-             | Some exp -> lexp_print_adv (false, 0, true) exp);
+             | Some exp -> lexp_print exp);
             print_string ": ";
-            lexp_print_type (false, 0, true) tp;
+            _lexp_print (!debug_ppctx) tp;
             print_string "\n"
         with
             Not_found -> print_string "Not_found  |\n")
@@ -844,16 +717,15 @@ and lexp_print_var_info ctx =
         print_string " = ";
          (match exp with
              | None -> print_string "<var>"
-             | Some exp -> lexp_print_adv (false, 0, true) exp);
+             | Some exp -> lexp_print exp);
         print_string ": ";
-        lexp_print_adv (false, 0, true) tp;
+        lexp_print tp;
         print_string "\n")
     done;
 ;;
 
 
 let lexp_parse_all p ctx = _lexp_parse_all p ctx 1;;
-let lexp_print e = lexp_print_adv (false, 0, true) e;;
 
 
 (* add dummy definition helper *)
@@ -870,10 +742,7 @@ let add_def name ctx =
 (* Lexp helper *)
 let _lexp_expr_str (str: string) (tenv: bool array)
             (grm: grammar) (limit: string option) (ctx: lexp_context) =
-    let pretoks = prelex_string str in
-    let toks = lex tenv pretoks in
-    let sxps = sexp_parse_all_to_list grm toks limit in
-    let pxps = pexp_parse_all sxps in
+    let pxps = _pexp_expr_str str tenv grm limit in
         lexp_parse_all pxps ctx
 ;;
 
@@ -882,16 +751,28 @@ let lexp_expr_str str lctx =
     _lexp_expr_str str default_stt default_grammar (Some ";") lctx
 ;;
 
-
 let _lexp_decl_str (str: string) tenv grm limit ctx =
-    let pretoks = prelex_string str in
-    let toks = lex tenv pretoks in
-    let sxps = sexp_parse_all_to_list grm toks limit in
-    let pxps = pexp_decls_all sxps in
+    let pxps = _pexp_decl_str str tenv grm limit in
         lexp_p_decls pxps ctx
 ;;
 
 (* specialized version *)
 let lexp_decl_str str lctx =
     _lexp_decl_str str default_stt default_grammar (Some ";") lctx
+;;
+
+
+(*  Eval String
+ * ---------------------- *)
+
+let _eval_expr_str str lctx rctx silent =
+    let lxps = lexp_expr_str str lctx in
+        (eval_all lxps rctx silent)
+;;
+
+let eval_expr_str str lctx rctx = _eval_expr_str str lctx rctx false
+
+let eval_decl_str str lctx rctx =
+    let lxps, lctx = lexp_decl_str str lctx in
+        (eval_decls lxps rctx), lctx
 ;;

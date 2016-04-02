@@ -54,13 +54,15 @@ let ut_string vb msg = if vb <= (!_global_verbose_lvl) then print_string msg els
 
 
 let print_file_name i n name pass =
+    (if pass then print_string green else print_string red);
     let line_size = 80 - (String.length name) - 16 in
     print_string "    (";
     ralign_print_int i 2; print_string "/";
     ralign_print_int n 2; print_string ") ";
     print_string name;
     print_string (make_line '.' line_size);
-    if pass then print_string "..OK\n" else print_string "FAIL\n"
+    if pass then print_string "..OK\n" else print_string "FAIL\n";
+    print_string reset;
 ;;
 
 let verbose n = (n <= (!_global_verbose_lvl))

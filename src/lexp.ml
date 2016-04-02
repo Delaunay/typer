@@ -25,6 +25,7 @@ open Sexp
 open Pexp
 open Myers
 open Grammar
+open Fmt
 (* open Unify *)
 
 (*************** DeBruijn indices for variables *********************)
@@ -290,7 +291,8 @@ let lexp_to_string e =
     | Inductive _ -> "inductive_"
     | Cons _ -> "inductive-cons"
     | Case _ -> "case"
-    | _ -> "unkwn"
+    | UnknownType _ -> "unkwn"
+    | _ -> "not implemented"
 ;;
 
 let builtin_reduce b args arg =
@@ -664,3 +666,183 @@ let lexp_print e = sexp_print (pexp_unparse (lexp_unparse e))
  *                         mk_meta_dummy env l *)
 
 *)
+
+
+(*
+ *      Printing
+ * --------------------- *)
+(*
+    pretty ?        (print with new lines and indents)
+    indent level
+    print_type?     (print inferred Type)
+    print_index     (print dbi index)
+    separate decl   (print extra newline between declarations)
+    indent size      4
+    highlight       (use console color to display hints)
+*)
+
+type print_context = (bool * int * bool * bool * bool * bool* int)
+
+let pretty_ppctx  = ref (true , 0, true, false, true,  2, true)
+let compact_ppctx = ref (false, 0, true, false, true,  2, true)
+let debug_ppctx   = ref (false, 0, true, true , false, 2, true)
+
+let rec lexp_print e = _lexp_print (!debug_ppctx) e
+and _lexp_print ctx e = print_string (_lexp_to_str ctx e)
+
+(*  Print a lexp into its typer equivalent                              *)
+(*  Depending on the print_context the output can be correct typer code *)
+(*  This function will be very useful when debugging generated code     *)
+
+(* If I remember correctly ocaml doc, concat string is actually terrible *)
+(* It might be better to use a Buffer. *)
+and _lexp_to_str ctx exp =
+    (* create a string instead of printing *)
+
+    let (pretty, indent, ptype, pindex, _, isize, color) = ctx in
+    let lexp_to_str = _lexp_to_str ctx in
+
+    (* internal context, when parsing let *)
+    let inter_ctx = (false, indent + 1, ptype, pindex, false, isize, color) in
+
+    let lexp_to_stri idt e =
+        _lexp_to_str (pretty, indent + idt, ptype, pindex, false, isize, color) e in
+
+    (* colors *)
+    let red     = if color then red else "" in
+    let green   = if color then green else "" in
+    let yellow  = if color then yellow else "" in
+    let magenta = if color then magenta else "" in
+    let cyan    = if color then cyan else "" in
+    let reset   = if color then reset  else "" in
+
+    let _index idx = if pindex then ("[" ^ (string_of_int idx) ^ "]") else "" in
+
+    let make_indent idt = if pretty then (make_line ' ' ((idt + indent) * isize)) else "" in
+    let newline = (if pretty then "\n" else " ") in
+    let nl = newline in
+
+    let keyword str = magenta ^ str ^ reset in
+    let error str   = red ^ str ^ reset in
+    let tval str = yellow ^ str ^ reset in
+    let fun_call str= cyan ^ str ^ reset in
+
+    let index idx = let str = _index idx in if idx < 0 then (error str) else
+        (green ^ str ^ reset) in
+
+    let kind_str k =
+        match k with
+            | Aexplicit -> "->" | Aimplicit -> "=>" | Aerasable -> "≡>" in
+
+    match exp with
+        | Imm(value) -> (match value with
+            | String (_, s) -> tval ("\"" ^ s ^ "\"")
+            | Integer(_, s) -> tval (string_of_int s)
+            | Float  (_, s) -> tval (string_of_float s)
+            | _ -> internal_error "Wrong Imm value.")
+
+        | Var ((loc, name), idx) -> name ^ (index idx) ;
+
+        | Let (_, decls, body)   ->
+            let decls = List.fold_left (fun str elem ->
+                str ^ elem ^ " ") "" (_lexp_str_decls inter_ctx decls) in
+
+            (keyword "let ") ^ decls ^ (keyword "in ") ^ newline ^
+                (make_indent 1) ^ (lexp_to_stri 1 body)
+
+        | Arrow(k, Some (_, name), tp, loc, expr) ->
+            "(" ^ name ^ " : " ^ (lexp_to_str tp) ^ ") " ^
+                (kind_str k) ^ " " ^ (lexp_to_str expr)
+
+        | Arrow(k, None, tp, loc, expr) ->
+            (lexp_to_str tp) ^ " " ^ (kind_str k) ^ " " ^ (lexp_to_str expr)
+
+        | Lambda(k, (loc, name), ltype, lbody) ->
+            let arg = "(" ^ name ^ " : " ^ (lexp_to_str ltype) ^ ")" in
+
+            (keyword "lambda ") ^ arg ^ " " ^ (kind_str k) ^ newline ^
+                (make_indent 1) ^ (lexp_to_stri 1 lbody)
+
+        | Cons(((_, idt_name), idx), (_, ctor_name)) ->
+            (keyword "inductive-cons ") ^ idt_name ^ (index idx) ^ " " ^ ctor_name
+
+        | Call(fname, args) -> (
+            (*  get function name *)
+            let str, idx = match fname with
+                | Var((_, name), idx) -> name, idx
+                | _ -> (error "unkwn"), -1 in
+
+            let binop_str op (_, lhs) (_, rhs) =
+                (lexp_to_str lhs) ^ op ^ (lexp_to_str rhs) in
+
+            match (str, args) with
+                (* Special Operator *)
+                | ("_=_", [lhs; rhs]) -> binop_str " = " lhs rhs
+                | ("_+_", [lhs; rhs]) -> binop_str " + " lhs rhs
+                | ("_-_", [lhs; rhs]) -> binop_str " - " lhs rhs
+                | ("_/_", [lhs; rhs]) -> binop_str " / " lhs rhs
+                | ("_*_", [lhs; rhs]) -> binop_str " * " lhs rhs
+                (* not an operator *)
+                | _ ->
+                    let args = List.fold_left
+                        (fun str (_, lxp) -> str ^ " " ^ (lexp_to_str lxp))
+                        "" args in
+
+                    "(" ^ (fun_call (lexp_to_str fname)) ^ args ^ ")")
+
+        | Inductive (_, (_, name), _, ctors) ->
+            (keyword "inductive_") ^ " (" ^ name ^ ") " ^ (lexp_str_ctor ctx ctors)
+
+        | Case (_, target, tpe, map, dflt) ->(
+            let str = (keyword "case ") ^ (lexp_to_str target) ^
+                                          " : " ^ (lexp_to_str tpe) in
+            let arg_str arg =
+                List.fold_left (fun str v ->
+                    match v with
+                        | None -> str ^ " _"
+                        | Some (_, (_, n)) -> str ^ " " ^ n) "" arg in
+
+
+            let str = SMap.fold (fun k (_, arg, exp) str ->
+                str ^ nl ^ (make_indent 1) ^
+                    "| " ^ (fun_call k) ^ (arg_str arg) ^ " => " ^ (lexp_to_stri 1 exp))
+                map str in
+
+            match dflt with
+                | None -> str
+                | Some df ->
+                    str ^ nl ^ (make_indent 1) ^ "| _ => " ^ (lexp_to_stri 1 df))
+
+        | Builtin (_, name, _) -> name
+
+        | UnknownType (loc)      -> error "unkwn";
+        | _ -> print_string "Printing Not Implemented"; ""
+
+and lexp_str_ctor ctx ctors =
+    SMap.fold (fun key value str ->
+        let str = str ^ " (" ^ key in
+
+        let str = List.fold_left (fun str (k, _, arg) ->
+            str ^ " " ^ (_lexp_to_str ctx arg)) str value in
+
+            str ^ ")")
+        ctors ""
+
+and _lexp_str_decls ctx decls =
+
+    let (pretty, indent, ptype, pindex, sepdecl, isize, _) = ctx in
+    let lexp_to_str = _lexp_to_str ctx in
+
+    let make_indent idt = if pretty then (make_line ' ' ((idt + indent) * isize)) else "" in
+    let sepdecl = (if sepdecl then "\n" else "") in
+
+    let type_str name lxp = (if ptype then (
+        (make_indent 0) ^ name ^ " : " ^ (lexp_to_str lxp) ^ ";") else "") in
+
+    let ret = List.fold_left (fun str ((_, name), lxp, ltp) ->
+        let str = if ptype then (type_str name ltp)::str else str in
+        ((make_indent 0) ^ name ^ " = " ^ (lexp_to_str lxp) ^ ";" ^
+            sepdecl)::str)
+
+        [] decls in
+        List.rev ret
