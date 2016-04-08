@@ -52,6 +52,9 @@ type builtin =
   | EqType
   | LevelType
 
+type subst =                     (* deBruijn substitution.  *)
+  | Lift of db_index * db_offset (* (n,m): increase indices≥n by m. *)
+  | Identity
 
 type ltype = lexp
  and lexp =
@@ -60,10 +63,7 @@ type ltype = lexp
    | Sort of location * sort
    | Builtin of builtin * string * ltype
    | Var of vref
-   (* This just means that all non-local Var bindings in the lexp should
-    * have their debuijn index incremented by i.  IOW it guarantees that
-    * the lexp does not refer to the topmost i elements of the context.  *)
-   | Shift of db_offset * lexp
+   | Susp of subst * lexp (* Suspended substitution, to substitute lazily.  *)
    (* This "Let" allows recursion.  *)
    | Let of location * (vdef * lexp * ltype) list * lexp
    | Arrow of arg_kind * vdef option * ltype * location * lexp
@@ -77,8 +77,7 @@ type ltype = lexp
              * (location * (arg_kind * vdef) option list * lexp) SMap.t
              * lexp option               (* Default.  *)
     | UnknownType of location (* This is easy to handle *)
- (*   | Susp of subst * lexp
-  *   (\* For logical metavars, there's no substitution.  *\)
+ (*   (\* For logical metavars, there's no substitution.  *\)
   *   | Metavar of (location * string) * metakind * metavar ref
   * and metavar =
   *   (\* An uninstantiated var, along with a venv (stipulating over which vars
@@ -274,7 +273,7 @@ let rec lexp_location e =
   | Cons (_,(l,_)) -> l
   | Case (l,_,_,_,_) -> l
   | UnknownType l -> l
-  | Shift (_, l) -> lexp_location l
+  | Susp (_, l) -> lexp_location l
   (* | Susp (_, e) -> lexp_location e
    * | Metavar ((l,_),_,_) -> l *)
 
@@ -395,129 +394,6 @@ let builtin_reduce b args arg =
  *            | e -> lexp_whnf VMap.empty (lexp_copy e)
  *        with Not_found -> e) *)
 
-
-let conv_erase = true              (* If true, conv ignores erased terms. *)
-
-(* Return true iff e₁ and e₂ are convertible in `env'.
- * `s' maps vars bound in e₁ to their α-equivalent in e₂.  *)
-(* let rec lexp_conv_p env s e1 e2 =
- *   let lexp_conv_p = lexp_conv_p env in
- *   (\* We compare e1 and e2 directly because vars in `s' should never appear
- *    * in e2 anyway, so if e1 and e2 are equal, then e1 doesn't refer to vars
- *    * in `s' either.  *\)
- *   e1 == e2
- *   || match (e1, e2) with
- *     | (Imm (Integer (_, i1)), Imm (Integer (_, i2))) -> i1 = i2
- *     | (Imm (Float (_, i1)), Imm (Float (_, i2))) -> i1 = i2
- *     | (Imm (String (_, i1)), Imm (String (_, i2))) -> i1 = i2
- *     | (Var (_, v1), Var (_, v2)) ->
- *       v1 = v2
- *       || (match try fst (VMap.find v1 env) with _ -> None with
- *          | Some e1 -> lexp_conv_p s e1 e2
- *          | None -> match try fst (VMap.find v2 env) with _ -> None with
- *                   | Some e2 -> lexp_conv_p s e1 e2
- *                   | None -> v2 = VMap.find v1 s)
- *     | (Var (_, v1), _)
- *       -> (match try fst (VMap.find v1 env) with _ -> None with
- *          | Some e1 -> lexp_conv_p s e1 e2
- *          | None -> false)
- *     | (_, Var (_, v2))
- *       -> (match try fst (VMap.find v2 env) with _ -> None with
- *          | Some e2 -> lexp_conv_p s e1 e2
- *          | None -> false)
- *     | (Metavar (_, mk, r1), _)
- *         when (match !r1 with MetaSet _ -> true | _ -> false)
- *       -> (match !r1,mk with
- *          | MetaSet e1, MetaGraft s1 -> lexp_conv_p s (mk_susp s1 e1) e2
- *          | MetaSet e1, MetaFoF      -> lexp_conv_p s e1 e2
- *          | _ -> false) (\* Impossible.  *\)
- *     | (_, Metavar (_, mk, r2))
- *         when (match !r2 with MetaSet _ -> true | _ -> false)
- *       -> (match !r2,mk with
- *          | MetaSet e2, MetaGraft s2 -> lexp_conv_p s e1 (mk_susp s2 e2)
- *          | MetaSet e2, MetaFoF      -> lexp_conv_p s e1 e2
- *          | _ -> false) (\* Impossible.  *\)
- *     | (Metavar ((l,_), MetaGraft s1, r1), Metavar (_, MetaGraft s2, r2))
- *         when r1 = r2
- *       -> (match !r1 with
- *          | MetaSet _ -> false    (\* Impossible!  *\)
- *          | MetaUnset (venv,_,_)
- *            -> let diffs
- *                (\* FIXME: If we filter s1&s2 when constructing MetaGraft, we can
- *                 * use VMap.equal.  *\)
- *                = VMap.merge
- *                    (fun v e1 e2
- *                     -> try let _ = VMap.find v venv in
- *                           match e1,e2 with
- *                           | Some e1, Some e2 when lexp_conv_p s e1 e2
- *                             -> None
- *                           | _ -> Some ()
- *                       (\* If `v' is not in `venv' that means `v' cannot
- *                        * appear in the var's instantiation, so we only need
- *                        * to decide if s(e)=e which we presume to be true for
- *                        * the same reason that we started this function by
- *                        * comparing e1≡e2 rather than s(e1)=e2.  *\)
- *                       with _ -> None)
- *                    s1 s2
- *              in VMap.is_empty diffs)
- *     | (Metavar (_, MetaFoF, r1), Metavar (_, MetaFoF, r2)) -> r1 = r2
- *     | (Susp (s1, e1), _) -> lexp_conv_p s (lexp_whnf s1 e1) e2
- *     | (_, Susp (s2, e2)) -> lexp_conv_p s e1 (lexp_whnf s2 e2)
- *     | (Cons (t1, (_, tag1)), Cons (t2, (_, tag2)))
- *       -> tag1 = tag2 && lexp_conv_p s t1 t2
- *     | (Case (_,e1,t1,branches1,default1), Case (_,e2,t2,branches2,default2))
- *       -> lexp_conv_p s e1 e2
- *         && (match (default1, default2) with
- *            | (None, None) -> true
- *            | (Some e1, Some e2) -> lexp_conv_p s e1 e2
- *            | _ -> false)
- *         && (conv_erase || lexp_conv_p s t1 t2)
- *         && SMap.equal
- *             (fun (_, args1, e1) (_, args2, e2)
- *              -> lexp_conv_p (List.fold_left2
- *                               (fun s (ak1,(_,arg1)) (ak2,(_,arg2))
- *                                -> if conv_erase && ak1 = Aerasable then s
- *                                  else VMap.add arg1 arg2 s)
- *                               s args1 args2)
- *                            e1 e2)
- *             branches1 branches2
- *     | (Inductive ((_,id1), t1, cases1), Inductive ((_,id2), t2, cases2))
- *       -> id1 = id2
- *         && lexp_conv_p s t1 t2
- *         && SMap.equal (lexp_conv_p s) cases1 cases2
- *     | (Lambda (Aerasable,_,_,e1), Lambda (Aerasable,_,_,e2)) when conv_erase
- *       -> lexp_conv_p s e1 e2
- *     | (Lambda (ak1,(_,v1),t1,e1), Lambda (ak2,(_,v2),t2,e2))
- *       -> ak1 = ak2
- *         && (conv_erase || lexp_conv_p s t1 t2)
- *         && lexp_conv_p (VMap.add v1 v2 s) e1 e2
- *     | (Call (f1, args1), Call (f2, args2))
- *       -> lexp_conv_p s f1 f2
- *         && List.length args1 = List.length args2
- *         && List.fold_left2 (fun eqp (ak1,a1) (ak2,a2) ->
- *                            eqp && ak1 = ak2
- *                            && ((conv_erase && ak1 = Aerasable)
- *                               || lexp_conv_p s a1 a2))
- *                           true args1 args2
- *     | (Arrow (ak1,v1,t11,_,t21), Arrow (ak2,v2,t12,_,t22))
- *       -> ak1 = ak2
- *         && lexp_conv_p s t11 t12
- *         && lexp_conv_p (match (v1,v2) with
- *                         | (Some (_,v1), Some (_,v2)) -> VMap.add v1 v2 s
- *                         | _ -> s)
- *                        t21 t22
- *     | (Let (_,decls1,body1), Let (_,decls2,body2))
- *       -> List.length decls1 = List.length decls2
- *         && let s' = List.fold_left2 (fun s ((_,v1),_,_) ((_,v2),_,_)
- *                                     -> VMap.add v1 v2 s)
- *                                    s decls1 decls2
- *           in List.fold_left2 (fun eqp (_,e1,t1) (_,e2,t2) ->
- *                               eqp
- *                               && lexp_conv_p s' e1 e2
- *                               && lexp_conv_p s t1 t2)
- *                              (lexp_conv_p s' body1 body2)
- *                              decls1 decls2
- *     | (_, _) -> false *)
 
 (*
 (* In non-recursion calls, `s' is always empty.  *)

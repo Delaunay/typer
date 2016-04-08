@@ -529,6 +529,16 @@ probably also econg.
 
 *** What about recursion/induction?
 
+** Challenge: from a (potentially costly) ∃b. b > n && P b, write
+   a (total) function
+
+      search n P (P? : decidable P) (terminates ::: ∃b. b > n && P b)
+             -> ∃b. b > n && P b
+
+   which just iterates through all integers starting at n.  Most likely
+   "terminates" will only be "runtime erasable" and not
+   "typecheck-erasable".
+
 * Useful macros
 ** Syntax extensions
 *** case, with non-trivial patterns
