@@ -209,9 +209,6 @@ and _lexp_parse p ctx i: lexp =
 and lexp_call (fname: pexp) (_args: sexp list) ctx i =
     (*  Process Arguments *)
     let pargs = List.map pexp_parse _args in
-    (*
-     *  Lookup name in environment and replace the name by its builtin type
-     *)
 
     (*  Call to named function which must have been defined earlier  *
      *          i.e they must be in the context                      *)
@@ -229,7 +226,14 @@ and lexp_call (fname: pexp) (_args: sexp list) ctx i =
             (*  Check if the function was defined *)
             let idx = senv_lookup name ctx in
             let vf = (make_var name idx loc) in
-                Call(vf, new_args)
+
+            (* Is the function builtin ? *)
+            if (is_lbuiltin idx ctx) then (
+                match env_lookup_expr ctx ((loc, name), idx) with
+                    | None -> lexp_error loc "Unknown builtin"; Call(vf, new_args)
+                    | Some e -> Call(e, new_args)
+            )
+            else Call(vf, new_args)
 
         with Not_found ->
             (*  Don't stop even if an error was found *)

@@ -31,16 +31,17 @@
  * --------------------------------------------------------------------------- *)
 
 open Util
+open Fmt
+
+open Sexp
 open Pexp       (* Arg_kind *)
 open Lexp
 
-open Sexp
-open Fmt
-open Debruijn
+open Builtin
 open Grammar
 
+open Debruijn
 open Env
-open Builtin
 
 
 let eval_error loc msg =
@@ -57,7 +58,9 @@ let _eval_max_recursion_depth = ref 255
 let reset_eval_trace () = _global_eval_trace := []
 
 (*  currently, we don't do much *)
-type value_type = lexp
+type value_type = lexp (*
+    | Value of lexp
+    | Closure of lexp * runtime_env *)
 
 (* This is an internal definition
  * 'i' is the recursion depth used to print the call trace *)
@@ -78,7 +81,7 @@ let rec _eval lxp ctx i: (value_type) =
         | Cons (_, _) as e -> e
 
         (* Lambda's body is evaluated when called   *)
-        | Lambda _ -> lxp
+        | Lambda _ -> lxp (* Closure(lxp, ctx) *)
 
         (*  Return a value stored in the env        *)
         | Var((loc, name), idx) as e -> eval_var ctx e ((loc, name), idx)
@@ -92,6 +95,15 @@ let rec _eval lxp ctx i: (value_type) =
         (* Built-in Function * )
         | Call(Builtin(v, name, ltp), args) ->
             let nctx = build_arg_list args ctx i in *)
+
+        (* Call to a builtin function *)
+        | Call(b, args) when b = builtin_iadd ->
+            let nctx = build_arg_list args ctx i in
+                iadd_impl nctx
+
+        | Call(b, args) when b = builtin_imult ->
+            let nctx = build_arg_list args ctx i in
+                imult_impl nctx
 
         (* Function call *)
         | Call (lname, args) -> eval_call ctx i lname args
@@ -129,7 +141,6 @@ and eval_call ctx i lname args =
 
     (*  To handle partial call we need to consume args and   *)
     (*  lambdas together and return the remaining lambda     *)
-    (*  Call by name: replace variables then eval            *)
     let rec consume_args (ctx: runtime_env) (lxp: lexp) args (k: int): value_type =
         match lxp, args with
             (* Base Case*)
@@ -158,54 +169,6 @@ and eval_call ctx i lname args =
                         " Expected: " ^ (string_of_int k) ^ " arg(s)") in
 
     match lname with
-        (*  Hardcoded functions *)
-        (* FIXME: These should not be hardcoded here, but should be
-         * stuffed into the "initial environment", i.e. the value of
-         * `ctx` used at top-level.  *)
-
-        (* + is read as a nested binary operator *)
-        | Var((_, name), _) when name = "_+_" ->
-            let nctx = build_arg_list args ctx i in
-
-            let llxp = (get_rte_variable (None) 0 nctx) in
-            let rlxp = (get_rte_variable (None) 1 nctx) in
-            let l = get_int llxp in
-            let r = get_int rlxp in
-
-            (* if l and r are not ints this is a partial eval *)
-            if l = None || r = None then
-                Call(lname, [(Aexplicit, llxp); (Aexplicit, rlxp)])
-            else (
-                let v, w = match l, r with
-                    | Some v, Some w -> v, w
-                    | _, _ -> (-40), (-40) in
-                Imm(Integer(dloc, v + w)))
-
-        (* _*_ is read as a single function with x args *)
-        | Var((_, name), _) when name = "_*_" ->
-            let nctx = build_arg_list args ctx i in
-
-            let vint = (nfirst_rte_var args_n nctx) in
-            let varg = List.map (fun g -> get_int g) vint in
-
-            (* check for partial eval and compute product *)
-            let (partial, prod) = List.fold_left (fun a g ->
-                let (partial, prod) = a in
-                    match g with
-                        | Some v  -> (partial, v * prod)
-                        | None -> (true, 1))
-                (false, 1) varg in
-
-            (* we could partially eval partial call         *)
-            (* i.e (a * 2 * 2 * b * 4) => (a * b * 16)      *)
-            (* but we don't here                            *)
-
-            if partial then
-                let args = List.map (fun g -> (Aexplicit, g)) vint in
-                    Call(lname, args)
-            else
-                Imm(Integer(dloc, prod))
-
         (* This is a named function call *)
         | Var((_, name), idx) -> (
             (*  get function's body from current context *)
@@ -213,7 +176,6 @@ and eval_call ctx i lname args =
 
             (*  _eval every args using current context *)
             let arg_val = List.map (fun (k, e) -> _eval e ctx (i + 1)) args in
-            let arg_val2 = List.map (fun (k, e) -> e) args in
 
             match body with
                 (* If 'cons', build it back with evaluated args *)

@@ -792,6 +792,10 @@ and _lexp_to_str ctx exp =
         | Builtin (_, name, _) -> name
 
         | UnknownType (loc)      -> error "unkwn";
+
+        | Sort (_, _) -> "Sort"
+        | SortLevel _ -> "SortLevel"
+
         | _ -> print_string "Printing Not Implemented"; ""
 
 and lexp_str_ctor ctx ctors =

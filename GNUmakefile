@@ -57,3 +57,13 @@ clean:
 	-rm -rf _build
 
 .PHONY: ityper typer debug tests
+
+
+run/debug_util:
+	@./_build/debug_util ./samples/test__.typer
+
+run/ityper:
+	@./_build/ityper
+
+run/tests:
+	@./_build/tests/utests

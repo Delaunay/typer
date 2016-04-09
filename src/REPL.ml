@@ -233,8 +233,8 @@ let parse_args () =
 let main () =
     parse_args ();
 
-    let lctx = (default_lctx ()) in
-    let rctx = make_runtime_ctx in
+    let lctx = default_lctx () in
+    let rctx = default_rctx () in
 
     print_string (make_title " TYPER REPL ");
     print_string _welcome_msg;

@@ -37,7 +37,7 @@ open Pexp   (* arg_kind *)
 open Lexp
 
 open Debruijn
-open Env    (* get_rte_variable *)
+open Env       (* get_rte_variable *)
 
 
 (*                Builtin types               *)
@@ -59,22 +59,20 @@ let op_binary t =  Arrow (Aexplicit, None, t, dloc,
 
 let iop_binary = op_binary type_int
 let fop_binary = op_binary type_float
+let type_eq = let lv = (dloc, "l") in
+   let tv = (dloc, "t") in
+   Arrow (Aerasable, Some lv, type_level, dloc,
+          Arrow (Aerasable, Some tv,
+                 Sort (dloc, Stype (Var (lv, 0))), dloc,
+                 Arrow (Aexplicit, None, Var (tv, 0), dloc,
+                        Arrow (Aexplicit, None, Var (tv, 1), dloc,
+                               type0))))
 
 let builtin_iadd = Builtin (IAdd, "_+_", iop_binary)
-let builtin_imult = Builtin (IMult, "_*_", iop_binary) (*
+let builtin_imult = Builtin (IMult, "_*_", iop_binary)
+let builtin_eq = Builtin (EqType, "_=_", type_eq) (*
 let builtin_fadd = Builtin (FAdd, "_+_", fop_binary)
 let builtin_fmult = Builtin (FMult, "_*_", fop_binary) *)
-
-let type_eq
-  = Builtin (EqType, "_=_",
-       let lv = (dloc, "l") in
-       let tv = (dloc, "t") in
-       Arrow (Aerasable, Some lv, type_level, dloc,
-              Arrow (Aerasable, Some tv,
-                     Sort (dloc, Stype (Var (lv, 0))), dloc,
-                     Arrow (Aexplicit, None, Var (tv, 0), dloc,
-                            Arrow (Aexplicit, None, Var (tv, 1), dloc,
-                                   type0)))))
 
 (*      Math Functions       *)
 let get_int lxp =
@@ -135,14 +133,13 @@ let typer_builtins = [
     ("Int"  , None, type_int,    none_fun);
     ("Float", None, type_float,  none_fun);
     ("Type" , None, type0,       none_fun);   (* builtin_iadd *)
-    ("_=_"  , None, type_eq,     none_fun);   (*  t  ->  t  -> bool *)
-    ("_+_"  , None, iop_binary,  iadd_impl);  (* int -> int -> int  *)
-    ("_*_"  , None, iop_binary,  imult_impl); (* int -> int -> int  *)
+    ("_=_"  , Some builtin_eq, type_eq,     none_fun);   (*  t  ->  t  -> bool *)
+    ("_+_"  , Some builtin_iadd, iop_binary,  iadd_impl);  (* int -> int -> int  *)
+    ("_*_"  , Some builtin_imult, iop_binary,  imult_impl); (* int -> int -> int  *)
 
 (*  Macro primitives *)
 
 ]
-
 
 (* Make lxp context with built-in types *)
 let default_lctx () =
@@ -157,12 +154,24 @@ let default_lctx () =
       typer_builtins
 ;;
 
-(* Make lxp context with built-in types *)
+(* Make runtime context with built-in types *)
 let default_rctx () =
     (* Empty context *)
     let rctx = make_runtime_ctx in
-    let rctx = add_rte_variable (Some "_+_") iop_binary rctx in
-        add_rte_variable (Some "_*_") iop_binary rctx
 
+    (* populate ctx *)
+    List.fold_left
+      (fun ctx (name, lxp, ltp, f) ->
+        add_rte_variable (Some name) ltp ctx)
+       rctx
+       typer_builtins
 ;;
 
+let is_lbuiltin idx ctx =
+    let bsize = List.length typer_builtins in
+    let csize = get_size ctx in
+
+    if idx >= csize - bsize then
+        true
+    else
+        false

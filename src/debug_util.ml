@@ -36,12 +36,13 @@ open Fmt
 open Debug
 
 (* ASTs *)
-open Prelexer
-open Lexer
 open Sexp
 open Pexp
 open Lexp
 
+(* AST reader *)
+open Prelexer
+open Lexer
 open Lparse
 open Eval
 
