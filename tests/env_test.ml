@@ -45,11 +45,11 @@ let _ = (add_test "ENV" "Set Variables" (fun () ->
     if 10 <= (!_global_verbose_lvl) then (
 
         let var = [
-            ((Some "a"), UnknownType(dloc), (make_val "a"));
-            ((Some "b"), UnknownType(dloc), (make_val "b"));
-            ((Some "c"), UnknownType(dloc), (make_val "c"));
-            ((Some "d"), UnknownType(dloc), (make_val "d"));
-            ((Some "e"), UnknownType(dloc), (make_val "e"));
+            ((Some "a"), type_int, (make_val "a"));
+            ((Some "b"), type_int, (make_val "b"));
+            ((Some "c"), type_int, (make_val "c"));
+            ((Some "d"), type_int, (make_val "d"));
+            ((Some "e"), type_int, (make_val "e"));
         ] in
 
         let n = (List.length var) - 1 in

@@ -125,7 +125,7 @@ let imult_impl ctx =
     else
         Imm(Integer(dloc, prod))
 
-let none_fun = (fun ctx -> UnknownType(dloc))
+let none_fun = (fun ctx -> type_int)
 
 (* Built-in list of types/functions *)
 let typer_builtins = [

@@ -49,8 +49,8 @@ let not_implemented_error () =
     internal_error "not implemented"
 ;;
 
-let dlxp = UnknownType(dloc)
-let dltype = UnknownType(dloc)
+let dlxp = type0
+let dltype = type0
 let dloc = dummy_location
 
 let lexp_warning = msg_warning "LEXP"
@@ -170,7 +170,6 @@ and _lexp_parse p ctx i: lexp =
         | Pcase (loc, target, patterns) ->
 
             let lxp = lexp_parse target ctx in
-            let ltp = UnknownType(loc) in
 
             let uniqueness_warn name =
                 lexp_warning loc ("Pattern " ^ name ^ " is a duplicate." ^
@@ -200,10 +199,10 @@ and _lexp_parse p ctx i: lexp =
                             loop tl merged dflt) in
 
             let (lpattern, dflt) = loop patterns SMap.empty None in
-            Case(loc, lxp, ltp, lpattern, dflt)
+            Case(loc, lxp, dltype, lpattern, dflt)
 
         | _
-            -> UnknownType(tloc)
+            -> internal_error "Unhandled Pexp"
 
 (*  Identify Call Type and return processed call *)
 and lexp_call (fname: pexp) (_args: sexp list) ctx i =
@@ -464,7 +463,6 @@ and lexp_p_infer (p : pexp) (env : lexp_context): lexp * ltype =
         let rec _implt args lxp i = match args, lxp with
             (* No args left, return the remaining type *)
             | [], _ -> lxp
-            | _, UnknownType _ -> lxp
 
             (* Basic case consume an arg and an arrow *)
             | hd::tl, Arrow(_, _, ltp, _, ret_type) ->
@@ -494,8 +492,7 @@ and lexp_p_infer (p : pexp) (env : lexp_context): lexp * ltype =
             (* But sometimes we need tp to be returned                      *)
             | Var vrf -> (try let tp = env_lookup_type ctx vrf in
                 (if (is_type tp) then lxp else tp)
-                with e ->
-                    UnknownType(dloc))
+                with e -> dltype)
 
             (* I am not sure we should consider a constructor as a function   *)
             (* Another way to do what is done here is to handle cons in Call  *)
@@ -531,7 +528,6 @@ and lexp_p_infer (p : pexp) (env : lexp_context): lexp * ltype =
             | Inductive _ -> lxp
             | Builtin (_, _, ltp) -> ltp
             | Arrow _ -> lxp
-            | UnknownType _ -> lxp
 
             (* Nodes        *)
             (* ------------ *)

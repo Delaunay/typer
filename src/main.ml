@@ -32,6 +32,7 @@ open Sexp
 open Prelexer
 open Pexp
 open Grammar
+module TC = Typecheck
 
 (* Overview.
  *
