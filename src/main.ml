@@ -32,7 +32,7 @@ open Sexp
 open Prelexer
 open Pexp
 open Grammar
-open Typecheck
+module TC = Typecheck
 
 (* Overview.
  *

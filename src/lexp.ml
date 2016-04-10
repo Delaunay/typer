@@ -26,7 +26,8 @@ open Pexp
 open Myers
 open Grammar
 (* open Unify *)
-
+module S = Subst
+   
 (*************** DeBruijn indices for variables *********************)
 
 (* Occurrence of a variable's symbol: we use DeBruijn index, and for
@@ -52,10 +53,6 @@ type builtin =
   | EqType
   | LevelType
 
-type subst =                     (* deBruijn substitution.  *)
-  | Lift of db_index * db_offset (* (n,m): increase indices≥n by m. *)
-  | Identity
-
 type ltype = lexp
  and lexp =
    | Imm of sexp                        (* Used for strings, ...  *)
@@ -63,7 +60,7 @@ type ltype = lexp
    | Sort of location * sort
    | Builtin of builtin * string * ltype
    | Var of vref
-   | Susp of subst * lexp (* Suspended substitution, to substitute lazily.  *)
+   | Susp of S.subst * lexp (* Suspended substitution, to substitute lazily.  *)
    (* This "Let" allows recursion.  *)
    | Let of location * (vdef * lexp * ltype) list * lexp
    | Arrow of arg_kind * vdef option * ltype * location * lexp
@@ -76,7 +73,6 @@ type ltype = lexp
              * ltype (* The base inductive type over which we switch.  *)
              * (location * (arg_kind * vdef) option list * lexp) SMap.t
              * lexp option               (* Default.  *)
-    | UnknownType of location (* This is easy to handle *)
  (*   (\* For logical metavars, there's no substitution.  *\)
   *   | Metavar of (location * string) * metakind * metavar ref
   * and metavar =
@@ -272,7 +268,6 @@ let rec lexp_location e =
   | Inductive (l,_,_,_) -> l
   | Cons (_,(l,_)) -> l
   | Case (l,_,_,_,_) -> l
-  | UnknownType l -> l
   | Susp (_, l) -> lexp_location l
   (* | Susp (_, e) -> lexp_location e
    * | Metavar ((l,_),_,_) -> l *)

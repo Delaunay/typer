@@ -1,6 +1,6 @@
 (* util.ml --- Misc definitions for Typer.
 
-Copyright (C) 2011-2013  Free Software Foundation, Inc.
+Copyright (C) 2011-2013, 2016  Free Software Foundation, Inc.
 
 Author: Stefan Monnier <monnier@iro.umontreal.ca>
 Keywords: languages, lisp, dependent types.
@@ -20,6 +20,9 @@ more details.
 You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.  *)
 
+
+module SMap
+  = Map.Make (struct type t = string let compare = String.compare end)
 
 
 type charpos = int

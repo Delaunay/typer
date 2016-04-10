@@ -173,7 +173,6 @@ let debug_lexp_print tlxp =
         | Lambda(_, (loc, _), _, _) -> print_info "Lambda      " tloc tlxp
         | Call(_, _)                -> print_info "Call        " tloc tlxp
         | Inductive(loc, _, _, _)   -> print_info "Inductive   " tloc tlxp
-        | UnknownType(loc)          -> print_info "UnknownType " tloc tlxp
         | Case(loc, _, _, _, _)     -> print_info "Case        " tloc tlxp
         | Cons (rf, sym)            -> print_info "Cons        " tloc tlxp
         | _ -> print_string "Debug Printing Not Implemented";

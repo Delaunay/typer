@@ -21,92 +21,73 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.  *)
 
 open Util
-open Lexer
+(* open Lexer *)
 open Sexp
-open Pexp
-open Myers
+(* open Pexp *)
+(* open Myers *)
 (* open Grammar *)
 open Lexp
 (* open Unify *)
+module S = Subst
+module L = List
 
 let conv_erase = true              (* If true, conv ignores erased terms. *)
 
-let rec lexp_conv_arglist_p s1 s2 args1 args2 : bool =
+let rec conv_arglist_p s1 s2 args1 args2 : bool =
   List.fold_left2
-    (fun eqp (ak1,_,t1) (ak2,_,t2) ->
-      eqp && ak1 = ak2 && lexp_conv_p s1 t1 s2 t2)
+    (fun eqp (ak1,t1) (ak2,t2) ->
+      eqp && ak1 = ak2 && conv_p' s1 s2 t1 t2)
     true args1 args2
 
 (* Returns true if e₁ and e₂ are equal (upto alpha/beta/...).  *)
-and lexp_conv_p (s1:subst) (s2:subst) e1 e2 : bool =
+and conv_p' (s1:S.subst) (s2:S.subst) e1 e2 : bool =
+  let conv_p = conv_p' s1 s2 in
   (* e1 == e2    !! Looks obvious, but can fail because of s1 and s2 !!  *)
   match (e1, e2) with
     | (Imm (Integer (_, i1)), Imm (Integer (_, i2))) -> i1 = i2
     | (Imm (Float (_, i1)), Imm (Float (_, i2))) -> i1 = i2
     | (Imm (String (_, i1)), Imm (String (_, i2))) -> i1 = i2
-    (* | (Var (_, v1), Var (_, v2)) ->
-     *    v1 = v2
-     *    || (match try fst (VMap.find v1 env) with _ -> None with
-     *       | Some e1 -> lexp_conv_p e1 e2
-     *       | None -> match try fst (VMap.find v2 env) with _ -> None with
-     *                | Some e2 -> lexp_conv_p e1 e2
-     *                | None -> v2 = VMap.find v1 s)
-     * | (Var (_, v1), _)
-     *   -> (match try fst (VMap.find v1 env) with _ -> None with
-     *       | Some e1 -> lexp_conv_p e1 e2
-     *       | None -> false)
-     *  | (_, Var (_, v2))
-     *    -> (match try fst (VMap.find v2 env) with _ -> None with
-     *       | Some e2 -> lexp_conv_p e1 e2
-     *       | None -> false)
-     *  | (Cons (t1, (_, tag1)), Cons (t2, (_, tag2)))
-     *    -> tag1 = tag2 && lexp_conv_p t1 t2
-     *  | (Case (_,e1,t1,branches1,default1), Case (_,e2,t2,branches2,default2))
-     *    -> lexp_conv_p e1 e2
-     *      && (match (default1, default2) with
-     *         | (None, None) -> true
-     *         | (Some e1, Some e2) -> lexp_conv_p e1 e2
-     *         | _ -> false)
-     *      && (conv_erase || lexp_conv_p t1 t2)
-     *      && SMap.equal
-     *          (fun (_, args1, e1) (_, args2, e2)
-     *           -> lexp_conv_p e1 e2)
-     *          branches1 branches2
-     *  | (Inductive (_, id1, args1, cases1), Inductive (_, id2, args2, cases2))
-     *    -> id1 = id2
-     *      && lexp_conv_arglist_p args1 args2
-     *      && SMap.equal lexp_conv_arglist_p
-     *                   cases1 cases2
-     *  | (Lambda (Aerasable,_,_,e1), Lambda (Aerasable,_,_,e2)) when conv_erase
-     *    -> lexp_conv_p e1 e2
-     *  | (Lambda (ak1,(_,v1),t1,e1), Lambda (ak2,(_,v2),t2,e2))
-     *    -> ak1 = ak2
-     *      && (conv_erase || lexp_conv_p t1 t2)
-     *      && lexp_conv_p e1 e2
-     *  | (Call (f1, args1), Call (f2, args2))
-     *    -> lexp_conv_p f1 f2
-     *      && List.length args1 = List.length args2
-     *      && List.fold_left2 (fun eqp (ak1,a1) (ak2,a2) ->
-     *                         eqp && ak1 = ak2
-     *                         && ((conv_erase && ak1 = Aerasable)
-     *                            || lexp_conv_p a1 a2))
-     *                        true args1 args2
-     *  | (Arrow (ak1,v1,t11,_,t21), Arrow (ak2,v2,t12,_,t22))
-     *    -> ak1 = ak2
-     *      && lexp_conv_p t11 t12
-     *      && lexp_conv_p t21 t22
-     *  | (Let (_,decls1,body1), Let (_,decls2,body2))
-     *    -> List.length decls1 = List.length decls2
-     *      && List.fold_left2
-     *          (fun eqp (_,e1,t1) (_,e2,t2) ->
-     *            eqp
-     *            && lexp_conv_p e1 e2
-     *            && lexp_conv_p t1 t2)
-     *          (lexp_conv_p body1 body2)
-     *          decls1 decls2 *)
-     | (_, _) -> false
+    | (SortLevel (sl1), SortLevel (sl2)) -> sl1 == sl2
+    | (Sort (_, s1), Sort (_, s2)) -> s1 == s2
+    | (Builtin (b1, s1, _), Builtin (b2, s2, _)) -> b1 == b2 && s1 == s2
+    | (Var (_, v1), Var (_, v2)) -> S.apply s1 v1 = S.apply s2 v2
+    | (Susp (s1', e1), e2) -> conv_p' (S.compose s1 s1') s2 e1 e2
+    | (e1, Susp (s2', e2)) -> conv_p' s1 (S.compose s2 s2') e1 e2
+    | (Arrow (ak1, vd1, t11, _, t12), Arrow (ak2, vd2, t21, _, t22))
+      -> ak1 == ak2 && conv_p t11 t21
+        && conv_p' (match vd1 with None -> s1 | _ -> S.sink s1)
+                  (match vd2 with None -> s2 | _ -> S.sink s2)
+                  t12 t22
+    | (Lambda (ak1, _, t1, e1), Lambda (ak2, _, t2, e2))
+      -> ak1 == ak2 && conv_p t1 t2 && conv_p' (S.sink s1) (S.sink s2) e1 e2
+    | (Call (f1, args1), Call (f2, args2))
+      -> conv_p f1 f2 && conv_arglist_p s1 s2 args1 args2
+    | (Inductive (_, l1, args1, cases1), Inductive (_, l2, args2, cases2))
+      -> let rec conv_args s1 s2 args1 args2 =
+          match args1, args2 with
+          | ([], []) -> true
+          | ((ak1,_,t1)::args1, (ak2,_,t2)::args2)
+            -> ak1 == ak2 && conv_p' s1 s2 t1 t2
+              && conv_args (S.sink s1) (S.sink s2) args1 args2
+          | _,_ -> false in
+        let rec conv_fields s1 s2 fields1 fields2 =
+          match fields1, fields2 with
+          | ([], []) -> true
+          | ((ak1,vd1,t1)::fields1, (ak2,vd2,t2)::fields2)
+            -> ak1 == ak2 && conv_p' s1 s2 t1 t2
+              && conv_fields (match vd1 with None -> s1 | _ -> S.sink s1)
+                            (match vd2 with None -> s2 | _ -> S.sink s2)
+                            fields1 fields2 
+          | _,_ -> false in
+        l1 == l2 && conv_args s1 s2 args1 args2
+        && SMap.equal (conv_fields s1 s2) cases1 cases2
+    | (Cons (v1, l1), Cons (v2, l2)) -> l1 == l2 && conv_p (Var v1) (Var v2)
+    (* FIXME: Various missing cases, such as Let, Case, and beta-reduction.  *)
+    | (_, _) -> false
 
-(* "lexp_check ctx e t" should be read as "Δ ⊢ e : τ"  *)
-let rec lexp_check ctx e t =
+and conv_p e1 e2 = conv_p' S.identity S.identity e1 e2
+              
+(* "check ctx e t" should be read as "Δ ⊢ e : τ"  *)
+let rec check ctx e t =
   match e with
   | _ -> ()
