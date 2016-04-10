@@ -34,9 +34,7 @@
    function application.  *)
 (* FIXME: what about sections, as in "if_then e1 else_"?  *)
 
-
-module SMap
-  = Map.Make (struct type t = string let compare = String.compare end)
+open Util
 
 type grammar = (int option * int option) SMap.t
 

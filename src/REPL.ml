@@ -68,7 +68,7 @@ let ieval_error loc msg =
 ;;
 
 (*  Read stdin for input. Returns only when the last char is ';'
- *  We can use '%' to prevent evaluation
+ *  We can use '%' to prevent parsing
  *  If return is pressed and the last char is not ';' then
  *  indentation will be added                                       *)
 let rec read_input i =

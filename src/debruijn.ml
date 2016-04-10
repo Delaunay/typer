@@ -128,7 +128,7 @@ let env_extend (ctx:lexp_context) (def:vdef) (v: lexp option) (t:lexp) =
 let _env_lookup ctx (v : vref) =
   let ((dv_size, _), info_env, _) = ctx in
   let ti_size = Myers.length info_env in
-  let sync_offset = dv_size - ti_size in
+  let sync_offset = dv_size - ti_size in (* Check == 0 *)
 
   let ((_, rname), dbi) = v in
   let idx = (dbi - sync_offset) in
