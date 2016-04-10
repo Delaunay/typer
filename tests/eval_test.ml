@@ -35,6 +35,7 @@ open Lparse     (* eval string      *)
 open Eval       (* reset_eval_trace *)
 
 open Builtin
+open Env
 
 
 let get_int lxp =
@@ -155,27 +156,28 @@ let _ = (add_test "EVAL" "Infinite Recursion failure" (fun () ->
  * ------------------------ *)
 
 let _ = (add_test "EVAL" "Inductive::Case" (fun () ->
+    let lctx = default_lctx () in
+    let rctx = default_rctx () in
     reset_eval_trace ();
 
     (* Inductive type declaration + Noisy declarations *)
     let code = "
-        i = 90;\n
-        idt = inductive_ (idtd) (ctr0) (ctr1 idt) (ctr2 idt) (ctr3 idt);\n
-        j = 100;\n
-                                            d = 10;\n
-        ctr0 = inductive-cons idt ctr0;\n   e = 20;\n
-        ctr1 = inductive-cons idt ctr1;\n   f = 30;\n
-        ctr2 = inductive-cons idt ctr2;\n   g = 40;\n
-        ctr3 = inductive-cons idt ctr2;\n   h = 50;\n
-                                    x = 1;\n
-        a = (ctr1 (ctr2 ctr0));\n   y = 2;\n
-        b = (ctr2 (ctr2 ctr0));\n   z = 3;\n
-        c = (ctr3 (ctr2 ctr0));\n   w = 4;\n
+        i = 90;
+        idt = inductive_ (idtd) (ctr0) (ctr1 idt) (ctr2 idt) (ctr3 idt);
+                                          d = 10;
+        ctr0 = inductive-cons idt ctr0;   e = 20;
+        ctr1 = inductive-cons idt ctr1;   f = 30;
+        ctr2 = inductive-cons idt ctr2;   g = 40;
+        ctr3 = inductive-cons idt ctr2;   h = 50;
 
-        test_fun = lambda k -> case k\n
-            | ctr1 l => 1\n
-            | ctr2 l => 2\n
-            | _ => 3;\n" in
+        a = (ctr1 (ctr2 ctr0));   y = 2;
+        b = (ctr2 (ctr2 ctr0));   z = 3;
+        c = (ctr3 (ctr2 ctr0));   w = 4;
+
+        test_fun = lambda k -> case k
+            | ctr1 l => 1
+            | ctr2 l => 2
+            | _ => 3;" in
 
     let rctx, lctx = eval_decl_str code lctx rctx in
 

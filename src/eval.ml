@@ -191,16 +191,16 @@ and eval_call ctx i lname args =
                     clean_ctx arg_val in
                     _eval body nctx (i + 1))
 
-        (* if lname is not a Var them it is the body itself *)
-        (* FIXME:TODO Everything else                 *)
-        (*  Which includes a call to a lambda   *)
+        (* I am not sure something could be there           *)
+        (* Not sure if this is legal:                       *)
+        (*  ((lambda x -> lambda y -> x + y) 2 3)           *)
         | _ -> Imm(String(dloc, "Funct Not Implemented"))
 
 and eval_case ctx i loc target pat dflt =
     (* Eval target *)
     let v = _eval target ctx (i + 1) in
 
-    let (_, (osize, _, _)) = ctx in (* number of variable declared outside *)
+    let (_, (osize, _)) = ctx in    (* number of variable declared outside *)
     let csize = get_rte_size ctx in (* current size                        *)
     let offset = csize - osize in
 
@@ -317,22 +317,24 @@ and eval_decls decls ctx = _eval_decls decls ctx 1
 and _eval_decls (decls: ((vdef * lexp * ltype) list))
                (ctx: runtime_env) i: runtime_env =
 
-    let set_offset ctx off =
-        let (l, (a, b, c)) = ctx in
-            (l , (a, b, off)) in
+    (* Read declarations once and push them *)
+    let ctx = List.fold_left (fun ctx ((_, name), lxp, ltp) ->
+        add_rte_variable (Some name) lxp ctx)
+        ctx decls in
 
+    (* local ctx saves the number of declared variable inside ctx      *)
+    (* This is used to remove temporary variables when entering a Call *)
+    let ctx = local_ctx ctx in
     let n = (List.length decls) - 1 in
 
-    let dctx, _ = List.fold_left (fun (ctx, k) g ->
-        let ((_, name), lxp, _) = g in
+    (* Read declarations once and push them *)
+    let _, ctx = List.fold_left (fun (idx, ctx) ((_, name), lxp, ltp) ->
         let lxp = _eval lxp ctx (i + 1) in
-        let ctx = add_rte_variable (Some name) lxp ctx in
-        let ctx = set_offset ctx (n - k) in
-            (local_ctx ctx, k + 1))
-        (local_ctx ctx, 0) decls in
+        let ctx = set_rte_variable idx (Some name) lxp ctx in
+        (idx - 1, ctx))
+        (n, ctx) decls in
 
-    let dctx = set_offset dctx 0 in
-        (local_ctx dctx)
+        ctx
 
 and print_eval_result i lxp =
     print_string "     Out[";

@@ -44,61 +44,26 @@ let env_error loc msg =
 
 let str_idx idx = "[" ^ (string_of_int idx) ^ "]"
 
-let print_myers_list l print_fun =
-    let n = (length l) - 1 in
-
-    print_string (make_title " ENVIRONMENT ");
-    make_rheader [(None, "INDEX");
-        (None, "VARIABLE NAME"); (Some ('l', 48), "VALUE")];
-    print_string (make_sep '-');
-
-    for i = 0 to n do
-    print_string "    | ";
-        ralign_print_int (n - i) 5;
-        print_string " | ";
-        print_fun (nth (n - i) l);
-    done;
-    print_string (make_sep '=');
-;;
-
-let print_rte_ctx ctx =
-    let (l, b) = ctx in
-    print_myers_list l
-    (fun (n, g) ->
-        let _ =
-        match n with
-            | Some m -> lalign_print_string m 12; print_string "  |  "
-            | None -> print_string (make_line ' ' 12); print_string "  |  " in
-        lexp_print g; print_string "\n")
-;;
-
-
-(* Offset is used when we eval declaration one by one                    *)
-(* i.e not everything is present so we need to account for missing decls *)
-type decls_offset = int
 
 (*  Runtime Environ *)
-type runtime_env = ((string option * lexp) myers) * (int * int * decls_offset)
+type env_cell = (string option * lexp) ref
+type runtime_env = (env_cell myers) * (int * int)
 
-let make_runtime_ctx = (nil, (0, 0, 0));;
+let make_runtime_ctx = (nil, (0, 0));;
 
 let get_rte_size (ctx: runtime_env): int = let (l, _) = ctx in length l;;
 
-let add_rte_variable name x ctx =
-    let (l, b) = ctx in
-    let lst = (cons (name, x) l) in
-        (lst, b);;
-
 let is_free_var idx ctx =
-    let (l, (osize, _, offset)) = ctx in
+    let (l, (osize, _)) = ctx in
     let tsize = (get_rte_size ctx) - osize in
         if idx > tsize then true else false
 ;;
 
 let get_rte_variable (name: string option) (idx: int) (ctx: runtime_env): lexp =
-    let (l, (_, _, offset)) = ctx in
-    let idx = if (is_free_var idx ctx) then idx - offset else idx in
-    try (let (tn, x) = (nth idx l) in
+    let (l, _) = ctx in
+    try (
+        let ref_cell = (nth idx l) in
+        let (tn, x) = !ref_cell in
     match (tn, name) with
         | (Some n1, Some n2) -> (
             if n1 = n2 then
@@ -112,21 +77,39 @@ let get_rte_variable (name: string option) (idx: int) (ctx: runtime_env): lexp =
     with Not_found ->
         let n = match name with Some n -> n | None -> "" in
         env_error dloc ("Variable lookup failure. Var: \"" ^
-            n ^ "\" idx: " ^ (str_idx idx) ^ " offset: " ^ (str_idx offset) ^
-            " free_var? " ^ (string_of_bool (is_free_var idx ctx)))
+            n ^ "\" idx: " ^ (str_idx idx))
 ;;
+
+let add_rte_variable name x (ctx: runtime_env): runtime_env =
+    let (l, b) = ctx in
+    let lst = (cons (ref (name, x)) l) in
+        (lst, b);;
+
+let set_rte_variable idx name lxp ctx =
+    let (l, _) = ctx in
+    let ref_cell = (nth idx l) in
+    let (n, _) = !ref_cell in
+
+    match (n, name) with
+        | Some n1, Some n2 ->
+            if (n1 != n2) then
+                env_error dloc ("Variable Name must Match:" ^ n1 ^ " " ^ n2)
+            else(
+                ref_cell := (name, lxp); ctx)
+
+        | _ -> ref_cell := (name, lxp); ctx
 
 
 (* This function is used when we enter a new scope                         *)
 (* it saves the size of the environment before temp var are added          *)
 (* it allow us to remove temporary variables when we enter a new scope     *)
 let local_ctx ctx =
-    let (l, (_, _, off)) = ctx in
+    let (l, (_, _)) = ctx in
     let osize = length l in
-        (l, (osize, 0, off))
+        (l, (osize, 0))
 ;;
 
-let select_n ctx n =
+let select_n (ctx: runtime_env) n: runtime_env =
     let (l, a) = ctx in
     let r = ref nil in
     let s = (length l) - 1 in
@@ -137,8 +120,8 @@ let select_n ctx n =
 
     ((!r), a)
 
-let temp_ctx ctx =
-    let (l, (osize, _, _)) = ctx in
+let temp_ctx (ctx: runtime_env): runtime_env =
+    let (l, (osize, _)) = ctx in
     let tsize = length l in
         (* Check if temporary variables are present *)
         if tsize != osize then
@@ -156,4 +139,34 @@ let nfirst_rte_var n ctx =
         else
             List.rev acc in
     loop 0 []
+;;
+
+let print_myers_list l print_fun =
+    let n = (length l) - 1 in
+
+    print_string (make_title " ENVIRONMENT ");
+    make_rheader [(None, "INDEX");
+        (None, "VARIABLE NAME"); (Some ('l', 48), "VALUE")];
+    print_string (make_sep '-');
+
+    for i = 0 to n do
+    print_string "    | ";
+        ralign_print_int (n - i) 5;
+        print_string " | ";
+        print_fun (nth (n - i) l);
+    done;
+    print_string (make_sep '=');
+;;
+
+let print_rte_ctx (ctx: runtime_env) =
+    let (l, b) = ctx in
+    print_myers_list l
+    (fun x ->
+        let (n, g) = !x in
+        let _ =
+        match n with
+            | Some m -> lalign_print_string m 12; print_string "  |  "
+            | None -> print_string (make_line ' ' 12); print_string "  |  " in
+
+        lexp_print g; print_string "\n")
 ;;
