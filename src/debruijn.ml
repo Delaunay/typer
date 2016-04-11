@@ -36,6 +36,7 @@ open Util
 open Lexp
 open Myers
 open Fmt
+module S = Subst
 
 let debruijn_error = msg_error "DEBRUIJN"
 let debruijn_warning = msg_warning "DEBRUIJN"
@@ -128,7 +129,9 @@ let env_extend (ctx:lexp_context) (def:vdef) (v: lexp option) (t:lexp) =
 let _env_lookup ctx (v : vref) =
   let ((dv_size, _), info_env, _) = ctx in
   let ti_size = Myers.length info_env in
-  let sync_offset = dv_size - ti_size in (* Check == 0 *)
+
+  (* FIXME: Shouldn't this be 0, always?  *)
+  let sync_offset = dv_size - ti_size in
 
   let ((_, rname), dbi) = v in
   let idx = (dbi - sync_offset) in
@@ -143,10 +146,14 @@ let _env_lookup ctx (v : vref) =
                       "Expected: \"" ^ rname ^ "\" got \"" ^ dname ^ "\"")
 
 let env_lookup_type ctx (v : vref) =
-    let (_, (_, _), _, t) =  _env_lookup ctx v in t
+  (* FIXME: We need to S.shift here, since `t` is valid in the context in
+   * which `vref` appeared, rather than in `ctx`.  *)
+  let (_, (_, _), _, t) =  _env_lookup ctx v in t
 
 let env_lookup_expr ctx (v : vref) =
-    let (_, (_, _), lxp, _) =  _env_lookup ctx v in lxp
+  (* FIXME: We need S.shift here, since `lxp` is valid in the context in
+   * which `vref` appeared (plus recursion offset), rather than in `ctx`.  *)
+  let (_, (_, _), lxp, _) =  _env_lookup ctx v in lxp
 
 let env_lookup_by_index index (ctx: lexp_context): env_elem =
     Myers.nth index (_get_env ctx)
