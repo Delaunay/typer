@@ -86,8 +86,65 @@ and conv_p' (s1:S.subst) (s2:S.subst) e1 e2 : bool =
     | (_, _) -> false
 
 and conv_p e1 e2 = conv_p' S.identity S.identity e1 e2
-              
-(* "check ctx e t" should be read as "Δ ⊢ e : τ"  *)
-let rec check ctx e t =
+
+type varbind =
+  | Variable
+  | ForwardRef
+  | LetDef of lexp
+
+let lookup_type ctx vref =
+  let (_, i) = vref in
+  let (_, _, _, t) = Myers.nth i ctx in
+  Susp (S.shift (i + 1), t)
+
+let assert_type e t t' =
+  if conv_p t t' then ()
+  else msg_error "TC" (lexp_location e) "Type mismatch"; ()
+       
+(* "check ctx e" should return τ when "Δ ⊢ e : τ"  *)
+let rec check ctx e =
+  (* let mustfind = assert_type e t in *)
   match e with
-  | _ -> ()
+  | Imm (Float (_, _)) -> type_float
+  | Imm (Integer (_, _)) -> type_int
+  | SortLevel (_) -> type_level
+  | Sort (l, Stype (SortLevel (SLn n)))
+    -> Sort (l, Stype (SortLevel (SLn (1 + n))))
+  | Builtin (_, _, t) -> t
+  | Var v -> lookup_type ctx v
+  | Susp (_, _) -> internal_error "Don't know how to check Susp"
+  | Let (_, defs, e)
+    -> let tmp_ctx =
+        L.fold_left (fun ctx (v, e, t)
+                     -> Myers.cons (0, Some v, ForwardRef, t) ctx)
+                    ctx defs in
+      let (new_ctx, _) =
+        L.fold_left (fun (ctx,recursion_offset) (v, e, t)
+                     -> let t' = check tmp_ctx e in
+                       assert_type e t t';
+                       (Myers.cons (recursion_offset, Some v, LetDef e, t) ctx,
+                        recursion_offset - 1))
+                    (ctx, L.length defs)
+                    defs in
+      check new_ctx e
+  | Arrow (ak, v, t1, l, t2)
+    -> (let k1 = check ctx t1 in
+       let k2 = check (Myers.cons (0, v, Variable, t1) ctx) t2 in
+       match k1, k2 with
+       | (Sort (_, Stype (SortLevel (SLn n1))),
+          Sort (_, Stype (SortLevel (SLn n2))))
+         (* Basic predicativity rule.  *)
+         -> Sort (l, Stype (SortLevel (SLn (max n1 n2))))
+       | ( (Sort (_, StypeLevel), Sort (_, Stype (SortLevel (SLn _))))
+         | (Sort (_, StypeLevel), Sort (_, StypeOmega))
+         (* | (Sort (_, Stype (SortLevel (SLn _))), Sort (_, StypeOmega)) *))
+         -> Sort (l, StypeOmega)
+      )
+  | Lambda (ak, ((l,_) as v), t, e)
+    -> (match check ctx t with
+       | Sort _ -> Arrow (ak, Some v, t, l,
+                         check (Myers.cons (0, Some v, Variable, t) ctx) e))
+  (* | _ -> let t' = check ctx e in
+   *       if conv_p t t' then ()
+   *       else msg_error "TC" (lexp_location e) "Type mismatch"; () *)
+
