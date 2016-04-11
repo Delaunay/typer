@@ -561,9 +561,7 @@ and lexp_p_infer (p : pexp) (env : lexp_context): lexp * ltype =
                                        (get_type lxp nctx))
 
             (* debug catch all *)
-            | _ ->  print_string
-                    ("Catch all was used by: " ^ (lexp_to_string lxp) ^ "\n");
-                dltype in
+            | _ -> dltype in
 
         (lxp, (get_type lxp env))
 

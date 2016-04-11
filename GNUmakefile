@@ -13,7 +13,7 @@ ifeq ($(OS), Windows_NT)
 # Windows need '-r' and building to native can be problematic (linking error)
 # So we build to byte instead
 
-OBFLAGS := $(OBFLAGS) -r
+OBFLAGS = $(OBFLAGS) -r
 COMPILE_MODE = byte
 
 endif
@@ -71,7 +71,7 @@ clean:
 
 
 run/debug_util:
-	@./_build/debug_util ./samples/test__.typer
+	@./_build/debug_util ./samples/test__.typer -fmt-type=off
 
 run/ityper:
 	@./_build/ityper

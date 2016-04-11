@@ -31,48 +31,45 @@ open Utest_lib
 open Sexp
 open Lexp
 
+open Lparse     (* eval string      *)
+open Eval       (* reset_eval_trace *)
+
 open Builtin
 open Env
 
 
+let get_int lxp =
+    let lxp = get_value_lexp lxp in
+    match lxp with
+        | Imm(Integer(_, l)) -> l
+        | _ -> (-40);
+;;
+
+
+(* default environment *)
+let lctx = default_lctx ()
 let rctx = default_rctx ()
 
-let make_val value = Imm(String(dloc, value))
 
+let _ = (add_test "MACROS" "Variable Cascade" (fun () ->
+    reset_eval_trace ();
 
-let _ = (add_test "ENV" "Set Variables" (fun () ->
+    let dcode = "
+        a = 10;
+        b = a;
+        c = b;
+        d = c;" in
 
-    if 10 <= (!_global_verbose_lvl) then (
+    let rctx, lctx = eval_decl_str dcode lctx rctx in
 
-        let var = [
-            ((Some "a"), type_int, (make_val "a"));
-            ((Some "b"), type_int, (make_val "b"));
-            ((Some "c"), type_int, (make_val "c"));
-            ((Some "d"), type_int, (make_val "d"));
-            ((Some "e"), type_int, (make_val "e"));
-        ] in
+    let ecode = "d;" in
 
-        let n = (List.length var) - 1 in
+    let ret = eval_expr_str ecode lctx rctx in
 
-        let rctx = List.fold_left (fun ctx (n, t, _) ->
-            add_rte_variable n (Value(t)) ctx)
-            rctx var in
-
-        print_rte_ctx rctx;
-
-        let rctx, _ = List.fold_left (fun (ctx, idx) (n, _, v) ->
-            ((set_rte_variable idx n (Value(v)) ctx), idx - 1))
-            (rctx, n) var in
-
-        print_rte_ctx rctx;
-
-        success ()
-    )
-    else
-        success ()
-
-));;
-
+        match ret with
+            | [r] -> expect_equal_int (get_int r) 10
+            | _ -> failure ())
+);;
 
 
 (* run all tests *)

@@ -128,12 +128,19 @@ let env_extend (ctx:lexp_context) (def:vdef) (v: lexp option) (t:lexp) =
 (* generic lookup *)
 let _env_lookup ctx (v : vref) =
   let ((dv_size, _), info_env, _) = ctx in
+  let ((loc, rname), dbi) = v in
   let ti_size = Myers.length info_env in
 
-  (* FIXME: Shouldn't this be 0, always?  *)
-  let sync_offset = dv_size - ti_size in
+  (* FIXME: Shouldn't this be 0, always?                *)
+  (* It is not during declaration processing            *)
+  (* This was required by the old type deduction system *)
+  (* We might be able to remove it in later versions    *)
 
-  let ((_, rname), dbi) = v in
+  let sync_offset = dv_size - ti_size in
+  (*if sync_offset != 0 then
+    debruijn_warning loc ("Environment are out of sync by " ^
+        (string_of_int sync_offset) ^ " element(s)")*)
+
   let idx = (dbi - sync_offset) in
 
   let ret = try Myers.nth idx info_env
