@@ -44,9 +44,22 @@ let env_error loc msg =
 
 let str_idx idx = "[" ^ (string_of_int idx) ^ "]"
 
+(*  currently, we don't do much *)
+type value_type =
+    | Value of lexp
+    | Closure of lexp * (((string option * value_type) ref myers) * (int * int))
+
+let get_value_lexp (vtp: value_type) =
+    match vtp with
+        | Value s -> s
+        | Closure (s, _) -> s
+
+let value_print (vtp: value_type) = lexp_print (get_value_lexp vtp)
+let value_location (vtp: value_type) = lexp_location (get_value_lexp vtp)
+
 
 (*  Runtime Environ *)
-type env_cell = (string option * lexp) ref
+type env_cell = (string option * value_type) ref
 type runtime_env = (env_cell myers) * (int * int)
 
 let make_runtime_ctx = (nil, (0, 0));;
@@ -59,7 +72,7 @@ let is_free_var idx ctx =
         if idx > tsize then true else false
 ;;
 
-let get_rte_variable (name: string option) (idx: int) (ctx: runtime_env): lexp =
+let get_rte_variable (name: string option) (idx: int) (ctx: runtime_env): value_type =
     let (l, _) = ctx in
     try (
         let ref_cell = (nth idx l) in
@@ -80,12 +93,12 @@ let get_rte_variable (name: string option) (idx: int) (ctx: runtime_env): lexp =
             n ^ "\" idx: " ^ (str_idx idx))
 ;;
 
-let add_rte_variable name x (ctx: runtime_env): runtime_env =
+let add_rte_variable name (x: value_type) (ctx: runtime_env): runtime_env =
     let (l, b) = ctx in
     let lst = (cons (ref (name, x)) l) in
         (lst, b);;
 
-let set_rte_variable idx name lxp ctx =
+let set_rte_variable idx name (lxp: value_type) ctx =
     let (l, _) = ctx in
     let ref_cell = (nth idx l) in
     let (n, _) = !ref_cell in
@@ -168,5 +181,5 @@ let print_rte_ctx (ctx: runtime_env) =
             | Some m -> lalign_print_string m 12; print_string "  |  "
             | None -> print_string (make_line ' ' 12); print_string "  |  " in
 
-        lexp_print g; print_string "\n")
+        value_print g; print_string "\n")
 ;;

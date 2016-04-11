@@ -75,34 +75,31 @@ let builtin_fadd = Builtin (FAdd, "_+_", fop_binary)
 let builtin_fmult = Builtin (FMult, "_*_", fop_binary) *)
 
 (*      Math Functions       *)
-let get_int lxp =
+let get_int (lxp: value_type): (int option) =
+    let lxp = get_value_lexp lxp in
     match lxp with
         | Imm(Integer(_, l)) -> Some l
         | _ -> None
 ;;
 
-let get_float lxp =
-    match lxp with
-        | Imm(Float(_, l)) -> Some l
-        | _ -> None
-;;
-
-let iadd_impl ctx =
+(*)
+let iadd_impl ctx: value_type =
     let llxp = (get_rte_variable (None) 0 ctx) in
     let rlxp = (get_rte_variable (None) 1 ctx) in
     let l = get_int llxp in
     let r = get_int rlxp in
 
     (* if l and r are not ints this is a partial eval *)
-    if l = None || r = None then
-        Call(builtin_iadd, [(Aexplicit, llxp); (Aexplicit, rlxp)])
+    if l = None || r = None then(
+        let lxp = Call(builtin_iadd, [(Aexplicit, llxp); (Aexplicit, (get_value_lexp rlxp))]) in
+        Closure(lxp, ctx))
     else (
         let v, w = match l, r with
             | Some v, Some w -> v, w
             | _, _ -> (-40), (-40) in
-        Imm(Integer (dloc, v + w)))
+        Value(Imm(Integer (dloc, v + w))))
 
-let imult_impl ctx =
+let imult_impl ctx: value_type =
 
     let vint = (nfirst_rte_var 2 ctx) in
     let varg = List.map (fun g -> get_int g) vint in
@@ -121,12 +118,12 @@ let imult_impl ctx =
 
     if partial then
         let args = List.map (fun g -> (Aexplicit, g)) vint in
-            Call(builtin_imult, args)
+            Closure(Call(builtin_imult, args), ctx)
     else
-        Imm(Integer(dloc, prod))
+        Value(Imm(Integer(dloc, prod))) *)
 
 
-let none_fun = (fun ctx -> type0)
+let none_fun = (fun ctx -> Value(type0))
 
 (* Built-in list of types/functions *)
 let typer_builtins = [
@@ -135,8 +132,8 @@ let typer_builtins = [
     ("Float", None, type_float,  none_fun);
     ("Type" , None, type0,       none_fun);   (* builtin_iadd *)
     ("_=_"  , Some builtin_eq, type_eq,     none_fun);   (*  t  ->  t  -> bool *)
-    ("_+_"  , Some builtin_iadd, iop_binary,  iadd_impl);  (* int -> int -> int  *)
-    ("_*_"  , Some builtin_imult, iop_binary,  imult_impl); (* int -> int -> int  *)
+    ("_+_"  , Some builtin_iadd, iop_binary,  none_fun);  (* int -> int -> int  *)
+    ("_*_"  , Some builtin_imult, iop_binary,  none_fun); (* int -> int -> int  *)
 
 (*  Macro primitives *)
 
@@ -163,7 +160,7 @@ let default_rctx () =
     (* populate ctx *)
     List.fold_left
       (fun ctx (name, lxp, ltp, f) ->
-        add_rte_variable (Some name) ltp ctx)
+        add_rte_variable (Some name) (Value(ltp)) ctx)
        rctx
        typer_builtins
 ;;

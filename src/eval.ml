@@ -57,10 +57,6 @@ let _global_eval_ctx = ref make_runtime_ctx
 let _eval_max_recursion_depth = ref 255
 let reset_eval_trace () = _global_eval_trace := []
 
-(*  currently, we don't do much *)
-type value_type = lexp (*
-    | Value of lexp
-    | Closure of lexp * runtime_env *)
 
 (* This is an internal definition
  * 'i' is the recursion depth used to print the call trace *)
@@ -76,12 +72,12 @@ let rec _eval lxp ctx i: (value_type) =
     match lxp with
         (*  Leafs           *)
         (* ---------------- *)
-        | Imm(v) -> lxp
-        | Inductive (_, _, _, _) as e -> e
-        | Cons (_, _) as e -> e
+        | Imm(v) -> Value(lxp)
+        | Inductive (_, _, _, _) as e -> Value(e)
+        | Cons (_, _) as e -> Value(e)
 
         (* Lambda's body is evaluated when called   *)
-        | Lambda _ -> lxp (* Closure(lxp, ctx) *)
+        | Lambda _ -> Closure(lxp, ctx)
 
         (*  Return a value stored in the env        *)
         | Var((loc, name), idx) as e -> eval_var ctx e ((loc, name), idx)
@@ -96,14 +92,14 @@ let rec _eval lxp ctx i: (value_type) =
         | Call(Builtin(v, name, ltp), args) ->
             let nctx = build_arg_list args ctx i in *)
 
-        (* Call to a builtin function *)
+        (* Call to a builtin function * )
         | Call(b, args) when b = builtin_iadd ->
             let nctx = build_arg_list args ctx i in
-                iadd_impl nctx
+                iadd_impl lxp b args nctx
 
         | Call(b, args) when b = builtin_imult ->
             let nctx = build_arg_list args ctx i in
-                imult_impl nctx
+                imult_impl lxp b args nctx *)
 
         (* Function call *)
         | Call (lname, args) -> eval_call ctx i lname args
@@ -111,7 +107,7 @@ let rec _eval lxp ctx i: (value_type) =
         (* Case *)
         | Case (loc, target, _, pat, dflt) -> (eval_case ctx i loc target pat dflt)
 
-        | _ -> Imm(String(dloc, "eval Not Implemented"))
+        | _ -> Value(Imm(String(dloc, "eval Not Implemented")))
 
 and eval_var ctx lxp v =
     let ((loc, name), idx) = v in
@@ -126,10 +122,10 @@ and eval_var ctx lxp v =
         match expr with
             | Var(_, j) when j = (-3) -> lxp
             | Var((_, name2), j) ->
-                var_crawling (get_rte_variable (Some name2) j ctx) (k + 1)
+                var_crawling (get_value_lexp (get_rte_variable (Some name2) j ctx)) (k + 1)
             | _ -> expr in
 
-    try var_crawling lxp 0
+    try Value(var_crawling lxp 0)
     with Not_found ->
         eval_error loc ("Variable: " ^ name ^ (str_idx idx) ^ " was not found ")
 
@@ -139,8 +135,15 @@ and eval_call ctx i lname args =
     let clean_ctx = temp_ctx ctx in
     let args_n = List.length args in
 
+    (* get function body *)
+    let body = _eval lname ctx (i + 1) in
+
+    match body with
+        | Value lxp -> _eval lxp ctx (i + 1)
+        | Closure (lxp, ctx1) -> _eval lxp ctx1 (i + 1)
+
     (*  To handle partial call we need to consume args and   *)
-    (*  lambdas together and return the remaining lambda     *)
+    (*  lambdas together and return the remaining lambda     * )
     let rec consume_args (ctx: runtime_env) (lxp: lexp) args (k: int): value_type =
         match lxp, args with
             (* Base Case*)
@@ -166,8 +169,8 @@ and eval_call ctx i lname args =
             | _, _ ->
                 eval_error tloc ("Wrong Number of arguments." ^
                         " Got:" ^ (string_of_int args_n) ^ " arg(s)." ^
-                        " Expected: " ^ (string_of_int k) ^ " arg(s)") in
-
+                        " Expected: " ^ (string_of_int k) ^ " arg(s)") in *)
+    (*)
     match lname with
         (* This is a named function call *)
         | Var((_, name), idx) -> (
@@ -194,11 +197,11 @@ and eval_call ctx i lname args =
         (* I am not sure something could be there           *)
         (* Not sure if this is legal:                       *)
         (*  ((lambda x -> lambda y -> x + y) 2 3)           *)
-        | _ -> Imm(String(dloc, "Funct Not Implemented"))
+        | _ -> Imm(String(dloc, "Funct Not Implemented")) *)
 
 and eval_case ctx i loc target pat dflt =
     (* Eval target *)
-    let v = _eval target ctx (i + 1) in
+    let v = (get_value_lexp (_eval target ctx (i + 1))) in
 
     let (_, (osize, _)) = ctx in    (* number of variable declared outside *)
     let csize = get_rte_size ctx in (* current size                        *)
@@ -208,7 +211,8 @@ and eval_case ctx i loc target pat dflt =
     let get_inductive_ref lxp =
         match lxp with
             | Cons(((_, vname), idx), (_, cname)) ->(
-                let info = get_rte_variable (Some vname) (idx + offset) ctx in
+                let info = (get_value_lexp
+                                (get_rte_variable (Some vname) (idx + offset) ctx)) in
                 let ctor_def = match info with
                     | Inductive(_, _, _, c) -> c
                     | _ -> eval_error loc "Not an Inductive Type" in
@@ -300,7 +304,7 @@ and eval_case ctx i loc target pat dflt =
                     | Some (_, (_, name)) ->
                         let (_, xp) = arg in
                         let xp = (arg_shift xp toffset) in
-                            add_rte_variable (Some name) xp nctx)
+                            add_rte_variable (Some name) (Value(xp)) nctx)
 
                 ctx pat_args args in
                     (* eval body *)
@@ -319,7 +323,7 @@ and _eval_decls (decls: ((vdef * lexp * ltype) list))
 
     (* Read declarations once and push them *)
     let ctx = List.fold_left (fun ctx ((_, name), lxp, ltp) ->
-        add_rte_variable (Some name) lxp ctx)
+        add_rte_variable (Some name) (Value(lxp)) ctx)
         ctx decls in
 
     (* local ctx saves the number of declared variable inside ctx      *)

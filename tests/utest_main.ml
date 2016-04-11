@@ -38,6 +38,8 @@ let cut_name str =
 let _global_verbose_lvl = ref 1
 let _global_sample_dir = ref "./"
 let _global_tests_dir = ref "./_build/tests/"
+let _global_fsection = ref ""
+let _global_fstitle = ref ""
 
 let arg_defs = [
     ("--verbose=",
@@ -46,6 +48,11 @@ let arg_defs = [
         Arg.String (fun g -> _global_sample_dir := g), " Set sample directory");
     ("--tests=",
         Arg.String (fun g -> _global_tests_dir := g), " Set tests directory");
+    (* Allow users to select which test to run *)
+    ("--fsection=",
+        Arg.String (fun g -> _global_fsection := g), " Set test filter"));
+    ("--ftitle=",
+        Arg.String (fun g -> _global_ftitle := g), " Set test filter"));
 ];;
 
 let parse_args () = Arg.parse arg_defs (fun s -> ()) ""

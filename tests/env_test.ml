@@ -55,13 +55,13 @@ let _ = (add_test "ENV" "Set Variables" (fun () ->
         let n = (List.length var) - 1 in
 
         let rctx = List.fold_left (fun ctx (n, t, _) ->
-            add_rte_variable n t ctx)
+            add_rte_variable n (Value(t)) ctx)
             rctx var in
 
         print_rte_ctx rctx;
 
         let rctx, _ = List.fold_left (fun (ctx, idx) (n, _, v) ->
-            ((set_rte_variable idx n v ctx), idx - 1))
+            ((set_rte_variable idx n (Value(v)) ctx), idx - 1))
             (rctx, n) var in
 
         print_rte_ctx rctx;
