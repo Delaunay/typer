@@ -53,10 +53,10 @@ let dlxp = type0
 let dltype = type0
 let dloc = dummy_location
 
-let lexp_warning = msg_warning "LEXP"
-let lexp_error = msg_error "LEXP"
+let lexp_warning = msg_warning "LPARSE"
+let lexp_error = msg_error "LPARSE"
 let lexp_fatal loc msg =
-    msg_error "LEXP" loc msg;
+    msg_error "LPARSE" loc msg;
     raise (internal_error msg)
 ;;
 

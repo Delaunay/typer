@@ -51,18 +51,17 @@ let lctx = default_lctx ()
 let rctx = default_rctx ()
 
 
-let _ = (add_test "MACROS" "Variable Cascade" (fun () ->
+let _ = (add_test "MACROS" "macros base" (fun () ->
     reset_eval_trace ();
 
+    (* define 'lambda x -> x * x' using macros *)
     let dcode = "
-        a = 10;
-        b = a;
-        c = b;
-        d = c;" in
+        sqrt = (node_ (symbol_ \"lambda\") (symbol_ \"x\")
+            (node_ (symbol_ \"*\") (symbol_ \"x\") (symbol_ \"x\"))); " in
 
     let rctx, lctx = eval_decl_str dcode lctx rctx in
 
-    let ecode = "d;" in
+    let ecode = "(sqrt 3);" in
 
     let ret = eval_expr_str ecode lctx rctx in
 

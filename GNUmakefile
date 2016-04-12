@@ -51,7 +51,7 @@ tests-build:
 	@mv _build/tests/utest_main.$(COMPILE_MODE)  _build/tests/utests
 
 tests-run:
-	@./_build/tests/utests --verbose= 2
+	@./_build/tests/utests --verbose= 5
 
 tests: tests-build tests-run
 
@@ -77,4 +77,4 @@ run/ityper:
 	@./_build/ityper
 
 run/tests:
-	@./_build/tests/utests
+	@./_build/tests/utests --verbose= 1

@@ -126,6 +126,7 @@ let make_string loc args_val ctx  = Value(type0)
 let make_integer loc args_val ctx = Value(type0)
 let make_float loc args_val ctx   = Value(type0)
 
+let builtin_sexp = Builtin (SexpType, "_sxp_", type0)
 
 (* Built-in list of types/functions *)
 let typer_builtins = [
@@ -140,12 +141,12 @@ let typer_builtins = [
     ("_*_"  , Some builtin_imult, iop_binary, imult_impl); (* int -> int -> int  *)
 
 (*  Macro primitives *)
-    ("block_"  , None, type0, make_block);
-    ("symbol_" , None, type0, make_symbol);
-    ("string_" , None, type0, make_string);
-    ("integer_", None, type0, make_integer);
-    ("float_"  , None, type0, make_float);
-    ("node_"   , None, type0, make_node);
+    ("block_"  , Some builtin_sexp, type0, make_block);
+    ("symbol_" , Some builtin_sexp, type0, make_symbol);
+    ("string_" , Some builtin_sexp, type0, make_string);
+    ("integer_", Some builtin_sexp, type0, make_integer);
+    ("float_"  , Some builtin_sexp, type0, make_float);
+    ("node_"   , Some builtin_sexp, type0, make_node);
 ]
 
 (* Make built-in lookup table *)

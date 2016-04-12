@@ -35,11 +35,12 @@ let cut_name str =
     String.sub str 0 (String.length str - 12)
 ;;
 
-let _global_verbose_lvl = ref 1
+let _global_verbose_lvl = ref 5
 let _global_sample_dir = ref "./"
 let _global_tests_dir = ref "./_build/tests/"
 let _global_fsection = ref ""
 let _global_ftitle = ref ""
+let _global_filter = ref false
 
 let arg_defs = [
     ("--verbose=",
@@ -50,19 +51,33 @@ let arg_defs = [
         Arg.String (fun g -> _global_tests_dir := g), " Set tests directory");
     (* Allow users to select which test to run *)
     ("--fsection=",
-        Arg.String (fun g -> _global_fsection := g), " Set test filter");
+        Arg.String (fun g -> _global_fsection := String.uppercase g;
+                            _global_filter := true), " Set test filter");
     ("--ftitle=",
-        Arg.String (fun g -> _global_ftitle := g), " Set test filter");
+        Arg.String (fun g -> _global_ftitle := String.uppercase g;
+                             _global_filter := true), " Set test filter");
 ];;
+
+
+let verbose n = (n <= (!_global_verbose_lvl))
 
 let parse_args () = Arg.parse arg_defs (fun s -> ()) ""
 
-let ut_string vb msg = if vb <= (!_global_verbose_lvl) then print_string msg else ()
+let ut_string vb msg = if verbose vb then print_string msg else ()
 
+let cut_byte str = String.sub str 0 ((String.length str) - 10)
+let cut_native str = String.sub str 0 ((String.length str) - 12)
+
+let cut_name str =
+    if (Filename.check_suffix str "_test.byte")
+    then (cut_byte str)
+    else (cut_native str)
 
 let print_file_name i n name pass =
-    (if pass then print_string green else print_string red);
     let line_size = 80 - (String.length name) - 16 in
+    let name = cut_name name in
+
+    (if pass then print_string green else print_string red);
     print_string "    (";
     ralign_print_int i 2; print_string "/";
     ralign_print_int n 2; print_string ") ";
@@ -72,8 +87,11 @@ let print_file_name i n name pass =
     print_string reset;
 ;;
 
-let verbose n = (n <= (!_global_verbose_lvl))
-
+let must_run str =
+    if (!_global_filter) then(
+        let name = String.uppercase (cut_name str) in
+            if name = !_global_fsection then true else false)
+    else true
 
 (* search *_test.byte executable en run them
     Usage:
@@ -116,11 +134,14 @@ let main () =
     let failed_test = ref 0 in
     let tests_n = ref 0 in
     let test_args = " --samples= " ^ root_folder ^
-                    " --verbose= " ^ (string_of_int !_global_verbose_lvl) in
+                    " --verbose= " ^ (string_of_int !_global_verbose_lvl) ^
+                    (if (String.length !_global_ftitle) != 0 then
+                   (" --ftitle= " ^ !_global_ftitle) else "") in
 
     List.iter (fun file ->
         flush stdout;
 
+        if must_run file then (
         tests_n := !tests_n + 1;
         exit_code := Sys.command (folder ^ file ^ test_args);
 
@@ -132,6 +153,8 @@ let main () =
         );
 
         (if verbose 2 then print_newline ());
+
+        );
 
     ) files;
 
