@@ -41,7 +41,7 @@ let rec make_line c n = String.make n c;;
 (*  Big numbers are replaced by #### *)
 let cut_int (v:int) (start:int) (len:int): int = 0;;
 
-(*  LALIGN
+(*  RALIGN
  * ----------------------- *)
 let ralign_generic get_size print_str print_elem cut_elem elem col =
     let n = get_size elem in
@@ -75,6 +75,27 @@ let lalign_print_string =
 
 let lalign_print_int =
     lalign_generic str_size_int print_string print_int cut_int;;
+
+(*  CALIGN
+ * ----------------------- *)
+let calign_generic get_size print_str print_elem cut_elem elem col =
+    let n = get_size elem in
+    let p = n mod 2 in
+    let sep_n = (col - n) / 2 in
+
+    if n > col then
+        print_elem (cut_elem elem 0 col)
+    else begin
+        print_str (make_line ' ' sep_n);
+        print_elem elem;
+        print_str (make_line ' ' (sep_n + p)); end
+;;
+
+let calign_print_string =
+    calign_generic String.length print_string print_string String.sub;;
+
+let calign_print_int =
+    calign_generic str_size_int print_string print_int cut_int;;
 
 (* Table Printing helper *)
 let make_title title =

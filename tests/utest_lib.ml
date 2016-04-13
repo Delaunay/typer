@@ -71,13 +71,32 @@ exception Unexpected_result of string
  *)
 let _global_verbose_lvl = ref 0
 let _global_sample_dir = ref ""
+let _global_fsection = ref ""
+let _global_ftitle = ref ""
 
 let arg_defs = [
     ("--verbose=",
         Arg.Int (fun g -> _global_verbose_lvl := g), " Set verbose level");
     ("--samples=",
         Arg.String (fun g -> _global_sample_dir := g), " Set sample directory");
+(* Allow users to select which test to run *)
+    ("--fsection=",
+        Arg.String (fun g -> _global_fsection := String.uppercase g), " Set test filter");
+    ("--ftitle=",
+        Arg.String (fun g -> _global_ftitle := String.uppercase g), " Set test filter");
 ];;
+
+let must_run_section str =
+    if (String.length !_global_fsection) != 0  then(
+        let name = String.uppercase str in
+            if name = !_global_fsection then true else false)
+    else true
+
+let must_run_title str =
+    if (String.length !_global_ftitle) != 0 then(
+        let name = String.uppercase str in
+            if name = !_global_ftitle then true else false)
+    else true
 
 let parse_args () = Arg.parse arg_defs (fun s -> ()) ""
 
@@ -154,6 +173,7 @@ let add_test sname tname tfun =
  *  tmap: test_name -> tmap
  *  tk  : Test Key                  *)
 let for_all_tests sk tmap tk =
+    if (must_run_title tk) then (
     let tv = StringMap.find tk tmap in
     flush stdout;
     try
@@ -165,14 +185,18 @@ let for_all_tests sk tmap tk =
                 _ret_code := failure ())
     with e ->
         _ret_code := failure ();
-        unexpected_throw sk tk e
+        unexpected_throw sk tk e) else ()
 ;;
 
 let for_all_sections sk =
     let tmap, tst = StringMap.find sk (!_global_sections) in
+
+    if (must_run_section sk) then(
         ut_string2 ("[RUN    ] " ^ sk ^ " \n");
         tst := List.rev (!tst);
-        List.iter (for_all_tests sk tmap) (!tst)
+        List.iter (for_all_tests sk tmap) (!tst))
+
+    else ()
 ;;
 
 (* Run all *)

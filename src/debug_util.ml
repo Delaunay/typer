@@ -286,7 +286,11 @@ let main () =
 
         (* Eval declaration *)
         let rctx = make_runtime_ctx in
-        let rctx = eval_decls lexps rctx in
+        let rctx = (try eval_decls lexps rctx
+            with e ->
+                print_rte_ctx (!_global_eval_ctx);
+                print_eval_trace ();
+                raise e) in
 
         (if (get_p_option "rctx") then(
             print_rte_ctx rctx; print_string "\n"));
@@ -301,9 +305,9 @@ let main () =
 
             (* get main body *)
             let body = (get_rte_variable (Some "main") main rctx) in
+
             (* eval main *)
-            let r = (debug_eval body rctx) in
-                print_eval_result 1 r
+                print_eval_result 1 body
 
         with
             Not_found -> ()

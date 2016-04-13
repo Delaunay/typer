@@ -77,7 +77,7 @@ let rec _eval lxp ctx i: (value_type) =
         | Cons (_, _) as e -> Value(e)
 
         (* Lambda's body is evaluated when called   *)
-        | Lambda _ -> Closure(lxp, ctx)
+        | Lambda (_, _, _, lxp) -> Closure(lxp, ctx)
 
         (*  Return a value stored in the env        *)
         | Var((loc, name), idx) as e -> eval_var ctx e ((loc, name), idx)
@@ -88,116 +88,59 @@ let rec _eval lxp ctx i: (value_type) =
             let nctx = _eval_decls decls ctx i in
                 _eval inst nctx (i + 1)
 
-        (* Built-in Function * )
-        | Call(Builtin(v, name, ltp), args) ->
-            let nctx = build_arg_list args ctx i in *)
-
-        (* Call to a builtin function * )
-        | Call(b, args) when b = builtin_iadd ->
-            let nctx = build_arg_list args ctx i in
-                iadd_impl lxp b args nctx
-
-        | Call(b, args) when b = builtin_imult ->
-            let nctx = build_arg_list args ctx i in
-                imult_impl lxp b args nctx *)
+        (* Built-in Function *)
+        | Call(Builtin(btype, str, ltp), args)->
+            let args_val = List.map (fun (k, e) -> _eval e ctx (i + 1)) args in
+                (get_builtin_impl btype str ltp) tloc args_val ctx
 
         (* Function call *)
-        | Call (lname, args) -> eval_call ctx i lname args
+        | Call (lname, args) as call -> eval_call ctx i lname args call
 
         (* Case *)
         | Case (loc, target, _, pat, dflt) -> (eval_case ctx i loc target pat dflt)
 
-        | _ -> Value(Imm(String(dloc, "eval Not Implemented")))
+        | _ -> lexp_print lxp; Value(Imm(String(dloc, "eval Not Implemented")))
 
 and eval_var ctx lxp v =
     let ((loc, name), idx) = v in
-
-    (* find variable binding i.e we do not want a another variable  *)
-    (* (-3) represent a variable that should not be replaced        *)
-    let rec var_crawling expr k =
-        (if k > 255 then(
-            lexp_print expr; print_string "\n"; flush stdout;
-            eval_error loc "Variable lookup failed"));
-
-        match expr with
-            | Var(_, j) when j = (-3) -> lxp
-            | Var((_, name2), j) ->
-                var_crawling (get_value_lexp (get_rte_variable (Some name2) j ctx)) (k + 1)
-            | _ -> expr in
-
-    try Value(var_crawling lxp 0)
+        try get_rte_variable (Some name) idx ctx
     with Not_found ->
         eval_error loc ("Variable: " ^ name ^ (str_idx idx) ^ " was not found ")
 
-and eval_call ctx i lname args =
+and eval_call ctx i lname args call =
     (* create a clean environment *)
-    let tloc = lexp_location lname in
+    let args_val = List.map (fun (k, e) -> _eval e ctx (i + 1)) args in
     let clean_ctx = temp_ctx ctx in
-    let args_n = List.length args in
 
     (* get function body *)
     let body = _eval lname ctx (i + 1) in
 
-    match body with
-        | Value lxp -> _eval lxp ctx (i + 1)
-        | Closure (lxp, ctx1) -> _eval lxp ctx1 (i + 1)
-
-    (*  To handle partial call we need to consume args and   *)
-    (*  lambdas together and return the remaining lambda     * )
-    let rec consume_args (ctx: runtime_env) (lxp: lexp) args (k: int): value_type =
-        match lxp, args with
-            (* Base Case*)
-            | Lambda(_, (_, name), _, body), arg::tl ->
-                let ctx = add_rte_variable (Some name) arg ctx in
-                    consume_args ctx body tl (k + 1)
-
-            (* Partial Application *)
-            (* In truth we don't really stop here. We push missing args *)
-            (* as such that missing args will be replaced by themselves *)
-            (* when the full eval branch will be called                 *)
-            | Lambda(kind, (loc, name), l, body), [] ->
-                let ctx = add_rte_variable (Some name) (Var((loc, name), -3)) ctx in
-                let b = consume_args ctx body [] (k + 1) in
-                (* Build a new lambda *)
-                    Lambda(kind, (loc, name), l, b)
-
-            (* Full Eval *)
-            | _, [] ->
-                _eval lxp ctx (k + i)
-
-            (* Too many args *)
-            | _, _ ->
-                eval_error tloc ("Wrong Number of arguments." ^
-                        " Got:" ^ (string_of_int args_n) ^ " arg(s)." ^
-                        " Expected: " ^ (string_of_int k) ^ " arg(s)") in *)
-    (*)
-    match lname with
-        (* This is a named function call *)
-        | Var((_, name), idx) -> (
-            (*  get function's body from current context *)
-            let body = get_rte_variable (Some name) idx ctx in
-
-            (*  _eval every args using current context *)
-            let arg_val = List.map (fun (k, e) -> _eval e ctx (i + 1)) args in
-
-            match body with
-                (* If 'cons', build it back with evaluated args *)
+    let rec eval_call body args ctx =
+        match body, args with
+            (* first lambda *)
+            | Value (lxp), hd::tl -> (match lxp with
                 | Cons _ ->
-                    Call(lname, (List.map (fun g -> (Aexplicit, g)) arg_val))
-
-                | Lambda _ ->
-                    (consume_args clean_ctx body arg_val 0)
-
+                    let cons_args = List.map (fun g -> (Aexplicit, (get_value_lexp g)))  args_val in
+                        Value(Call(lname, (cons_args)))
                 | _ ->
-                (*  Add args inside our clean context *)
-                let nctx = List.fold_left (fun c v -> add_rte_variable None v c)
-                    clean_ctx arg_val in
-                    _eval body nctx (i + 1))
+                    (* Push first arg *)
+                    let nctx = add_rte_variable None hd ctx in
+                    (* eval first lambda *)
+                    let ret = _eval lxp nctx (i + 1) in
 
-        (* I am not sure something could be there           *)
-        (* Not sure if this is legal:                       *)
-        (*  ((lambda x -> lambda y -> x + y) 2 3)           *)
-        | _ -> Imm(String(dloc, "Funct Not Implemented")) *)
+                        eval_call ret tl nctx)
+
+            (* we add an argument to the closure *)
+            | Closure (lxp, ctx), hd::tl ->
+                let nctx = add_rte_variable None hd ctx in
+                let ret = _eval lxp nctx (i + 1) in
+                    eval_call ret tl nctx
+
+            (* No more arguments *)
+            | Closure (_, _), [] -> body
+            | Value (lxp), [] -> body in
+
+        eval_call body args_val clean_ctx
 
 and eval_case ctx i loc target pat dflt =
     (* Eval target *)
@@ -333,6 +276,7 @@ and _eval_decls (decls: ((vdef * lexp * ltype) list))
 
     (* Read declarations once and push them *)
     let _, ctx = List.fold_left (fun (idx, ctx) ((_, name), lxp, ltp) ->
+        _global_eval_trace := [];
         let lxp = _eval lxp ctx (i + 1) in
         let ctx = set_rte_variable idx (Some name) lxp ctx in
         (idx - 1, ctx))
@@ -344,9 +288,8 @@ and print_eval_result i lxp =
     print_string "     Out[";
     ralign_print_int i 2;
     print_string "] >> ";
-    match lxp with
-        | Imm(v) -> sexp_print v; print_string "\n"
-        | e ->  lexp_print e; print_string "\n"
+    value_print lxp; print_string "\n";
+
 
 and print_eval_trace () =
     print_trace " EVAL TRACE " 50 lexp_to_string lexp_print !_global_eval_trace

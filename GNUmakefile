@@ -13,7 +13,7 @@ ifeq ($(OS), Windows_NT)
 # Windows need '-r' and building to native can be problematic (linking error)
 # So we build to byte instead
 
-OBFLAGS := $(OBFLAGS) -r
+OBFLAGS = $(OBFLAGS) -r
 COMPILE_MODE = byte
 
 endif
@@ -51,7 +51,7 @@ tests-build:
 	@mv _build/tests/utest_main.$(COMPILE_MODE)  _build/tests/utests
 
 tests-run:
-	@./_build/tests/utests --verbose= 2
+	@./_build/tests/utests --verbose= 5
 
 tests: tests-build tests-run
 
@@ -71,10 +71,10 @@ clean:
 
 
 run/debug_util:
-	@./_build/debug_util ./samples/test__.typer
+	@./_build/debug_util ./samples/test__.typer -fmt-type=off
 
 run/ityper:
 	@./_build/ityper
 
 run/tests:
-	@./_build/tests/utests
+	@./_build/tests/utests --verbose= 1

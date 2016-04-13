@@ -40,6 +40,13 @@ open Debruijn
 open Env       (* get_rte_variable *)
 
 
+
+let builtin_error loc msg =
+    msg_error "BUILT-IN" loc msg;
+    raise (internal_error msg)
+;;
+
+
 (*                Builtin types               *)
 let dloc = dummy_location
 let slevel0 = SortLevel (SLn 0)
@@ -82,62 +89,77 @@ let get_int (lxp: value_type): (int option) =
         | _ -> None
 ;;
 
-(*)
-let iadd_impl ctx: value_type =
-    let llxp = (get_rte_variable (None) 0 ctx) in
-    let rlxp = (get_rte_variable (None) 1 ctx) in
+(* Builtin of builtin * string * ltype *)
+let _generic_binary_iop name f loc args_val ctx =
+
+    let n = List.length args_val in
+    let nctx = List.fold_left (fun c v -> add_rte_variable None v c) ctx args_val in
+
+    (if n != 2 then builtin_error loc (name ^ " expects 2 arguments"));
+
+    let llxp = (get_rte_variable (None) 0 nctx) in
+    let rlxp = (get_rte_variable (None) 1 nctx) in
+
     let l = get_int llxp in
     let r = get_int rlxp in
 
-    (* if l and r are not ints this is a partial eval *)
-    if l = None || r = None then(
-        let lxp = Call(builtin_iadd, [(Aexplicit, llxp); (Aexplicit, (get_value_lexp rlxp))]) in
-        Closure(lxp, ctx))
-    else (
-        let v, w = match l, r with
-            | Some v, Some w -> v, w
-            | _, _ -> (-40), (-40) in
-        Value(Imm(Integer (dloc, v + w))))
+        match l, r with
+            | Some v, Some w -> Value(Imm(Integer (dloc, (f v w))))
+            | _ -> builtin_error loc (name ^ " expects Integers as arguments")
+;;
 
-let imult_impl ctx: value_type =
-
-    let vint = (nfirst_rte_var 2 ctx) in
-    let varg = List.map (fun g -> get_int g) vint in
-
-    (* check for partial eval and compute product *)
-    let (partial, prod) = List.fold_left (fun a g ->
-        let (partial, prod) = a in
-            match g with
-                | Some v  -> (partial, v * prod)
-                | None -> (true, 1))
-        (false, 1) varg in
-
-    (* we could partially eval partial call         *)
-    (* i.e (a * 2 * 2 * b * 4) => (a * b * 16)      *)
-    (* but we don't here                            *)
-
-    if partial then
-        let args = List.map (fun g -> (Aexplicit, g)) vint in
-            Closure(Call(builtin_imult, args), ctx)
-    else
-        Value(Imm(Integer(dloc, prod))) *)
+let iadd_impl  = _generic_binary_iop "Integer::add"  (fun a b -> a + b)
+let isub_impl  = _generic_binary_iop "Integer::sub"  (fun a b -> a - b)
+let imult_impl = _generic_binary_iop "Integer::mult" (fun a b -> a * b)
+let idiv_impl  = _generic_binary_iop "Integer::div"  (fun a b -> a / b)
 
 
-let none_fun = (fun ctx -> Value(type0))
+let none_fun = (fun loc args_val ctx ->
+    builtin_error dloc "Requested Built-in was not implemented")
+
+
+let make_block loc args_val ctx   = Value(type0)
+let make_symbol loc args_val ctx  = Value(type0)
+let make_node sxp args_val ctx    = Value(type0)
+let make_string loc args_val ctx  = Value(type0)
+let make_integer loc args_val ctx = Value(type0)
+let make_float loc args_val ctx   = Value(type0)
+
+let builtin_sexp = Builtin (SexpType, "_sxp_", type0)
 
 (* Built-in list of types/functions *)
 let typer_builtins = [
 (*    NAME  | LXP  | Type       | impl      *)
     ("Int"  , None, type_int,    none_fun);
     ("Float", None, type_float,  none_fun);
-    ("Type" , None, type0,       none_fun);   (* builtin_iadd *)
-    ("_=_"  , Some builtin_eq, type_eq,     none_fun);   (*  t  ->  t  -> bool *)
-    ("_+_"  , Some builtin_iadd, iop_binary,  none_fun);  (* int -> int -> int  *)
-    ("_*_"  , Some builtin_imult, iop_binary,  none_fun); (* int -> int -> int  *)
+    ("Type" , None, type0,       none_fun);
+
+(* Built-in Functions *)
+    ("_=_"  , Some builtin_eq,    type_eq,    none_fun);   (*  t  ->  t  -> bool *)
+    ("_+_"  , Some builtin_iadd,  iop_binary, iadd_impl);  (* int -> int -> int  *)
+    ("_*_"  , Some builtin_imult, iop_binary, imult_impl); (* int -> int -> int  *)
 
 (*  Macro primitives *)
-
+    ("block_"  , Some builtin_sexp, type0, make_block);
+    ("symbol_" , Some builtin_sexp, type0, make_symbol);
+    ("string_" , Some builtin_sexp, type0, make_string);
+    ("integer_", Some builtin_sexp, type0, make_integer);
+    ("float_"  , Some builtin_sexp, type0, make_float);
+    ("node_"   , Some builtin_sexp, type0, make_node);
 ]
+
+(* Make built-in lookup table *)
+let _builtin_lookup =
+    List.fold_left (fun lkup (name, _, _, f) ->
+        SMap.add name f lkup)
+        SMap.empty typer_builtins
+
+
+let get_builtin_impl btype str ltp =
+    try SMap.find str _builtin_lookup
+    with Not_found ->
+        builtin_error dloc "Requested Built-in does not exist"
+
 
 (* Make lxp context with built-in types *)
 let default_lctx () =

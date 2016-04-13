@@ -54,7 +54,13 @@ let get_value_lexp (vtp: value_type) =
         | Value s -> s
         | Closure (s, _) -> s
 
-let value_print (vtp: value_type) = lexp_print (get_value_lexp vtp)
+let value_print (vtp: value_type) =
+    match vtp with
+        | Closure (lxp, _) ->
+            print_string ("Closure(" ^ (_lexp_to_str (!debug_ppctx) lxp))
+        | Value s -> lexp_print s
+
+
 let value_location (vtp: value_type) = lexp_location (get_value_lexp vtp)
 
 
