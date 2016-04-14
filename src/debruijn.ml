@@ -46,7 +46,7 @@ let debruijn_warning = msg_warning "DEBRUIJN"
 
 (*  Index -> Variable Info *)
 type env_elem = (int * (location * string) * lexp option * ltype)
-type env_type = env_elem myers
+type env_type = (env_elem ref) myers
 
 (* This exist because I don't want that file to depend on anything *)
 module StringMap
@@ -119,38 +119,48 @@ let senv_add_var (loc, name) ctx =
 
 let env_add_var_info var (ctx: lexp_context) =
     let (a, env, f) = ctx in
-    (a, cons var env, f)
+    (a, cons (ref var) env, f)
 
-let env_extend (ctx:lexp_context) (def:vdef) (v: lexp option) (t:lexp) =
+let env_extend (ctx: lexp_context) (def: vdef) (v: lexp option) (t: lexp) =
   env_add_var_info (0, def, v, t) (senv_add_var def ctx)
 
 
+let _name_error estr str =
+    if estr = str then () else
+    internal_error ("DeBruijn index refers to wrong name. " ^
+                      "Expected: \"" ^ estr ^ "\" got \"" ^ str ^ "\"")
+;;
+
+let env_set_var_info ctx (def: vref) (v: lexp option) (t: lexp) =
+    let ((dv_size, _), info_env, _) = ctx in
+    let ((loc, ename), dbi) = def in
+
+    try(let rf = (Myers.nth dbi info_env) in
+        let (_, (_, name), _, _) = !rf in
+
+        (* Check if names match *)
+        _name_error ename name;
+
+        rf := (0, (loc, ename), v, t))
+    with
+        Not_found -> internal_error "DeBruijn index out of bounds!"
+;;
+
 (* generic lookup *)
-let _env_lookup ctx (v : vref) =
-  let ((dv_size, _), info_env, _) = ctx in
-  let ((loc, rname), dbi) = v in
-  let ti_size = Myers.length info_env in
+let _env_lookup ctx (v: vref): env_elem  =
+    let ((dv_size, _), info_env, _) = ctx in
+    let ((loc, ename), dbi) = v in
 
-  (* FIXME: Shouldn't this be 0, always?                *)
-  (* It is not during declaration processing            *)
-  (* This was required by the old type deduction system *)
-  (* We might be able to remove it in later versions    *)
+    try(let ret = !(Myers.nth dbi info_env) in
+        let (_, (_, name), _, _) = ret in
 
-  let sync_offset = dv_size - ti_size in
-  (*if sync_offset != 0 then
-    debruijn_warning loc ("Environment are out of sync by " ^
-        (string_of_int sync_offset) ^ " element(s)")*)
+        (* Check if names match *)
+        _name_error ename name;
 
-  let idx = (dbi - sync_offset) in
+        ret)
+    with
+        Not_found -> internal_error "DeBruijn index out of bounds!"
 
-  let ret = try Myers.nth idx info_env
-    with Not_found -> internal_error "DeBruijn index out of bounds!" in
-
-  let (_, (_, dname), _, _) = ret in
-    if dname = rname then ret
-    else
-      internal_error ("DeBruijn index refers to wrong name. " ^
-                      "Expected: \"" ^ rname ^ "\" got \"" ^ dname ^ "\"")
 
 let env_lookup_type ctx (v : vref) =
   (* FIXME: We need to S.shift here, since `t` is valid in the context in
@@ -163,6 +173,6 @@ let env_lookup_expr ctx (v : vref) =
   let (_, (_, _), lxp, _) =  _env_lookup ctx v in lxp
 
 let env_lookup_by_index index (ctx: lexp_context): env_elem =
-    Myers.nth index (_get_env ctx)
+    !(Myers.nth index (_get_env ctx))
 
 

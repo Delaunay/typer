@@ -140,7 +140,7 @@ let make_symbol loc args_val ctx  =
     let s = get_string lxp in
         match s with
             | Some str -> Vsexp(Symbol(loc, str))
-            | _ -> builtin_error loc ("symbol_ expects Integers as arguments")
+            | _ -> builtin_error loc ("symbol_ expects sexp as arguments")
 
 
 let make_node loc args_val ctx    =
@@ -167,7 +167,7 @@ let make_float loc args_val ctx   = Value(type0)
 let builtin_block   = Builtin (SexpType, "block_", type0)
 let builtin_symbol  = Builtin (SexpType, "symbol_", type0)
 let builtin_string  = Builtin (SexpType, "string_", type0)
-let builtin_integer = Builtin (SexpType, "intger_", type0)
+let builtin_integer = Builtin (SexpType, "integer_", type0)
 let builtin_float   = Builtin (SexpType, "float_", type0)
 let builtin_node    = Builtin (SexpType, "node_", type0)
 

@@ -83,8 +83,38 @@ let rec lexp_parse (p: pexp) (ctx: lexp_context): lexp =
     _lexp_parse p ctx 1
 
 and _lexp_parse p ctx i: lexp =
+    let v, _ = lexp_p_infer p ctx i in v
 
-    let lexp_parse p ctx = _lexp_parse p ctx (i + 1) in
+(*
+ *      Type Inference
+ * --------------------- *)
+(* Parsing a Pexp into an Lexp is really "elaboration", i.e. it needs to
+ * infer the types and perform macro-expansion.  For won't really
+ * do any of that, but we can already start structuring it accordingly.
+ *
+ * More specifically, we do it with 2 mutually recursive functions:
+ * one takes a Pexp along with its expected type and return an Lexp
+ * of that type (hopefully), whereas the other takes a Pexp and
+ * infers its type (which it returns along with the Lexp).
+ * This is the idea of "bidirectional type checking", which minimizes
+ * the amount of "guessing" and/or annotations.  Basically guessing/annotations
+ * is only needed at those few places where the code is not fully-normalized,
+ * which in normal programs is only in "let" definitions.
+ * So the rule of thumbs are:
+ * - use lexp_p_infer for destructors, and use lexp_p_check for constructors.
+ * - use lexp_p_check whenever you can.
+ *)
+
+(*
+ * Infer: Imm, bultin, var, let, arrow, call, inductive, cons, case
+ *
+ * check: lambda
+ *)
+and lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
+
+    let lexp_check p t ctx = lexp_p_check p t ctx (i + 1) in
+    let lexp_infer p ctx = lexp_p_infer p ctx (i + 1) in
+
     let tloc = pexp_location p in
 
     _global_lexp_ctx := ctx;
@@ -92,46 +122,58 @@ and _lexp_parse p ctx i: lexp =
 
     match p with
         (*  Block/String/Integer/Float *)
-        | Pimm value -> Imm(value)
+        | Pimm value -> (Imm(value),
+            match value with
+                | Integer _ -> type_int
+                | Float _ -> type_float
+                | _ -> lexp_error tloc "Could not find type"; dltype)
 
         (*  Symbol i.e identifier *)
-        | Pvar (loc, name) -> begin
-            try
-                (*  Send Variable loc *)
-                let idx = senv_lookup name ctx in
-                    (make_var name idx loc)
+        | Pvar (loc, name) ->(
+            try let idx = senv_lookup name ctx in
+                let lxp = (make_var name idx loc) in
+
+                (* search type *)
+                (* This fail because when parsing sqr * )
+                let ltp = env_lookup_type ctx ((loc, name), idx) in
+                    lxp, ltp ( *)
+
+                    lxp, dltype
+
 
             with Not_found ->
                 (lexp_error loc ("The Variable: \"" ^ name ^ "\" was not declared");
                 (* Error recovery. The -1 index will raise an error later on *)
-                (make_var name (-1) loc))  end
+                (make_var name (-1) loc), dltype))
 
         (*  Let, Variable declaration + local scope *)
         | Plet(loc, decls, body) ->
             let decl, nctx = _lexp_decls decls ctx i in
-            let bdy = lexp_parse body nctx in
-            Let(tloc, decl, bdy)
+            let bdy, ltp = lexp_infer body nctx in
+                Let(tloc, decl, bdy), ltp
 
         (* ->/=> *)
         | Parrow (kind, Some var, tp, loc, expr) ->
             let nvar = var in               (* /!\ HERE *)
-            let ltyp = lexp_parse tp ctx in
-            let lxp = lexp_parse expr ctx in
-            Arrow(kind, Some nvar, ltyp, tloc, lxp)
+            let ltyp, _ = lexp_infer tp ctx in
+            let lxp, _ = lexp_infer expr ctx in
+            let v = Arrow(kind, Some nvar, ltyp, tloc, lxp) in
+                v, v
 
         | Parrow (kind, None, tp, loc, expr) ->
-            let ltyp = lexp_parse tp ctx in
-            let lxp = lexp_parse expr ctx in
-                Arrow(kind, None, ltyp, tloc, lxp)
+            let ltyp, _ = lexp_infer tp ctx in
+            let lxp, _ = lexp_infer expr ctx in
+            let v = Arrow(kind, None, ltyp, tloc, lxp) in
+                v, v
 
         | Plambda (kind, var, pt, body) ->
-           let tctx = env_extend ctx var None dltype in
-           let ltp = match pt with
-             | None -> dltype
-             | Some pt -> lexp_parse pt tctx in
-           let nctx = env_extend ctx var None ltp in
-           let lbody = lexp_parse body nctx in
-            Lambda(kind, var, ltp, lbody)
+            let ltp, _ = match pt with
+                | None -> dltype, dltype
+                | Some pt -> lexp_infer pt ctx in
+
+            let nctx = env_extend ctx var None ltp in
+            let lbody, _ = lexp_infer body nctx in
+                Lambda(kind, var, ltp, lbody), dltype
 
         | Pcall (fname, _args) ->
             lexp_call fname _args ctx i
@@ -139,7 +181,8 @@ and _lexp_parse p ctx i: lexp =
         (* Pinductive *)
         | Pinductive (label, [], ctors) ->
             let map_ctor = lexp_parse_inductive ctors ctx i in
-            Inductive(tloc, label, [], map_ctor)
+            let v = Inductive(tloc, label, [], map_ctor) in
+                v, v
 
         (* Pcons *)
         | Pcons(vr, sym) -> (
@@ -160,16 +203,16 @@ and _lexp_parse p ctx i: lexp =
 
                     | _ -> lexp_error loc "Not an Inductive Type" in
 
-                Cons((vr, idx), sym)
+                Cons((vr, idx), sym), dltype
             with Not_found ->
                 lexp_error loc
                 ("The inductive type: " ^ type_name ^ " was not declared");
-                Cons((vr, -1), sym))
+                Cons((vr, -1), sym), dltype)
 
         (* Pcase *)
         | Pcase (loc, target, patterns) ->
 
-            let lxp = lexp_parse target ctx in
+            let tlxp, tltp = lexp_infer target ctx in
 
             let uniqueness_warn name =
                 lexp_warning loc ("Pattern " ^ name ^ " is a duplicate." ^
@@ -179,6 +222,8 @@ and _lexp_parse p ctx i: lexp =
                 try let _ = SMap.find name map in uniqueness_warn name
                 with e -> ()) in
 
+            let texp = ref dltype in
+
             (*  Read patterns one by one *)
             let rec loop ptrns merged dflt =
                 match ptrns with
@@ -186,9 +231,10 @@ and _lexp_parse p ctx i: lexp =
                     | hd::tl ->
                         let (pat, exp) = hd in
                         (*  Create pattern context *)
-                        let (name, iloc, arg), nctx = lexp_read_pattern pat exp lxp ctx in
+                        let (name, iloc, arg), nctx = lexp_read_pattern pat exp tlxp ctx in
                         (*  parse using pattern context *)
-                        let exp = lexp_parse exp nctx in
+                        let exp, ltp = lexp_infer exp nctx in
+                        texp := ltp;
 
                         if name = "_" then (
                             (if dflt != None then uniqueness_warn name);
@@ -199,54 +245,59 @@ and _lexp_parse p ctx i: lexp =
                             loop tl merged dflt) in
 
             let (lpattern, dflt) = loop patterns SMap.empty None in
-            Case(loc, lxp, dltype, lpattern, dflt)
+                Case(loc, tlxp, tltp, lpattern, dflt), (!texp)
 
         | _
             -> internal_error "Unhandled Pexp"
 
+and lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
+    let tloc = pexp_location p in
+
+    _global_lexp_ctx := ctx;
+    _global_lexp_trace := (i, tloc, p)::!_global_lexp_trace;
+
+    match p with
+    | _ -> let (e, inferred_t) = lexp_p_infer p ctx (i + 1) in
+        (* FIXME: check that inferred_t = t!  *)
+        e
+
 (*  Identify Call Type and return processed call *)
 and lexp_call (fname: pexp) (_args: sexp list) ctx i =
+    let loc = pexp_location fname in
+
+    (* get function name *)
+    let name, loc = match fname with
+        | Pvar(loc, nm) -> nm, loc
+        | Pcons (_, (loc, nm)) -> nm, loc
+        | _ -> internal_error "This expression cannot be called" in
+
+    (* retrieve function body *)
+    let body, ltp = lexp_p_infer fname ctx (i + 1) in
+
     (*  Process Arguments *)
     let pargs = List.map pexp_parse _args in
+    let largs = _lexp_parse_all pargs ctx i in
+    let new_args = List.map (fun g -> (Aexplicit, g)) largs in
 
-    (*  Call to named function which must have been defined earlier  *
-     *          i.e they must be in the context                      *)
-    begin try begin
-        (*  Get function name *)
-        let name, loc = match fname with
-            | Pvar(loc, nm) -> nm, loc
-            | Pcons (_, (loc, nm)) -> nm, loc
-            | _ -> raise Not_found in
+    try
 
-        let largs = _lexp_parse_all pargs ctx i in
-        let new_args = List.map (fun g -> (Aexplicit, g)) largs in
+    (*  Check if the function was defined *)
+    let idx = senv_lookup name ctx in
+    let vf = (make_var name idx loc) in
 
-        try
-            (*  Check if the function was defined *)
-            let idx = senv_lookup name ctx in
-            let vf = (make_var name idx loc) in
+    (* Is the function builtin ? *)
+    if (is_lbuiltin idx ctx) then (
+        match env_lookup_expr ctx ((loc, name), idx) with
+            | None -> lexp_error loc "Unknown builtin"; Call(vf, new_args), ltp
+            | Some e -> Call(e, new_args), ltp
+    )
+    else Call(vf, new_args), ltp
 
-            (* Is the function builtin ? *)
-            if (is_lbuiltin idx ctx) then (
-                match env_lookup_expr ctx ((loc, name), idx) with
-                    | None -> lexp_error loc "Unknown builtin"; Call(vf, new_args)
-                    | Some e -> Call(e, new_args)
-            )
-            else Call(vf, new_args)
-
-        with Not_found ->
-            (*  Don't stop even if an error was found *)
-            lexp_error loc ("The function \"" ^ name ^
-                                                  "\" was not defined");
-            let vf = (make_var name (-1) loc) in
-                Call(vf, new_args) end
-
-    (*  Call to a nameless function *)
     with Not_found ->
-        let largs = _lexp_parse_all pargs ctx i in
-        let new_args = List.map (fun g -> (Aexplicit, g)) largs in
-        let fname = _lexp_parse fname ctx (i + 1) in
-            Call(fname, new_args) end
+        (*  Don't stop even if an error was found *)
+        lexp_error loc ("The function \"" ^ name ^ "\" was not defined");
+        let vf = (make_var name (-1) loc) in
+            Call(vf, new_args), ltp
 
 (*  Read a pattern and create the equivalent representation *)
 and lexp_read_pattern pattern exp target ctx:
@@ -347,8 +398,7 @@ and _lexp_decls decls ctx i: (((vdef * lexp * ltype) list) * lexp_context) =
                 match hd with
                 (*  Type Info: Var:Type *)
                 | ((loc, name), type_info, true) -> begin
-                    try
-                        (*  If found its means the instruction was declared
+                    try (*  If found its means the instruction was declared
                          *  before the type info. Should we allow this? *)
                         let (l, inst, _) = SMap.find name merged in
                         let new_decl = (l, inst, Some type_info) in
@@ -361,8 +411,7 @@ and _lexp_decls decls ctx i: (((vdef * lexp * ltype) list) * lexp_context) =
 
                 (* Instruction: Var = expr *)
                 | ((loc, name), inst, false) -> begin
-                    try
-                        let (l, _, tp) = SMap.find name merged in
+                    try let (l, _, tp) = SMap.find name merged in
                         let new_decl = (l, Some inst, tp) in
                         let nmerged = SMap.add name new_decl merged in
                             (merge_decls tl nmerged acc)
@@ -377,45 +426,40 @@ and _lexp_decls decls ctx i: (((vdef * lexp * ltype) list) * lexp_context) =
     (* cast map to list to preserve declaration order *)
     let decls = List.map (fun name ->
             let (l, inst, tp) = SMap.find name mdecls in
-                ((l, name), inst, tp) ) ord
-        in
+                ((l, name), inst, tp) ) ord in
 
     (*  Add Each Variable to the environment *)
-    let nctx = List.fold_left (fun ctx hd ->
+    let ctx = List.fold_left (fun ctx hd ->
         match hd with
             | (_, None, _) -> ctx   (*  Unused variable: No Instruction *)
-            | (var, _, _) -> senv_add_var var ctx)
+            | (var, _, _) -> env_extend ctx var None dltype)
         ctx decls in
 
-    let n = (List.length decls) - 1 in
+    let lst = ref [] in
+    let n = ref ((List.length decls) - 1) in
+        (* for each declaration lexp their rhs *)
+        List.iter (fun ((loc, name), opxp, otpxp) ->
+                let vdef = (loc, name) in
+                let vref = (vdef, !n) in
+                    n := !n - 1;
 
-    (*  Add Variable info *)
-    let rec process_var_info dcl_lst ctx acc m =
-        match dcl_lst with
-            | [] -> (List.rev acc), ctx
-            | hd::tl ->
-                match hd with
-                    | ((loc, name), Some pinst, None) ->(
-                        let lxp, ltp = lexp_p_infer pinst ctx in
-                        let nacc = ((loc, name), lxp, ltp)::acc in
-                        let ctx = env_add_var_info (0, (loc, name),
-                                                     Some lxp, ltp) ctx in
-                            process_var_info tl ctx nacc (m - 1))
+                match opxp, otpxp with
+                    | Some pxp, Some tpxp ->
+                        let lxp, _ = lexp_p_infer pxp ctx (i + 1) in
+                        let ltp, _ = lexp_p_infer tpxp ctx (i + 1) in
+                            (env_set_var_info ctx vref (Some lxp) ltp);
+                            lst := (vdef, lxp, ltp)::!lst
 
-                    | ((loc, name), Some pinst, Some ptype) ->(
-                        let linst  = lexp_parse pinst ctx in
-                        let ltyp = lexp_parse ptype ctx in
-                        let nacc = ((loc, name), linst, ltyp)::acc in
-                        let ctx = env_add_var_info (0, (loc, name),
-                                                     Some linst, ltyp) ctx in
-                            process_var_info tl ctx nacc (m - 1))
+                    | Some pxp, None ->
+                        let lxp, ltp = lexp_p_infer pxp ctx (i + 1) in
+                            (env_set_var_info ctx vref (Some lxp) ltp);
+                            lst := (vdef, lxp, ltp)::!lst
 
-                    (* Skip the variable *)
-                    | ((loc, name), None, _) -> (lexp_warning loc "Unused Variable";
-                            process_var_info tl ctx acc m) in
+                    | None, _ -> lexp_warning loc "Unused Variable"
+            )
+        decls;
 
-    let acc, ctx = process_var_info decls nctx [] n in
-        acc, ctx
+        List.rev (!lst), ctx
 
 and _lexp_parse_all (p: pexp list) (ctx: lexp_context) i : lexp list =
 
@@ -427,151 +471,6 @@ and _lexp_parse_all (p: pexp list) (ctx: lexp_context) i : lexp list =
 
     (loop p ctx [])
 
-(*
- *      Type Inference
- * --------------------- *)
-(* Parsing a Pexp into an Lexp is really "elaboration", i.e. it needs to
- * infer the types and perform macro-expansion.  For won't really
- * do any of that, but we can already start structuring it accordingly.
- *
- * More specifically, we do it with 2 mutually recursive functions:
- * one takes a Pexp along with its expected type and return an Lexp
- * of that type (hopefully), whereas the other takes a Pexp and
- * infers its type (which it returns along with the Lexp).
- * This is the idea of "bidirectional type checking", which minimizes
- * the amount of "guessing" and/or annotations.  Basically guessing/annotations
- * is only needed at those few places where the code is not fully-normalized,
- * which in normal programs is only in "let" definitions.
- * So the rule of thumbs are:
- * - use lexp_p_infer for destructors, and use lexp_p_check for constructors.
- * - use lexp_p_check whenever you can.
- *)
-
-(*
- * Infer: Imm, bultin, var, let, arrow, call, inductive, cons, case
- *
- * check: lambda
- *)
-and lexp_p_infer (p : pexp) (env : lexp_context): lexp * ltype =
-
-    (* Parse expr *)
-    let tloc = pexp_location p in
-    let lxp = lexp_parse p env in
-
-    let consume_args args lxp ctx =
-        let arg_n = List.length args in
-        let rec _implt args lxp i = match args, lxp with
-            (* No args left, return the remaining type *)
-            | [], _ -> lxp
-
-            (* Basic case consume an arg and an arrow *)
-            | hd::tl, Arrow(_, _, ltp, _, ret_type) ->
-                (* FIXME: Check hd and ltp are of the same type *)
-                _implt tl ret_type (i + 1)
-
-            (* We still have args to consume but type is not an arrow *)
-            | (_, hd)::tl, tp ->
-                lexp_error tloc ("Number of Arg mismatch. Expected: " ^
-                    (string_of_int i) ^ " arg(s). Got " ^ (string_of_int arg_n));
-                tp  in
-        _implt args lxp 0 in
-
-    let is_type lxp =
-        match lxp with
-            | Inductive _ -> true
-            | _ -> false in
-
-    let rec get_type lxp ctx =
-        match lxp with
-            (* Leafs        *)
-            (* ------------ *)
-
-            (* Why don't we always return tp ? We want to be able to use    *)
-            (* type aliases     Nat = inductive_                            *)
-            (* We want the type to be inferred as 'Nat' not 'inductive_'... *)
-            (* But sometimes we need tp to be returned                      *)
-            | Var vrf -> (try let tp = env_lookup_type ctx vrf in
-                (if (is_type tp) then lxp else tp)
-                with e -> dltype)
-
-            (* I am not sure we should consider a constructor as a function   *)
-            (* Another way to do what is done here is to handle cons in Call  *)
-            | Cons (vrf, (_, n)) ->(
-                let rec build_arrow_type args acc =
-                    match args with
-                        | [] -> acc
-                        | (kind, var, ltp)::tl ->
-                            build_arrow_type tl (Arrow(kind, var, ltp, dloc, acc))
-                            in
-
-                match env_lookup_type ctx vrf with
-                    | Inductive(_, _, _, ctor_map) -> (
-                        try match SMap.find n ctor_map with
-                            (* No Args *)
-                            | [] -> Var(vrf)  (* return its inductive type *)
-                            (* Return a Constructor function *)
-                            | args -> build_arrow_type (List.rev args) (Var(vrf))
-
-                        with Not_found ->
-                            (lexp_error tloc ("Constructor " ^ n ^
-                                                     " does not exist"); dltype))
-                    | _ -> (lexp_error tloc "Inductive type was expected"; dltype))
-
-            | Imm sxp -> (match sxp with
-                | Integer _ -> let idx = senv_lookup "Int" ctx in
-                        env_lookup_type ctx ((dloc, "Int"), idx)
-                | Float _ -> let idx = senv_lookup "Float" ctx in
-                        env_lookup_type ctx ((dloc, "Float"), idx)
-                | _ -> lexp_error tloc "Could not infer type"; dltype)
-
-            (* Types by definition *)
-            | Inductive _ -> lxp
-            | Builtin (_, _, ltp) -> ltp
-            | Arrow _ -> lxp
-
-            (* Nodes        *)
-            (* ------------ *)
-            | Let (_, _, body) -> (get_type body ctx)
-            | Call(f, args) ->
-                (consume_args args (get_type f ctx) ctx)
-
-            | Case (_, _, _, branches, dflt) ->
-                (* we need to check that all branches return the same type *)
-                let lst = SMap.bindings branches in
-                let types = List.map
-                    (fun (_, (_, args, body)) ->
-                        (* FIXME: We need to lookup arg type *)
-                        let nctx = List.fold_left (fun c v ->
-                            match v with
-                                | None -> c
-                                | Some (_, arg) -> env_extend ctx arg None dltype)
-                            ctx args in
-                            get_type body nctx) lst in
-
-                let types = match dflt with
-                    | None -> types
-                    | Some expr -> (get_type expr ctx)::types in
-                let tp = List.hd types in
-                    (* FIXME: do type checking *)
-                    tp
-
-            | Lambda (kind, vdef, ltp, lxp) ->
-                let nctx = env_extend ctx vdef (Some ltp) lxp in
-                Arrow(kind, Some vdef, (get_type ltp nctx), tloc,
-                                       (get_type lxp nctx))
-
-            (* debug catch all *)
-            | _ -> dltype in
-
-        (lxp, (get_type lxp env))
-
-
-and lexp_p_check (p : pexp) (t : ltype) (env : lexp_context): lexp =
-  match p with
-  | _
-    -> let (e, inferred_t) = lexp_p_infer p env in
-      (* FIXME: check that inferred_t = t!  *)
-      e
 
 (*  Print context  *)
 and print_lexp_ctx ctx =
