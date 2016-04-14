@@ -74,7 +74,7 @@ let cut_name str =
     else (cut_native str)
 
 let print_file_name i n name pass =
-    let line_size = 80 - (String.length name) - 16 in
+    let line_size = 80 - (String.length (cut_name name)) - 16 in
     let name = cut_name name in
 
     (if pass then print_string green else print_string red);

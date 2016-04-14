@@ -138,7 +138,8 @@ and eval_call ctx i lname args call =
 
             (* No more arguments *)
             | Closure (_, _), [] -> body
-            | Value (lxp), [] -> body in
+            | Value (lxp), [] -> body
+            | _ -> eval_error dloc "Cannot eval function" in
 
         eval_call body args_val clean_ctx
 

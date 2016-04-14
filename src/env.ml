@@ -30,10 +30,15 @@
  *
  * --------------------------------------------------------------------------- *)
 
-open Fmt        (*  make_title, table util *)
-open Lexp       (*  lexp_print *)
-open Myers
 open Util       (* msg_error    *)
+open Fmt        (*  make_title, table util *)
+
+open Sexp
+open Lexp       (*  lexp_print *)
+
+open Myers
+
+
 
 let dloc = dummy_location
 
@@ -48,17 +53,21 @@ let str_idx idx = "[" ^ (string_of_int idx) ^ "]"
 type value_type =
     | Value of lexp
     | Closure of lexp * (((string option * value_type) ref myers) * (int * int))
+    (* Macro type *)
+    | Vsexp of sexp
 
 let get_value_lexp (vtp: value_type) =
     match vtp with
         | Value s -> s
         | Closure (s, _) -> s
+        | _ -> env_error dloc "Does not hold a lexp"
 
 let value_print (vtp: value_type) =
     match vtp with
         | Closure (lxp, _) ->
             print_string ("Closure(" ^ (_lexp_to_str (!debug_ppctx) lxp))
         | Value s -> lexp_print s
+        | Vsexp sxp -> sexp_print sxp
 
 
 let value_location (vtp: value_type) = lexp_location (get_value_lexp vtp)

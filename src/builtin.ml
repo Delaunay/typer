@@ -89,19 +89,32 @@ let get_int (lxp: value_type): (int option) =
         | _ -> None
 ;;
 
+let get_string (lxp: value_type): (string option) =
+    let lxp = get_value_lexp lxp in
+    match lxp with
+        | Imm(String(_, l)) -> Some l
+        | _ -> None
+;;
+
+let get_sexp (lxp: value_type): (sexp option) =
+    match lxp with
+        | Vsexp l -> Some l
+        | _ -> None
+;;
+
 (* Builtin of builtin * string * ltype *)
-let _generic_binary_iop name f loc args_val ctx =
-
-    let n = List.length args_val in
-    let nctx = List.fold_left (fun c v -> add_rte_variable None v c) ctx args_val in
-
-    (if n != 2 then builtin_error loc (name ^ " expects 2 arguments"));
-
-    let llxp = (get_rte_variable (None) 0 nctx) in
-    let rlxp = (get_rte_variable (None) 1 nctx) in
-
-    let l = get_int llxp in
-    let r = get_int rlxp in
+let _generic_binary_iop name f loc (args_val: value_type list) (ctx: runtime_env) =
+    (* We don't have to access context because:                   *)
+    (*  x + y is parsed as Call(_+_ x y)                          *)
+    (* Partial application handling aggregates arguments in a ctx *)
+    (* once all arguments are present Call(_+_ x y) is called     *)
+    (* First, its arguments are evaluated which is where x, y are replaced        *)
+    (* by their value in the context then _generic_binary_iop handle the function *)
+    (* i.e we don't need to push x and y in the context. *)
+    (* We don't even need the context                    *)
+    let l, r = match args_val with
+        | [a; b] -> (get_int a), (get_int b)
+        | _ -> builtin_error loc (name ^ " expects 2 arguments") in
 
         match l, r with
             | Some v, Some w -> Value(Imm(Integer (dloc, (f v w))))
@@ -114,38 +127,83 @@ let imult_impl = _generic_binary_iop "Integer::mult" (fun a b -> a * b)
 let idiv_impl  = _generic_binary_iop "Integer::div"  (fun a b -> a / b)
 
 
+(* loc is given by the compiler *)
 let none_fun = (fun loc args_val ctx ->
     builtin_error dloc "Requested Built-in was not implemented")
 
+let make_symbol loc args_val ctx  =
+    (* symbol is a simple string *)
+    let lxp = match args_val with
+        | [r] -> r
+        | _ -> builtin_error loc ("symbol_ expects 1 arguments") in
+
+    let s = get_string lxp in
+        match s with
+            | Some str -> Vsexp(Symbol(loc, str))
+            | _ -> builtin_error loc ("symbol_ expects Integers as arguments")
+
+
+let make_node loc args_val ctx    =
+
+    let head, args = match args_val with
+        | hd::tl -> (get_sexp hd), tl
+        | _ -> builtin_error loc ("node_ expects at least 2 arguments") in
+
+    let op = match head with
+        | Some sxp -> sxp
+        | None -> builtin_error loc ("node_ expects sexp as operator") in
+
+    let s = List.map (fun g -> match get_sexp g with
+        | Some sxp -> sxp
+        | None -> builtin_error loc ("node_ expects sexp as arguments")) args in
+
+        Vsexp(Node(op, s))
 
 let make_block loc args_val ctx   = Value(type0)
-let make_symbol loc args_val ctx  = Value(type0)
-let make_node sxp args_val ctx    = Value(type0)
 let make_string loc args_val ctx  = Value(type0)
 let make_integer loc args_val ctx = Value(type0)
 let make_float loc args_val ctx   = Value(type0)
 
-let builtin_sexp = Builtin (SexpType, "_sxp_", type0)
+let builtin_block   = Builtin (SexpType, "block_", type0)
+let builtin_symbol  = Builtin (SexpType, "symbol_", type0)
+let builtin_string  = Builtin (SexpType, "string_", type0)
+let builtin_integer = Builtin (SexpType, "intger_", type0)
+let builtin_float   = Builtin (SexpType, "float_", type0)
+let builtin_node    = Builtin (SexpType, "node_", type0)
+
+(*
+ *  Should we have a function that
+ *      -> returns a new context inside typer ? (So we need to add a ctx type too)
+ *      -> returns current context ?
+ *      -> pexp_eval expr
+ *      -> lexp_eval expr
+ *      -> ou seulement: 'eval expr ctx'
+ *)
 
 (* Built-in list of types/functions *)
+(* Some of the information is redundant but it suppress a lot of warnings *)
 let typer_builtins = [
-(*    NAME  | LXP  | Type       | impl      *)
-    ("Int"  , None, type_int,    none_fun);
-    ("Float", None, type_float,  none_fun);
-    ("Type" , None, type0,       none_fun);
+(*    NAME  | LXP       | Type | impl      *)
+    ("Type" , type0     , type0, none_fun);
+    ("Int"  , type_int  , type0, none_fun);
+    ("Float", type_float, type0, none_fun);
 
 (* Built-in Functions *)
-    ("_=_"  , Some builtin_eq,    type_eq,    none_fun);   (*  t  ->  t  -> bool *)
-    ("_+_"  , Some builtin_iadd,  iop_binary, iadd_impl);  (* int -> int -> int  *)
-    ("_*_"  , Some builtin_imult, iop_binary, imult_impl); (* int -> int -> int  *)
+    ("_=_"  , builtin_eq,    type_eq,    none_fun);   (*  t  ->  t  -> bool *)
+    ("_+_"  , builtin_iadd,  iop_binary, iadd_impl);  (* int -> int -> int  *)
+    ("_*_"  , builtin_imult, iop_binary, imult_impl); (* int -> int -> int  *)
 
 (*  Macro primitives *)
-    ("block_"  , Some builtin_sexp, type0, make_block);
-    ("symbol_" , Some builtin_sexp, type0, make_symbol);
-    ("string_" , Some builtin_sexp, type0, make_string);
-    ("integer_", Some builtin_sexp, type0, make_integer);
-    ("float_"  , Some builtin_sexp, type0, make_float);
-    ("node_"   , Some builtin_sexp, type0, make_node);
+    ("block_"  , builtin_block  , type0, make_block);
+    ("symbol_" , builtin_symbol , type0, make_symbol);
+    ("string_" , builtin_string , type0, make_string);
+    ("integer_", builtin_integer, type0, make_integer);
+    ("float_"  , builtin_float  , type0, make_float);
+    ("node_"   , builtin_node   , type0, make_node);
+
+(* Macros primitives type ? *)
+
+
 ]
 
 (* Make built-in lookup table *)
@@ -160,7 +218,6 @@ let get_builtin_impl btype str ltp =
     with Not_found ->
         builtin_error dloc "Requested Built-in does not exist"
 
-
 (* Make lxp context with built-in types *)
 let default_lctx () =
     (* Empty context *)
@@ -169,7 +226,7 @@ let default_lctx () =
     (* populate ctx *)
     List.fold_left
       (fun ctx (name, lxp, ltp, _) ->
-        env_extend ctx (dloc, name) lxp ltp)
+        env_extend ctx (dloc, name) (Some lxp) ltp)
       lctx
       typer_builtins
 ;;
@@ -182,7 +239,7 @@ let default_rctx () =
     (* populate ctx *)
     List.fold_left
       (fun ctx (name, lxp, ltp, f) ->
-        add_rte_variable (Some name) (Value(ltp)) ctx)
+        add_rte_variable (Some name) (Value(lxp)) ctx)
        rctx
        typer_builtins
 ;;
