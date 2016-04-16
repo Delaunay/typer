@@ -25,8 +25,8 @@
  *
  * --------------------------------------------------------------------------- *)
 
-open Util
 open Utest_lib
+open Util
 
 open Sexp
 open Lexp
@@ -37,14 +37,12 @@ open Eval       (* reset_eval_trace *)
 open Builtin
 open Env
 
-
 let get_int lxp =
     let lxp = get_value_lexp lxp in
     match lxp with
         | Imm(Integer(_, l)) -> l
         | _ -> (-40);
 ;;
-
 
 (* default environment *)
 let lctx = default_lctx ()
@@ -175,7 +173,7 @@ let _ = (add_test "EVAL" "Inductive::Case" (fun () ->
         b = (ctr2 (ctr2 ctr0));   z = 3;
         c = (ctr3 (ctr2 ctr0));   w = 4;
 
-        test_fun = lambda k -> case k
+        test_fun = lambda (k : idt) -> case k
             | ctr1 l => 1
             | ctr2 l => 2
             | _ => 3;" in
@@ -206,7 +204,8 @@ let nat_decl = "
     zero = inductive-cons Nat zero;
     succ = inductive-cons Nat succ;
 
-    tonum = lambda x -> case x\n
+    tonum : Nat -> Int;
+    tonum = lambda (x : Nat) -> case x
             | (succ y) => (1 + (tonum y))
             | zero => 0;"
 ;;
@@ -253,6 +252,7 @@ let _ = (add_test "EVAL" "Inductive::Nat Plus" (fun () ->
         two = (succ one);
         three = (succ two);
 
+        plus : Nat -> Nat -> Nat;
         plus = lambda (x : Nat) -> lambda (y : Nat) -> case x
             | zero => y
             | succ z => succ (plus z y);

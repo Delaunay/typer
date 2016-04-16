@@ -38,8 +38,7 @@ let lctx = default_lctx ()
 
 
 let _ = (add_test "LEXP" "Built-in type Inference" (fun () ->
-    success ()
-(*
+
     let dcode = "a = 10; b = 1.12;" in
 
     let ret, _ = lexp_decl_str dcode lctx in
@@ -50,7 +49,39 @@ let _ = (add_test "LEXP" "Built-in type Inference" (fun () ->
                (_, _, Builtin(_, "Float", _))] ->
                 success()
 
-            | _ -> failure () *)
+            | _ -> failure ()
+));;
+
+let _ = (add_test "LEXP" "lexp_print" (fun () ->
+
+    let dcode = "
+        sqr = lambda (x : Int) -> x * x;
+        cube = lambda (x : Int) -> x * (sqr x);
+
+        mult = lambda (x : Int) -> lambda (y : Int) -> x * y;
+
+        twice = (mult 2);
+
+        let_fun = lambda (x : Int) ->
+            let a = (twice x); b = (mult 2 x); in
+                a + b;" in
+
+    let ret1, _ = lexp_decl_str dcode lctx in
+
+    let to_str decls =
+        let str = _lexp_str_decls (!compact_ppctx) ret1 in
+            List.fold_left (fun str lxp -> str ^ lxp) "" str in
+
+    (* Cast to string *)
+    let str1 = to_str ret1 in
+
+    (* read code again *)
+    let ret2, _ = lexp_decl_str str1 lctx in
+
+    (* Cast to string *)
+    let str2 = to_str ret2 in
+
+    if str1 = str2 then success () else failure ()
 ));;
 
 (*

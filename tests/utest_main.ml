@@ -100,7 +100,7 @@ let main () =
     parse_args ();
 
     print_string  "\n";
-    calign_print_string " Running Unit Tests " 80;
+    calign_print_string " Running Unit Test " 80;
     print_string  "\n\n";
 
     (*print_string ("[       ] Test folder: " ^ folder ^ "\n"); *)

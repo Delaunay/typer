@@ -20,7 +20,6 @@ more details.
 You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.  *)
 
-
 module SMap
   = Map.Make (struct type t = string let compare = String.compare end)
 
@@ -41,25 +40,40 @@ let print_loc (loc: location) =
     Fmt.ralign_print_int loc.column 3;
 ;;
 
-(*  File is not printed because currently we parse only one file... *)
-(*  Section is the name of the compilation step [for debugging]     *)
-(*  'prerr' output is ugly                                          *)
-let msg_message kind section (loc: location) msg =
-  print_string ("    " ^ kind);
-  print_string " ["; print_loc loc; print_string "] ";
-  print_string (section ^ "    ");
-  print_string msg;
-  print_newline ()
+(*
+ *  -1 - Nothing    (* During testing we may want to produce errors *)
+ *   0 - Fatal
+ *   1 - Error
+ *   2 - Warning
+ *   3 - Info
+ *)
 
-let msg_error = msg_message "[!] Error    "
-let msg_info = msg_message "[?] Info     "
-let msg_warning = msg_message "/!\\ Warning  "
-
-let string_implode chars = String.concat "" (List.map (String.make 1) chars)
+let _typer_verbose = ref 20
 
 exception Internal_error of string
 let internal_error s = raise (Internal_error s)
 
+(*  File is not printed because currently we parse only one file... *)
+(*  Section is the name of the compilation step [for debugging]     *)
+(*  'prerr' output is ugly                                          *)
+let msg_message lvl kind section (loc: location) msg =
+  if lvl <= !_typer_verbose then(
+    print_string ("    " ^ kind);
+    print_string " ["; print_loc loc; print_string "] ";
+    print_string (section ^ "    ");
+    print_string msg;
+    print_newline ()) else ()
+
+let msg_error   = msg_message 1 "[!] Error    "
+let msg_info    = msg_message 3 "[?] Info     "
+let msg_warning = msg_message 2 "/!\\ Warning  "
+let msg_fatal s l m  =
+    msg_message 0 "[X] Fatal    " s l m;
+    internal_error m
+
+let not_implemented_error () = internal_error "not implemented"
+
+let string_implode chars = String.concat "" (List.map (String.make 1) chars)
 
 let print_trace name max elem_to_string print_elem trace =
     print_string (Fmt.make_title name);

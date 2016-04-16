@@ -285,7 +285,7 @@ let main () =
             print_lexp_ctx nctx; print_string "\n"));
 
         (* Eval declaration *)
-        let rctx = make_runtime_ctx in
+        let rctx = default_rctx () in
         let rctx = (try eval_decls lexps rctx
             with e ->
                 print_rte_ctx (!_global_eval_ctx);

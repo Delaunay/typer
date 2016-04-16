@@ -55,7 +55,8 @@ open Builtin
 open Env
 open Debruijn
 
-
+(* how to handle arrow keys ? *)
+let _history = ref []
 
 let print_input_line i =
     print_string "  In[";
@@ -189,6 +190,7 @@ let readfiles files (i, lctx, rctx) prt =
 let rec repl i clxp rctx =
     let repl = repl (i + 1) in
     let ipt = read_input i in
+        _history := ipt::!_history;
         match ipt with
             (*  Check special keywords *)
             | "%quit" | "%q" -> ()

@@ -523,14 +523,14 @@ let lexp_print e = sexp_print (pexp_unparse (lexp_unparse e))
     print_type?     (print inferred Type)
     print_index     (print dbi index)
     separate decl   (print extra newline between declarations)
-    indent size      4
+    indent size     2/4
     highlight       (use console color to display hints)
 *)
 
 type print_context = (bool * int * bool * bool * bool * bool* int)
 
 let pretty_ppctx  = ref (true , 0, true, false, true,  2, true)
-let compact_ppctx = ref (false, 0, true, false, true,  2, true)
+let compact_ppctx = ref (false, 0, true, false, true,  2, false)
 let debug_ppctx   = ref (false, 0, true, true , false, 2, true)
 
 let rec lexp_print e = _lexp_print (!debug_ppctx) e
@@ -542,6 +542,7 @@ and _lexp_print ctx e = print_string (_lexp_to_str ctx e)
 
 (* If I remember correctly ocaml doc, concat string is actually terrible *)
 (* It might be better to use a Buffer. *)
+and lexp_to_str exp = _lexp_to_str (!debug_ppctx) exp
 and _lexp_to_str ctx exp =
     (* create a string instead of printing *)
 
@@ -616,13 +617,14 @@ and _lexp_to_str ctx exp =
             (*  get function name *)
             let str, idx = match fname with
                 | Var((_, name), idx) -> name, idx
+                | Builtin (_, name, _) -> name, 0
                 | _ -> (error "unkwn"), -1 in
 
             let binop_str op (_, lhs) (_, rhs) =
                 (lexp_to_str lhs) ^ op ^ (lexp_to_str rhs) in
 
             match (str, args) with
-                (* Special Operator *)
+                (* Special Operators *)
                 | ("_=_", [lhs; rhs]) -> binop_str " = " lhs rhs
                 | ("_+_", [lhs; rhs]) -> binop_str " + " lhs rhs
                 | ("_-_", [lhs; rhs]) -> binop_str " - " lhs rhs

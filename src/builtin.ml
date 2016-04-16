@@ -117,7 +117,7 @@ let _generic_binary_iop name f loc (args_val: value_type list) (ctx: runtime_env
         | _ -> builtin_error loc (name ^ " expects 2 arguments") in
 
         match l, r with
-            | Some v, Some w -> Value(Imm(Integer (dloc, (f v w))))
+            | Some v, Some w -> Value(Imm(Integer (loc, (f v w))))
             | _ -> builtin_error loc (name ^ " expects Integers as arguments")
 ;;
 
@@ -129,7 +129,7 @@ let idiv_impl  = _generic_binary_iop "Integer::div"  (fun a b -> a / b)
 
 (* loc is given by the compiler *)
 let none_fun = (fun loc args_val ctx ->
-    builtin_error dloc "Requested Built-in was not implemented")
+    builtin_error loc "Requested Built-in was not implemented")
 
 let make_symbol loc args_val ctx  =
     (* symbol is a simple string *)
@@ -213,10 +213,10 @@ let _builtin_lookup =
         SMap.empty typer_builtins
 
 
-let get_builtin_impl btype str ltp =
+let get_builtin_impl btype str ltp loc =
     try SMap.find str _builtin_lookup
     with Not_found ->
-        builtin_error dloc "Requested Built-in does not exist"
+        builtin_error loc "Requested Built-in does not exist"
 
 (* Make lxp context with built-in types *)
 let default_lctx () =

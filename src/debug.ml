@@ -33,13 +33,16 @@
 
 (* removes some warnings *)
 open Util
+open Fmt
+
 open Prelexer
 open Lexer
+
 open Sexp
 open Pexp
 open Lexp
+
 open Debruijn
-open Fmt
 open Grammar
 
 (* Print aPretokens *)

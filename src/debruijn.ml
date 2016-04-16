@@ -38,7 +38,7 @@ open Myers
 open Fmt
 module S = Subst
 
-let debruijn_error = msg_error "DEBRUIJN"
+let debruijn_error l m = msg_error "DEBRUIJN" l m; internal_error m
 let debruijn_warning = msg_warning "DEBRUIJN"
 
 (*  Type definitions
@@ -125,9 +125,9 @@ let env_extend (ctx: lexp_context) (def: vdef) (v: lexp option) (t: lexp) =
   env_add_var_info (0, def, v, t) (senv_add_var def ctx)
 
 
-let _name_error estr str =
+let _name_error loc estr str =
     if estr = str then () else
-    internal_error ("DeBruijn index refers to wrong name. " ^
+    debruijn_error loc ("DeBruijn index refers to wrong name. " ^
                       "Expected: \"" ^ estr ^ "\" got \"" ^ str ^ "\"")
 ;;
 
@@ -139,11 +139,11 @@ let env_set_var_info ctx (def: vref) (v: lexp option) (t: lexp) =
         let (_, (_, name), _, _) = !rf in
 
         (* Check if names match *)
-        _name_error ename name;
+        _name_error loc ename name;
 
         rf := (0, (loc, ename), v, t))
     with
-        Not_found -> internal_error "DeBruijn index out of bounds!"
+        Not_found -> debruijn_error loc "DeBruijn index out of bounds!"
 ;;
 
 (* generic lookup *)
@@ -155,11 +155,11 @@ let _env_lookup ctx (v: vref): env_elem  =
         let (_, (_, name), _, _) = ret in
 
         (* Check if names match *)
-        _name_error ename name;
+        _name_error loc ename name;
 
         ret)
     with
-        Not_found -> internal_error "DeBruijn index out of bounds!"
+        Not_found -> debruijn_error loc "DeBruijn index out of bounds!"
 
 
 let env_lookup_type ctx (v : vref) =

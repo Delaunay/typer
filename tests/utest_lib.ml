@@ -30,6 +30,7 @@
  *
  * --------------------------------------------------------------------------- *)
 
+
 open Util
 open Fmt
 
@@ -74,9 +75,13 @@ let _global_sample_dir = ref ""
 let _global_fsection = ref ""
 let _global_ftitle = ref ""
 
+let set_verbose lvl =
+    _global_verbose_lvl := lvl;
+    (if lvl >= 3 then _typer_verbose := 20 else _typer_verbose := (-1))
+
 let arg_defs = [
     ("--verbose=",
-        Arg.Int (fun g -> _global_verbose_lvl := g), " Set verbose level");
+        Arg.Int set_verbose, " Set verbose level");
     ("--samples=",
         Arg.String (fun g -> _global_sample_dir := g), " Set sample directory");
 (* Allow users to select which test to run *)

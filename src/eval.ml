@@ -43,11 +43,13 @@ open Grammar
 open Debruijn
 open Env
 
-
+(* eval error are always fatal *)
 let eval_error loc msg =
     msg_error "EVAL" loc msg;
     raise (internal_error msg)
 ;;
+
+let eval_fatal = msg_fatal "EVAL"
 
 let dloc = dummy_location
 let eval_warning = msg_warning "EVAL"
@@ -64,7 +66,7 @@ let rec _eval lxp ctx i: (value_type) =
     let tloc = lexp_location lxp in
 
     (if i > (!_eval_max_recursion_depth) then
-        raise (internal_error "Recursion Depth exceeded"));
+        eval_fatal tloc "Recursion Depth exceeded");
 
     _global_eval_ctx := ctx; (*  Allow us to print the latest used environment *)
     _global_eval_trace := (i, tloc, lxp)::!_global_eval_trace;
@@ -90,8 +92,12 @@ let rec _eval lxp ctx i: (value_type) =
 
         (* Built-in Function *)
         | Call(Builtin(btype, str, ltp), args)->
+            (* built-in does not have location info. So we extract it from args *)
+            let tloc = match args with
+                | (_, hd)::tl -> lexp_location hd
+                | _ -> dloc in
             let args_val = List.map (fun (k, e) -> _eval e ctx (i + 1)) args in
-                (get_builtin_impl btype str ltp) tloc args_val ctx
+                (get_builtin_impl btype str ltp tloc) tloc args_val ctx
 
         (* Function call *)
         | Call (lname, args) as call -> eval_call ctx i lname args call
