@@ -14,7 +14,7 @@ manual.??
 *.info
 *_build/
 *~
-#*#
+\#*\#
 test__.ml
 _temp_hack
 test__.typer

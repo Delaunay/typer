@@ -946,6 +946,15 @@ determine if it's (strictly) positive.
 as long as the type is not large.
 See http://dx.doi.org/10.1007/3-540-52335-9_47.
 
+** We can stop the positivity checker when it bumps into IO
+
+This should allow HOAS-style encodings like
+
+    data exp
+      | Cst Nat
+      | App exp exp
+      | Lam (IO (exp -> exp))
+
 * Universe polymorphism
 Agda seems to do:
 - Add Level as a new special type (with 0 and S constructors and without elim).
