@@ -21,6 +21,138 @@ this program.  If not, see <http://www.gnu.org/licenses/>.  *)
 
 module U = Util
 
+(* Substitutions.
+ *
+ * There are many different ways to implement a calculus with explicit
+ * substitutions, with tradeoffs between complexity of implementation,
+ * performance etc...
+ *
+ * The "fine-grained notation" version of the suspension calculus uses
+ * The following special rules:
+ *
+ *    (λ [t₁, ol+1, nl+1, @nl::e]) t₂     ==>   [t₁, ol+1, nl, (t₂,nl)::e]
+ *    [[t, ol, nl, e], 0, nl', nil]  ==>   [t, ol, nl+nl', e]
+ *
+ * Alternate rules:
+ *
+ *    [(λ t₁), ol, nl, e]) t₂        ==>   [t₁, ol+1, nl, (t₂,nl)::e]
+ *
+ * The normal beta rule is:
+ *
+ *    (λ t₁) t₂                      ==>   [t₁, 1, 0, (t₂,0) :: nil]
+ * 
+ * which would be instantiated to
+ *
+ *    (λ [t₁, ol, nl, e]) t₂    ==>   [[t₁, ol, nl, e], 1, 0, (t₂,0) :: nil]
+ *
+ * So we could do it as follows:
+ *
+ *    (λ [t₁ σ₁]) t₂   ==>  [t₁ ((1, 0, (t₂::nil)) ∘ σ₁)]
+ *    ((1, 0, (t₂::nil)) ∘ (ol+1, nl+1, e)  ==> (ol₁, nl, (t₂,nl)::e)
+ *
+ * Rules used in the "no merging" version:
+ *
+ *    (λ t₁) t₂                      ==>   [t₁, 1, 0, (t₂,0) :: nil]
+ *    (λ [t₁, ol+1, nl+1, @nl::e]) t₂  ==>   [t₁, ol+1, nl, (t₂,nl)::e]
+ *    [t, 0, 0, nil]                 ==>   t
+ *    [#i, ol, nl, e]                ==>   #(i-ol+nl)    if i>ol
+ *    [#i, ol, nl, e]                ==>   #(nl - j)     if e.i = @j'
+ *    [#i, ol, nl, e]          ==> [t, 0, nl - j, nil]   if e.i = (t,j)
+ *    [λt, ol, nl, e]                ==>   λ[t, ol+1, nl+1, @nl :: e]
+ *    [[t, ol, nl, e], 0, nl', nil]  ==>   [t, ol, nl+nl', e]
+ *
+ * First simplification: get rid of `ol`!
+ *
+ *    (λ t₁) t₂               ==>   [t₁, 0, (t₂,0)::nil]
+ *    [#i, nl, e]             ==>   [t, nl - j, nil]     if e.i = (t,j)
+ *    [λt, nl, e]             ==>   λ[t, nl+1, @nl::e]
+ *
+ *    (λ [t₁, nl+1, @nl::e]) t₂  ==>   [t₁, nl, (t₂,nl)::e]
+ *    [(λ t₁), nl, e]) t₂     ==>   [t₁, nl, (t₂,nl)::e]
+ *    [[t, nl, e], nl', nil]  ==>   [t, nl+nl', e]
+ *
+ *    [t, 0, nil]             ==>   t
+ *    [#i, nl, e]             ==>   #(i-len(e)+nl)       if i>len(e)
+ *    [#i, nl, e]             ==>   #(nl - j)            if e.i = @j'
+ *
+ * Re-introduce subst-merging.  So we currently have two merging rules:
+ *
+ *    ((0, (t₂::nil)) ∘ (nl+1, e)  ==>  (nl, (t₂,nl)::e)    if e≠nil
+ *    (nl, e) ∘ (nl', nil)         ==>  (nl+nl', e)
+ *
+ * What do these substitutions mean?
+ *
+ *    (N, nil)  ==  shift N
+ *    (0, e)    ==  replace nearest N vars with values from `e`
+ *    (nl+1, @nl::e)  ==  lift e
+ *    (nl, e)  ==  shift (nl - ol) (ol, e)   if ol = lvl(e)
+ *
+ * Another way to look at it:
+ *
+ *    (λ t₁) t₂               ==>   [t₁, t₂::nil]
+ *    [λt, σ]                 ==>   λ[t, lift σ]
+ *
+ *    (λ [t₁, lift σ]) t₂     ==>   [t₁, t₂::σ]
+ *    [(λ t₁), σ]) t₂         ==>   [t₁, t₂::σ]
+ *    [[t, σ], shift n nil]   ==>   [t, shift n σ]
+ *
+ *    [t, id]                 ==>   t
+ *    [#0, t::σ]              ==>   t
+ *    [#i, t::σ]              ==>   [#i-1, σ]
+ *    [#0, lift σ]            ==>   #0
+ *    [#i, lift σ]            ==>   [[#i-1, σ], shift 1 nil]
+ *    [#i, shift N σ]         ==>   [[#i, σ], shift N nil]
+ *
+ * I guess I'm leaning towards a kind of λσ, but with
+ *
+ *    σ = nil | σ ↑n | a·σ
+ *
+ * where lift σ  ==  #0·(σ ∘ nil ↑)  == #0·(σ ↑)
+ *   and   σ ↑n  ==  (σ ∘ ↑n)
+ *   and     #n  ==  [#0, ↑n]
+ *
+ *    (λt₁)t₂       ==>  [t₁, t₂·nil]
+ *    [λt, σ]       ==>  λ[t, lift σ]
+ *    [t, nil]      ==>  t
+ *    [#0, t·σ]     ==>  t
+ *    [#i+1, t·σ]   ==>  [#i, σ]    (because => [[#i, ↑] t·σ] => [#i, ↑ ∘ t·σ])
+ *    [#i, σ ↑n]    ==>  [[#i, σ], ↑n]
+ *
+ * Merging rules:
+ *
+ *    nil ∘ σ             ==>  σ
+ *    σ ∘ nil             ==>  σ
+ *    (σ ↑n₂) ↑n₁         ==>  σ ↑(n₁+n₂)
+ *    σ ↑n₁ ∘ nil ↑n₂     ==>  σ ↑(n₁+n₂)
+ *    σ₁ ↑n₁ ∘ (a·σ₂) ↑n₂ ==>  σ₁ ↑(n₁-1) ∘ σ₂ ↑n₂
+ *    σ₁ ↑n ∘ a·σ₂        ==>  σ₁ ↑(n-1) ∘ σ₂
+ *    a·σ₁ ∘ σ₂ ↑n        ==>  (a·σ₁ ∘ σ₂) ↑n
+ *    a·σ₁ ∘ σ₂           ==>  [a, σ₂]·(σ₁ ∘ σ₂)
+ *
+ *    σ ∘ nil ↑n          ==>  σ ↑n
+ *
+ * The optimisations used in FLINT would translate to:
+ *
+ *    [λt₁, σ] t₂         ==> (λ[t₁, lift σ]) t₂
+ *                        ==> [t₁, (lift σ) ∘ t₂·nil]
+ *                        ==> [t₁, #0·(σ ↑) ∘ t₂·nil]
+ *                        ==> [t₁, [#0, t₂·nil]·(σ ↑ ∘ t₂·nil)]
+ *                        ==> [t₁, t₂·σ]
+ *    [[t, σ], nil ↑n]    ==> [t, σ ∘ nil ↑n]
+ *                        ==> [t, σ ↑n]
+ *
+ * Confluence:
+ *
+ *    a·σ₁ ∘ σ₂ ↑n        ==>  (a·σ₁ ∘ σ₂) ↑n
+ *    a·σ₁ ∘ σ₂ ↑n        ==>  [a, σ₂ ↑n]·(σ₁ ∘ σ₂ ↑n)
+ *
+ * so we also need a rule
+ *
+ *     (a·σ₁ ∘ σ₂) ↑n    <==>  [a, σ₂ ↑n]·(σ₁ ∘ σ₂ ↑n)
+ *
+ * for confluence
+ *)
+
 (* We define here substitutions which take a variable within a source context
  * Δₛ and should return an expression valid in target context Δₜ.
  *
@@ -32,40 +164,66 @@ module U = Util
 type db_index = int             (* DeBruijn index.  *)
 type db_offset = int            (* DeBruijn index offset.  *)
 
-type subst =                     (* deBruijn substitution.  *)
+(* Substitution, i.e. a mapping from db_index to 'a
+ * In practice, 'a is always lexp, but we keep it as a paramter:
+ * - for better modularity of the code.
+ * - to break a mutual dependency between the Lexp and the Subst modules.  *)
+type 'a subst =
   (* Lift (n,m) increases indices≥N by M.
    * IOW, it takes variables from a source context Δₛ₁Δₛ₂ to a destination
    * context Δₛ₁ΔₜΔₛ₂ where Δₛ₂ has size N and Δₜ has size M.  *)
-  | Lift of db_index * db_offset
+  | Identity
+  | Cons of 'a * 'a subst
+  | Shift of db_offset * 'a subst
+  (* | Lift of db_index * db_offset *)
 
-(* Apply a substitution.  In theory this should return a Lexp, but
- * since we can only map variables to variables, we just return a db_index.
- * This also saves us from a mutual-recursion between the Subst and Lexp
- * modules.  *)
-let apply (s:subst) (v:db_index) : db_index =
-  match s with
-  | Lift (n,m) -> if v >= n then v + m else v
+(* Apply a substitution.  Also called `lookup`.  *)
+let apply (mkVar : 'b -> db_index -> 'a)
+          (mkShift: db_offset -> 'a -> 'a)
+          (s: 'a subst) (l : 'b) (v:db_index) : 'a =
+  let rec apply' (o:db_offset) (s: 'a subst) (v:db_index) : 'a =
+    match s with
+    | Identity -> mkVar l (v+o)
+    | Shift (o', s) -> apply' (o+o') s v
+    | Cons (e, s) -> if v>0 then apply' o s (v-1)
+                    else mkShift o e
+  in apply' 0 s v
+
+let mkShift (m:db_offset) s =
+  match s with Shift (n, s') -> Shift (n+m, s')
+             | _ -> if m>0 then Shift (m, s) else s
 
 (* A substitution which adds M to every deBruijn index.
  * I.e. one that takes variables from a context Δₛ to an extended
  * context ΔₛΔₜ where Δₜ has size M.  *)
-let shift m = Lift (0, m)
+let shift (m:db_offset) = mkShift m Identity
 
 (* The trivial substitution which doesn't do anything.  *)
-let identity = Lift (0,0)
+let identity = Identity
 
-(* Compose two substitutions.
- * Returns s₂ ∘ s₂ (i.e. s₂ is applied before s₁).  *)
-let compose s1 s2 =
-  match s1, s2 with
-  | (Lift (_, 0), s2) -> s2
-  | (s1, Lift (_, 0)) -> s1
-  | (Lift (n1, m1), Lift (n2, m2)) ->
-     if n1 >= n2 && n1 <= n2 + m2 then Lift (n2, m1 + m2)
-     else U.internal_error "Unable to compose subst at different indices"
+let identity_p s = match s with | Identity -> true | _ -> false
+
+(* Compose two substitutions.  This implements the merging rules.
+ * Returns s₁ ∘ s₂  (i.e. s₁ is applied before s₂) *)
+let compose (mkSusp : 'a -> 'a subst -> 'a)
+            (s1: 'a subst) (s2: 'a subst) : 'a subst =
+  let rec compose' (s1: 'a subst) (s2: 'a subst) : 'a subst =
+    match s1, s2 with
+    | (Identity, s2) -> s2
+    | (s1, Identity) -> s1
+    | (Shift (o1, s1), Shift (o2, Identity)) -> Shift (o1+o2, s1)
+    | (s1, Shift (o, Identity)) -> Shift (o, s1)
+    | (Shift (o1, s1), Shift (o2, Cons (e, s2)))
+      -> compose' (mkShift (o1-1) s1) (mkShift o2 s2)
+    | (Shift (o1, s1), Cons (e, s2)) -> compose' (mkShift (o1-1) s1) s2
+    | (Cons (e, s1), Shift (o2, s2)) -> Shift (o2, compose' (Cons (e, s1)) s2)
+    | (Cons (e, s1), s2) -> Cons (mkSusp e s2, compose' s1 s2)
+    | (_, Shift (_, Shift (_, _))) -> U.internal_error "Nested Shift!"
+  in compose' s1 s2
 
 (* Adjust a substitution for use under one more binder.
  * I.e. take a substitution from Δs to Δₜ and return a substitution
- * from Δs,x to Δₜ,x *)
-let sink s =
-  match s with | Lift (n, m) -> Lift (n + 1, m)
+ * from Δs,x to Δₜ,x.
+ * Also known as `lift`.  *)
+let sink (mkVar : 'b -> db_index -> 'a) (l:'b) (s:'a subst) =
+  Cons (mkVar l 0, mkShift 1 s)

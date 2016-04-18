@@ -55,6 +55,8 @@ type builtin =
   | EqType
   | LevelType
 
+(* Pour la propagation des types bidirectionnelle, tout va dans `infer`,
+ * sauf Lambda et Case qui vont dans `check`.  Je crois.  *)
 type ltype = lexp
  and lexp =
    | Imm of sexp                        (* Used for strings, ...  *)
@@ -62,7 +64,7 @@ type ltype = lexp
    | Sort of location * sort
    | Builtin of builtin * string * ltype
    | Var of vref
-   | Susp of S.subst * lexp (* Suspended substitution, to substitute lazily.  *)
+   | Susp of lexp * lexp S.subst  (* Lazy explicit substitution: e[σ].  *)
    (* This "Let" allows recursion.  *)
    | Let of location * (vdef * lexp * ltype) list * lexp
    | Arrow of arg_kind * vdef option * ltype * location * lexp
@@ -245,7 +247,7 @@ let rec lexp_location e =
   | Inductive (l,_,_,_) -> l
   | Cons (_,(l,_)) -> l
   | Case (l,_,_,_,_) -> l
-  | Susp (_, l) -> lexp_location l
+  | Susp (e, _) -> lexp_location e
   (* | Susp (_, e) -> lexp_location e
    * | Metavar ((l,_),_,_) -> l *)
 
