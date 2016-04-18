@@ -78,3 +78,6 @@ run/ityper:
 
 run/tests:
 	@./_build/tests/utests --verbose= 1
+
+run/ityper-file:
+	@./_build/ityper ./samples/test__.typer

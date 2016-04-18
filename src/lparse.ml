@@ -469,30 +469,46 @@ and _lexp_decls decls ctx i: (((vdef * lexp * ltype) list) * lexp_context) =
     (* This is required for later *)
     let ctx = !ctx in
     let lst = ref [] in
+
+    (* Doing types and expressions separately allow us to use        *)
+    (* all typing information when lexp_parsing recursive definition *)
+    (* The price of this is iterating twice over declarations        *)
+    (* + now we need to lookup type info                             *)
+
+    (* Process types once *)
     let n = ref ((List.length ndecls) - 1) in
-        (* for each declaration lexp their rhs *)
+        (* for each declaration lexp their types *)
         List.iter (fun ((loc, name), opxp, otpxp) ->
-                let vdef = (loc, name) in
-                let vref = (vdef, !n) in
-                    n := !n - 1;
+            let vdef = (loc, name) in
+            let vref = (vdef, !n) in
+                n := !n - 1;
 
-                match opxp, otpxp with
-                    | Some pxp, Some tpxp ->
-                        (* Add type first (for recursive definition) *)
-                        let ltp, _ = _lexp_p_infer tpxp ctx (i + 1) in
-                            (env_set_var_info ctx vref None ltp);
+            match opxp, otpxp with
+                | _, Some tpxp -> let ltp, _ = _lexp_p_infer tpxp ctx (i + 1) in
+                    (env_set_var_info ctx vref None ltp);
+                | _ -> ())
+        ndecls;
 
-                        let lxp, _ = _lexp_p_infer pxp ctx (i + 1) in
-                            (env_set_var_info ctx vref (Some lxp) ltp);
+    (* Process declaration in itself*)
+    let n = ref ((List.length ndecls) - 1) in
+        List.iter (fun ((loc, name), opxp, otpxp) ->
+            let vdef = (loc, name) in
+            let vref = (vdef, !n) in
+                n := !n - 1;
 
-                            lst := (vdef, lxp, ltp)::!lst
+            match opxp, otpxp with
+                | Some pxp, Some _ ->
+                    let ltp = env_lookup_type ctx vref in
+                    let lxp, _ = _lexp_p_infer pxp ctx (i + 1) in
+                        (env_set_var_info ctx vref (Some lxp) ltp);
+                        lst := (vdef, lxp, ltp)::!lst
 
-                    | Some pxp, None ->
-                        let lxp, ltp = _lexp_p_infer pxp ctx (i + 1) in
-                            (env_set_var_info ctx vref (Some lxp) ltp);
-                            lst := (vdef, lxp, ltp)::!lst
+                | Some pxp, None ->
+                    let lxp, ltp = _lexp_p_infer pxp ctx (i + 1) in
+                        (env_set_var_info ctx vref (Some lxp) ltp);
+                        lst := (vdef, lxp, ltp)::!lst
 
-                    | None, _ -> lexp_warning loc "Unused Variable"
+                | None, _ -> lexp_warning loc "Unused Variable"
             )
         ndecls;
 

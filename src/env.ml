@@ -65,7 +65,7 @@ let get_value_lexp (vtp: value_type) =
 let value_print (vtp: value_type) =
     match vtp with
         | Closure (lxp, _) ->
-            print_string ("Closure(" ^ (_lexp_to_str (!debug_ppctx) lxp))
+            print_string ("Closure(" ^ (_lexp_to_str (!debug_ppctx) lxp) ^ ")")
         | Value s -> lexp_print s
         | Vsexp sxp -> sexp_print sxp
 
