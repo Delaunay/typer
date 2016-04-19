@@ -227,3 +227,6 @@ let compose (mkSusp : 'a -> 'a subst -> 'a)
  * Also known as `lift`.  *)
 let sink (mkVar : 'b -> db_index -> 'a) (l:'b) (s:'a subst) =
   Cons (mkVar l 0, mkShift 1 s)
+
+(* Return a substitution which replaces #0 with `e`.  *)
+let substitute e = Cons (e, Identity)

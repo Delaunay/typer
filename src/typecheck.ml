@@ -20,7 +20,8 @@ more details.
 You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.  *)
 
-open Util
+module U = Util
+module SMap = U.SMap
 (* open Lexer *)
 open Sexp
 (* open Pexp *)
@@ -115,6 +116,63 @@ and conv_p' (s1:lexp S.subst) (s2:lexp S.subst) e1 e2 : bool =
 
 and conv_p e1 e2 = conv_p' S.identity S.identity e1 e2
 
+
+(********* Normalizing a term *********)
+
+let vdummy = (U.dummy_location, "dummy")
+let maybev mv = match mv with None -> vdummy | Some v -> v
+
+let rec unsusp e s =            (* Push a suspension one level down.  *)
+  match e with
+  | Imm _ -> e
+  | SortLevel _ -> e
+  | Sort (l, Stype e) -> Sort (l, Stype (mkSusp e s))
+  | Sort (l, _) -> e
+  | Builtin _ -> e
+  | Var ((l,_) as lv,v) -> U.msg_error "SUSP" l "¡Susp(Var)!"; sapply s lv v
+  | Susp (e,s') -> U.msg_error "SUSP" (lexp_location e) "¡Susp(Susp)!";
+                  mkSusp e (scompose s' s)
+  | Let (l, defs, e)
+    -> let s' = L.fold_left (fun s (v, _, _) -> ssink v s) s defs in
+      let (_,ndefs) = L.fold_left (fun (s,ndefs) (v, def, ty)
+                                   -> (ssink v s,
+                                      (v, mkSusp e s', mkSusp ty s) :: ndefs))
+                                  (s, []) defs in
+      Let (l, ndefs, mkSusp e s')
+  | Arrow (ak, v, t1, l, t2)
+    -> Arrow (ak, v, mkSusp t1 s, l, mkSusp t2 (ssink (maybev v) s))
+  | Lambda (ak, v, t, e) -> Lambda (ak, v, mkSusp t s, mkSusp e (ssink v s))
+  | Call (f, args) -> Call (mkSusp f s,
+                           L.map (fun (ak, arg) -> (ak, mkSusp arg s)) args)
+  | Inductive (l, label, args, cases)
+    -> let (_, nargs) = L.fold_left (fun (s, nargs) (ak, v, t)
+                                    -> (ssink v s, (ak, v, mkSusp t s) :: nargs))
+                                   (s, []) args in
+      let ncases = SMap.map (fun args
+                             -> let (_, ncase)
+                                 = L.fold_left (fun (s, nargs) (ak, v, t)
+                                                -> (ssink (maybev v) s,
+                                                   (ak, v, mkSusp t s)
+                                                   :: nargs))
+                                               (s, []) args in
+                               ncase)
+                            cases in
+      Inductive (l, label, nargs, ncases)
+  | Cons _ -> e
+  | Case (l, e, it, cases, default)
+    -> Case (l, mkSusp e s, mkSusp it s,
+            SMap.map (fun (l, cargs, e)
+                      -> let s' = L.fold_left (fun s carg
+                                              -> match carg with
+                                                | None -> s
+                                                | Some (ak, v) -> ssink v s)
+                                             s cargs in
+                        (l, cargs, mkSusp e s'))
+                     cases,
+            match default with
+            | None -> default
+            | Some e -> Some (mkSusp e s))
+
 (********* Testing if a lexp is properly typed  *********)
                            
 type varbind =
@@ -129,7 +187,20 @@ let lookup_type ctx vref =
 
 let assert_type e t t' =
   if conv_p t t' then ()
-  else msg_error "TC" (lexp_location e) "Type mismatch"; ()
+  else U.msg_error "TC" (lexp_location e) "Type mismatch"; ()
+
+let sort_compose l s1 s2 =
+  match s1, s2 with
+  | (Stype (SortLevel (SLn n1)), Stype (SortLevel (SLn n2)))
+    (* Basic predicativity rule.  *)
+    -> Stype (SortLevel (SLn (max n1 n2)))
+  | ( (StypeLevel, Stype (SortLevel (SLn _)))
+    | (StypeLevel, StypeOmega)
+    (* | (Sort (_, Stype (SortLevel (SLn _))), Sort (_, StypeOmega)) *))
+    -> StypeOmega
+  | _,_ -> (U.msg_error "TC" l
+                       "Mismatch sorts for arg and result";
+           StypeOmega)
 
 (* "check ctx e" should return τ when "Δ ⊢ e : τ"  *)
 let rec check ctx e =
@@ -143,12 +214,14 @@ let rec check ctx e =
   | Builtin (_, _, t) -> t
   (* FIXME: Check recursive references.  *)
   | Var v -> lookup_type ctx v
-  | Susp (_, _) -> internal_error "Don't know how to check Susp"
+  | Susp (e, s) -> check ctx (unsusp e s)
   | Let (_, defs, e)
     -> let tmp_ctx =
         L.fold_left (fun ctx (v, e, t)
                      -> (match check ctx t with
-                        | Sort (_, Stype _) -> ());
+                        | Sort (_, Stype _) -> ()
+                        | _ -> (U.msg_error "TC" (lexp_location t)
+                                           "Def type is not a type!"; ()));
                        Myers.cons (0, Some v, ForwardRef, t) ctx)
                     ctx defs in
       let (new_ctx, _) =
@@ -164,20 +237,55 @@ let rec check ctx e =
     -> (let k1 = check ctx t1 in
        let k2 = check (Myers.cons (0, v, Variable, t1) ctx) t2 in
        match k1, k2 with
-       | (Sort (_, Stype (SortLevel (SLn n1))),
-          Sort (_, Stype (SortLevel (SLn n2))))
-         (* Basic predicativity rule.  *)
-         -> Sort (l, Stype (SortLevel (SLn (max n1 n2))))
-       | ( (Sort (_, StypeLevel), Sort (_, Stype (SortLevel (SLn _))))
-         | (Sort (_, StypeLevel), Sort (_, StypeOmega))
-         (* | (Sort (_, Stype (SortLevel (SLn _))), Sort (_, StypeOmega)) *))
-         -> Sort (l, StypeOmega)
-      )
+       | (Sort (_, s1), Sort (_, s2))
+         -> Sort (l, sort_compose l s1 s2)
+       | (Sort (_, _), _) -> (U.msg_error "TC" (lexp_location t2)
+                            "Not a proper type";
+                             Sort (l, StypeOmega))
+       | (_, Sort (_, _)) -> (U.msg_error "TC" (lexp_location t1)
+                            "Not a proper type";
+                             Sort (l, StypeOmega)))
   | Lambda (ak, ((l,_) as v), t, e)
-    -> (match check ctx t with
-       | Sort _ -> Arrow (ak, Some v, t, l,
-                         check (Myers.cons (0, Some v, Variable, t) ctx) e))
-  (* | _ -> let t' = check ctx e in
-   *       if conv_p t t' then ()
-   *       else msg_error "TC" (lexp_location e) "Type mismatch"; () *)
-
+    -> ((match check ctx t with
+        | Sort _ -> ()
+        | _ -> (U.msg_error "TC" (lexp_location t)
+                           "Formal arg type is not a type!"; ()));
+       Arrow (ak, Some v, t, l,
+              check (Myers.cons (0, Some v, Variable, t) ctx) e))
+  | Call (f, args)
+    -> let ft = check ctx f in
+      L.fold_left (fun ft (ak,arg)
+                   -> let at = check ctx arg in
+                     match ft with
+                     | Arrow (ak', v, t1, l, t2)
+                       -> if not (ak == ak') then
+                            (U.msg_error "TC" (lexp_location arg)
+                                         "arg kind mismatch"; ())
+                          else ();
+                         assert_type arg t1 at;
+                         mkSusp t2 (S.substitute arg)
+                     | _ -> (U.msg_error "TC" (lexp_location arg)
+                                        "Calling a non function!"; ft))
+                  ft args
+  | Inductive (l, label, args, cases)
+    -> let rec arg_loop args s ctx =
+        match args with
+        | [] -> Sort (l, s)
+        | (ak, v, t)::args
+          -> match check ctx t with
+            | Sort (_, s')
+              -> Arrow (ak, Some v, t, lexp_location t,
+                       (* FIXME: `sort_compose` doesn't do what we want!  *)
+                       arg_loop args (sort_compose l s s')
+                                (Myers.cons (0, Some v, Variable, t) ctx)) in
+      let tct = arg_loop args (Stype (SortLevel (SLn 0))) ctx in
+      (* FIXME: Check cases!  *)
+      tct
+  (* | Case (l, e, it, branches, default)
+   *   -> let et = check ctx e in *)
+      (* FIXME: Check that `et` is derived from `it`.
+       * E.g. `et` could be `List Int` while `it` is `List`.  *)
+      (* FIXME: If there are no branches nor default, then we have no
+       * way to infer the type!  *)
+      (* FIXME: Check branches and default!  *)
+      
