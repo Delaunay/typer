@@ -108,6 +108,16 @@ let get_rte_variable (name: string option) (idx: int) (ctx: runtime_env): value_
             n ^ "\" idx: " ^ (str_idx idx))
 ;;
 
+let rte_shift vref ctx =
+    let (_, (osize, _)) = ctx in    (* number of variable declared outside *)
+    let csize = get_rte_size ctx in (* current size                        *)
+    let offset = csize - osize in
+    let ((loc, name), idx) = vref in
+    (* check if variable is free *)
+    let offset = if idx > offset then offset else 0 in
+    (* shift idx *)
+        idx + offset
+
 let add_rte_variable name (x: value_type) (ctx: runtime_env): runtime_env =
     let (l, b) = ctx in
     let lst = (cons (ref (name, x)) l) in

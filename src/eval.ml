@@ -109,7 +109,7 @@ let rec _eval lxp ctx i: (value_type) =
 
 and eval_var ctx lxp v =
     let ((loc, name), idx) = v in
-        try get_rte_variable (Some name) idx ctx
+    try get_rte_variable (Some name) (idx) ctx
     with Not_found ->
         eval_error loc ("Variable: " ^ name ^ (str_idx idx) ^ " was not found ")
 

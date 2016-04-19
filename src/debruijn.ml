@@ -122,7 +122,8 @@ let env_add_var_info var (ctx: lexp_context) =
     (a, cons (ref var) env, f)
 
 let env_extend (ctx: lexp_context) (def: vdef) (v: lexp option) (t: lexp) =
-  env_add_var_info (0, def, v, t) (senv_add_var def ctx)
+  let ((n, map), e, f) = ctx in
+  env_add_var_info (n, def, v, t) (senv_add_var def ctx)
 
 
 let _name_error loc estr str =

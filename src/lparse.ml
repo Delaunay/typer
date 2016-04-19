@@ -141,19 +141,26 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
             let bdy, ltp = lexp_infer body nctx in
                 Let(tloc, decl, bdy), ltp
 
-        (* ->/=> *)
+        (* ------------------------------------------------------------------ *)
         | Parrow (kind, Some var, tp, loc, expr) ->
-            let nvar = var in               (* /!\ HERE *)
             let ltyp, _ = lexp_infer tp ctx in
             let lxp, _ = lexp_infer expr ctx in
-            let v = Arrow(kind, Some nvar, ltyp, tloc, lxp) in
-                v, v
+            let v = Arrow(kind, Some var, ltyp, tloc, lxp) in
+                v, type0
 
         | Parrow (kind, None, tp, loc, expr) ->
             let ltyp, _ = lexp_infer tp ctx in
             let lxp, _ = lexp_infer expr ctx in
             let v = Arrow(kind, None, ltyp, tloc, lxp) in
-                v, v
+                v, type0
+
+        (* Pinductive *)
+        | Pinductive (label, [], ctors) ->
+            let map_ctor = lexp_parse_inductive ctors ctx i in
+            let v = Inductive(tloc, label, [], map_ctor) in
+                v, type0
+
+        (* *)
 
         | Plambda (kind, var, ptype, body) ->
             let ltp, _ = match ptype with
@@ -169,12 +176,6 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
         | Pcall (fname, _args) ->
             lexp_call fname _args ctx i
 
-        (* Pinductive *)
-        | Pinductive (label, [], ctors) ->
-            let map_ctor = lexp_parse_inductive ctors ctx i in
-            let v = Inductive(tloc, label, [], map_ctor) in
-                v, v
-
         (* Pcons *)
         | Pcons(vr, sym) -> (
             let (loc, type_name) = vr in
@@ -183,14 +184,14 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
             (*  An inductive type named type_name must be in the environment *)
             try let idx = senv_lookup type_name ctx in
                 (*  Check if the constructor exists *)
-                let idt = env_lookup_type ctx (vr, idx) in
+                let idt = env_lookup_expr ctx (vr, idx) in
 
                 (* make Base type *)
                 let inductive_type = Var((loc, type_name), idx) in
 
                 (* Get constructor args *)
                 let args = match idt with
-                    | Inductive(_, _, _, ctor_def) -> (
+                    | Some Inductive(_, _, _, ctor_def) -> (
                         try (SMap.find cname ctor_def)
                         with Not_found ->
                             lexp_error loc
@@ -261,7 +262,7 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
 
         | _ -> lexp_fatal tloc "Unhandled Pexp"
 
-and lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
+and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
     let tloc = pexp_location p in
 
     _global_lexp_ctx := ctx;
@@ -415,6 +416,61 @@ and lexp_parse_inductive ctors ctx i =
 (*  Parse let declaration *)
 and lexp_p_decls decls ctx = _lexp_decls decls ctx 1
 and _lexp_decls decls ctx i: (((vdef * lexp * ltype) list) * lexp_context) =
+    (* (pvar * pexp * bool) list * )
+
+    let ctx = ref ctx in
+    let mdecls = ref SMap.empty in
+    let order = ref [] in
+    let found = ref false in
+
+        List.iter (fun ((loc, name), pxp, bl) ->
+            (* Check if variable was already defined *)
+            let (l, olxp, oltp, _) = try found := true; SMap.find name !mdecls
+                with Not_found ->
+                    (* keep track of declaration order *)
+                    order := (name::!order);
+                    found := false;
+                    (* create  an empty element *)
+                    (loc, None, None, 0) in
+
+            (* create a dummy env for lexp_parse *)
+            let denv = env_extend (!ctx) (loc, name) None dltype in
+
+            (* Do we already have a type ? *)
+            let lxp, ltp = match oltp with
+                (* We infer *)
+                | None -> _lexp_p_infer pxp denv (i + 1)
+
+                (* We check *)
+                | Some ltp -> (_lexp_p_check pxp ltp denv (i + 1)), ltp in
+
+            (* update declaration *)
+            let new_decl = match bl with
+                | true  -> (if !found then () else ctx := env_extend (!ctx) (loc, name) None lxp);
+                    (l, olxp, Some lxp, i)
+                | false -> (if !found then () else ctx := env_extend (!ctx) (loc, name) (Some lxp) ltp);
+                    (l, Some lxp, oltp, i) in
+
+            (* Add Variable to the map *)
+            mdecls := SMap.add name new_decl !mdecls)
+
+            decls;
+
+    let ctx = !ctx in
+    let mdecls = !mdecls in
+    let order = !order in
+    (* Cast Map to list *)
+    let ndecls = List.map (fun name ->
+        let (l, inst, tp, _) = SMap.find name mdecls in
+            match inst, tp with
+                | Some lxp, Some ltp -> ((l, name), lxp, ltp)
+                | Some lxp, None     -> ((l, name), lxp, dltype)
+                | None, Some ltp     -> lexp_warning l "Type with no expression";
+                    ((l, name), dltype, ltp)
+                | None, None         -> lexp_warning l "No expression, No Type";
+                    ((l, name), dltype, dltype)) order in
+
+        (List.rev ndecls), ctx *)
 
     let ctx = ref ctx in
     let idx = ref 0 in
@@ -513,6 +569,7 @@ and _lexp_decls decls ctx i: (((vdef * lexp * ltype) list) * lexp_context) =
         ndecls;
 
         List.rev (!lst), ctx
+
 
 and _lexp_parse_all (p: pexp list) (ctx: lexp_context) i : lexp list =
 
