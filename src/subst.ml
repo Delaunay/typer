@@ -21,6 +21,40 @@ this program.  If not, see <http://www.gnu.org/licenses/>.  *)
 
 module U = Util
 
+
+(* Suspensions definitions.
+ *
+ *   ol: old embedding level ('associate' level, length with environement)
+ *   nl: new ....
+ *
+ *   n: A Natural Number
+ *   i: A positive integer
+ *
+ *  t ::= c             :
+ *       #i             : Debruijn Index variable bound by the ith abstraction
+ *       (t, t)         : Applications
+ *       (λ t)          : Abstractions
+ *       [t, n, n, e]   : Suspensions
+ *
+ *                                length                    level
+ *  e ::= nil               : 0                       : 0
+ *       (t, n)::e          : n + len(e)              : n
+ *       {e1, nl, ol, e2}   : len(e1) + len(e2) - nl  : lev(e1) + nl - ol
+ *
+ *       level is the dbi index ?
+ *
+ * Substitutions Compositions definitions.
+ *
+ * a ::= 1
+ *       a b
+ *       (λ a)    :
+ *       a[s]     :
+ *
+ * s ::= id       : identity
+ *       a . s    : cons replace dbi_idx = 0 by a use s for the rest
+ *       s o t    : Composition
+ *       shift    : dbi_index + 1
+ *)
 (* Substitutions.
  *
  * There are many different ways to implement a calculus with explicit
@@ -40,7 +74,7 @@ module U = Util
  * The normal beta rule is:
  *
  *    (λ t₁) t₂                      ==>   [t₁, 1, 0, (t₂,0) :: nil]
- * 
+ *
  * which would be instantiated to
  *
  *    (λ [t₁, ol, nl, e]) t₂    ==>   [[t₁, ol, nl, e], 1, 0, (t₂,0) :: nil]
@@ -168,7 +202,7 @@ type db_offset = int            (* DeBruijn index offset.  *)
  * In practice, 'a is always lexp, but we keep it as a paramter:
  * - for better modularity of the code.
  * - to break a mutual dependency between the Lexp and the Subst modules.  *)
-type 'a subst =
+type 'a subst = (* lexp subst *)
   (* Lift (n,m) increases indices≥N by M.
    * IOW, it takes variables from a source context Δₛ₁Δₛ₂ to a destination
    * context Δₛ₁ΔₜΔₛ₂ where Δₛ₂ has size N and Δₜ has size M.  *)

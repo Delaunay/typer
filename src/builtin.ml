@@ -75,9 +75,11 @@ let type_eq = let lv = (dloc, "l") in
                         Arrow (Aexplicit, None, Var (tv, 1), dloc,
                                type0))))
 
-let builtin_iadd = Builtin (IAdd, "_+_", iop_binary)
+let builtin_iadd  = Builtin (IAdd, "_+_", iop_binary)
 let builtin_imult = Builtin (IMult, "_*_", iop_binary)
-let builtin_eq = Builtin (EqType, "_=_", type_eq) (*
+let builtin_eq    = Builtin (EqType, "_=_", type_eq)
+let builtin_sexp  = Builtin (SexpType, "sexp", type0)
+(*
 let builtin_fadd = Builtin (FAdd, "_+_", fop_binary)
 let builtin_fmult = Builtin (FMult, "_*_", fop_binary) *)
 
@@ -135,12 +137,12 @@ let make_symbol loc args_val ctx  =
     (* symbol is a simple string *)
     let lxp = match args_val with
         | [r] -> r
-        | _ -> builtin_error loc ("symbol_ expects 1 arguments") in
+        | _ -> builtin_error loc ("symbol_ expects 1 argument") in
 
     let s = get_string lxp in
         match s with
             | Some str -> Vsexp(Symbol(loc, str))
-            | _ -> builtin_error loc ("symbol_ expects sexp as arguments")
+            | _ -> builtin_error loc ("symbol_ expects one string as argument")
 
 
 let make_node loc args_val ctx    =
@@ -159,17 +161,29 @@ let make_node loc args_val ctx    =
 
         Vsexp(Node(op, s))
 
+
 let make_block loc args_val ctx   = Value(type0)
 let make_string loc args_val ctx  = Value(type0)
 let make_integer loc args_val ctx = Value(type0)
 let make_float loc args_val ctx   = Value(type0)
 
-let builtin_block   = Builtin (SexpType, "block_", type0)
-let builtin_symbol  = Builtin (SexpType, "symbol_", type0)
-let builtin_string  = Builtin (SexpType, "string_", type0)
-let builtin_integer = Builtin (SexpType, "integer_", type0)
-let builtin_float   = Builtin (SexpType, "float_", type0)
-let builtin_node    = Builtin (SexpType, "node_", type0)
+let type_string   = type0
+let type_mblock   = type0
+
+let type_msymbol  = Arrow (Aexplicit, None, type_string, dloc, builtin_sexp)
+let type_mstring  = Arrow (Aexplicit, None, type_string, dloc, builtin_sexp)
+let type_minteger = Arrow (Aexplicit, None, type_int,    dloc, builtin_sexp)
+let type_mfloat   = Arrow (Aexplicit, None, type_float,  dloc, builtin_sexp)
+let type_mnode    = Arrow (Aexplicit, None, builtin_sexp,dloc, builtin_sexp)
+let type_mexpand  = Arrow (Aexplicit, None, builtin_sexp,dloc, type0)
+
+let builtin_block   = Builtin (SexpType, "block_", type_mblock)
+let builtin_symbol  = Builtin (SexpType, "symbol_", type_msymbol)
+let builtin_string  = Builtin (SexpType, "string_", type_mstring)
+let builtin_integer = Builtin (SexpType, "integer_", type_minteger)
+let builtin_float   = Builtin (SexpType, "float_", type_mfloat)
+let builtin_node    = Builtin (SexpType, "node_", type_mnode)
+let builtin_expand  = Builtin (SexpType, "expand_", type_mexpand)
 
 (*
  *  Should we have a function that
@@ -194,12 +208,13 @@ let typer_builtins = [
     ("_*_"  , builtin_imult, iop_binary, imult_impl); (* int -> int -> int  *)
 
 (*  Macro primitives *)
-    ("block_"  , builtin_block  , type0, make_block);
-    ("symbol_" , builtin_symbol , type0, make_symbol);
-    ("string_" , builtin_string , type0, make_string);
-    ("integer_", builtin_integer, type0, make_integer);
-    ("float_"  , builtin_float  , type0, make_float);
-    ("node_"   , builtin_node   , type0, make_node);
+    ("block_"  , builtin_block  , type_mblock  , make_block);
+    ("symbol_" , builtin_symbol , type_msymbol , make_symbol);
+    ("string_" , builtin_string , type_mstring , make_string);
+    ("integer_", builtin_integer, type_minteger, make_integer);
+    ("float_"  , builtin_float  , type_mfloat  , make_float);
+    ("node_"   , builtin_node   , type_mnode   , make_node);
+    ("expand_" , builtin_expand , type_mexpand , none_fun);
 
 (* Macros primitives type ? *)
 

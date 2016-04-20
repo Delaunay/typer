@@ -37,7 +37,7 @@ open Sexp
 open Lexp       (*  lexp_print *)
 
 open Myers
-
+open Debruijn
 
 
 let dloc = dummy_location
@@ -55,6 +55,8 @@ type value_type =
     | Closure of lexp * (((string option * value_type) ref myers) * (int * int))
     (* Macro type *)
     | Vsexp of sexp
+    (* Unable to eval during macro expansion, only throw if the value is used *)
+    | Vdummy
 
 let get_value_lexp (vtp: value_type) =
     match vtp with
@@ -68,6 +70,7 @@ let value_print (vtp: value_type) =
             print_string ("Closure(" ^ (_lexp_to_str (!debug_ppctx) lxp) ^ ")")
         | Value s -> lexp_print s
         | Vsexp sxp -> sexp_print sxp
+        | _ -> print_string "value_print_dummy"
 
 
 let value_location (vtp: value_type) = lexp_location (get_value_lexp vtp)
@@ -208,3 +211,4 @@ let print_rte_ctx (ctx: runtime_env) =
 
         value_print g; print_string "\n")
 ;;
+

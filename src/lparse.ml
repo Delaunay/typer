@@ -38,6 +38,7 @@ open Sexp
 open Pexp
 open Lexp
 
+open Env
 open Debruijn
 open Eval
 
@@ -320,6 +321,23 @@ and lexp_call (fname: pexp) (_args: sexp list) ctx i =
         match env_lookup_expr ctx ((loc, name), idx) with
             | None -> lexp_error loc "Unknown builtin";
                 Call(vf, new_args), ret_type
+
+            (* Is it a macro ? *)
+            | Some Builtin (_, "expand_", _) ->(
+                let lxp = match largs with
+                    | [lxp] -> lxp
+                    | hd::tl -> lexp_error loc "expand_ one lexp"; hd
+                    | _ -> lexp_fatal loc "expand_ one lexp" in
+
+                (* eval argument *)
+                let sxp = match eval lxp (from_lctx ctx) with
+                    | Vsexp(sxp) -> sxp
+                    | _ -> lexp_fatal loc "expand_ expects sexp" in
+
+                let pxp = pexp_parse sxp in
+                    lexp_p_infer pxp ctx)
+
+            (* a builtin functions *)
             | Some e -> Call(e, new_args), ret_type
     )
     else Call(vf, new_args), ret_type
@@ -445,6 +463,7 @@ and _lexp_decls decls ctx i: (((vdef * lexp * ltype) list) * lexp_context) =
                 | Some ltp -> (_lexp_p_check pxp ltp denv (i + 1)), ltp in
 
             (* update declaration *)
+            (* FIXME: modify env when lxp is found *)
             let new_decl = match bl with
                 | true  -> (if !found then () else ctx := env_extend (!ctx) (loc, name) None lxp);
                     (l, olxp, Some lxp, i)

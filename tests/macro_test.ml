@@ -54,17 +54,19 @@ let _ = (add_test "MACROS" "macros base" (fun () ->
 
     (* define 'lambda x -> x * x' using macros *)
     let dcode = "
-        sqrt_sexp = (node_ (symbol_ \"lambda_->_\") (symbol_ \"x\")
-            (node_ (symbol_ \"_*_\") (symbol_ \"x\") (symbol_ \"x\"))); " in
+        sqr_sexp = (node_ (symbol_ \"lambda_->_\") (symbol_ \"x\")
+            (node_ (symbol_ \"_*_\") (symbol_ \"x\") (symbol_ \"x\")));
+
+        sqr = (expand_ sqr_sexp);" in
 
     let rctx, lctx = eval_decl_str dcode lctx rctx in
 
-    let ecode = "(sqrt_sexp);" in
+    let ecode = "(sqr 3);" in
 
     let ret = eval_expr_str ecode lctx rctx in
 
         match ret with
-            | [r] -> value_print r; print_string "\n"; success ();
+            | [r] -> expect_equal_int (get_int r) (3 * 3)
             | _ -> failure ())
 );;
 

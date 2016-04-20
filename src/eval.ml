@@ -105,7 +105,8 @@ let rec _eval lxp ctx i: (value_type) =
         (* Case *)
         | Case (loc, target, _, pat, dflt) -> (eval_case ctx i loc target pat dflt)
 
-        | _ -> lexp_print lxp; Value(Imm(String(dloc, "eval Not Implemented")))
+        | _ -> print_string "debug catch-all eval: ";
+            lexp_print lxp; Value(Imm(String(dloc, "eval Not Implemented")))
 
 and eval_var ctx lxp v =
     let ((loc, name), idx) = v in
@@ -283,7 +284,7 @@ and _eval_decls (decls: ((vdef * lexp * ltype) list))
 
     (* Read declarations once and push them *)
     let _, ctx = List.fold_left (fun (idx, ctx) ((_, name), lxp, ltp) ->
-        _global_eval_trace := [];
+
         let lxp = _eval lxp ctx (i + 1) in
         let ctx = set_rte_variable idx (Some name) lxp ctx in
         (idx - 1, ctx))
@@ -303,7 +304,6 @@ and print_eval_trace () =
 ;;
 
 let eval lxp ctx =
-    _global_eval_trace := [];
     _eval lxp ctx 1
 
 let debug_eval lxp ctx =
@@ -319,5 +319,29 @@ let debug_eval lxp ctx =
 let eval_all lxps rctx silent =
     let evalfun = if silent then eval else debug_eval in
     List.map (fun g -> evalfun g rctx) lxps;;
+
+
+(* build a rctx from a lctx *)
+let from_lctx (ctx: lexp_context): runtime_env =
+    let ((_, _), env, _) = ctx in
+    let rctx = ref (default_rctx ()) in
+
+    (* Skip builtins *)
+    let bsize = List.length typer_builtins in
+    let csize = get_size ctx in
+
+    for i = bsize to csize do
+        let (_, (_, name), exp, _) = !(Myers.nth (csize - i) env) in
+
+        let vxp = match exp with
+            | Some lxp -> (eval lxp !rctx)
+            | None -> Vdummy in
+
+                rctx := add_rte_variable (Some name) vxp (!rctx)
+    done;
+
+        !rctx
+
+
 
 
