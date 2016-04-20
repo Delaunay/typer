@@ -45,12 +45,12 @@ let rec mkSusp e s =
   if S.identity_p s then e else
     match e with
     | Susp (e, s') -> mkSusp e (scompose s' s)
-    | Var (l,v) -> sapply s l v  (* Apply the substitution eagerly.  *)
+    | Var (l,v) -> slookup s l v  (* Apply the substitution eagerly.  *)
     | _ -> Susp (e, s)
 and scompose s1 s2 = S.compose mkSusp s1 s2
-and sapply s l v = S.apply (fun l i -> Var (l, i))
-                           (fun o e -> mkSusp e (S.shift o))
-                           s l v
+and slookup s l v = S.lookup (fun l i -> Var (l, i))
+                             (fun e o -> mkSusp e (S.shift o))
+                             s l v
 let ssink = S.sink (fun l i -> Var (l, i))
 
 
@@ -76,9 +76,9 @@ and conv_p' (s1:lexp S.subst) (s2:lexp S.subst) e1 e2 : bool =
     (* BEWARE: When we'll make expand let-defined vars here, we'll have to
      * be careful not to introduce infinite-recursion.  *)
     | (Var (l1, v1), e2) when not (S.identity_p s1) ->
-       conv_p' S.identity s2 (sapply s1 l1 v1) e2
+       conv_p' S.identity s2 (slookup s1 l1 v1) e2
     | (e1, Var (l2, v2)) when not (S.identity_p s2) ->
-       conv_p' s1 S.identity e1 (sapply s2 l2 v2)
+       conv_p' s1 S.identity e1 (slookup s2 l2 v2)
     | (Var (_, v1), Var (_, v2)) -> v1 == v2
     | (Susp (e1, s1'), e2) -> conv_p' (scompose s1' s1) s2 e1 e2
     | (e1, Susp (e2, s2')) -> conv_p' s1 (scompose s2' s2) e1 e2
@@ -129,7 +129,7 @@ let rec unsusp e s =            (* Push a suspension one level down.  *)
   | Sort (l, Stype e) -> Sort (l, Stype (mkSusp e s))
   | Sort (l, _) -> e
   | Builtin _ -> e
-  | Var ((l,_) as lv,v) -> U.msg_error "SUSP" l "¡Susp(Var)!"; sapply s lv v
+  | Var ((l,_) as lv,v) -> U.msg_error "SUSP" l "¡Susp(Var)!"; slookup s lv v
   | Susp (e,s') -> U.msg_error "SUSP" (lexp_location e) "¡Susp(Susp)!";
                   mkSusp e (scompose s' s)
   | Let (l, defs, e)

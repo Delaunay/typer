@@ -139,31 +139,27 @@ module U = Util
  *
  * I guess I'm leaning towards a kind of λσ, but with
  *
- *    σ = nil | σ ↑n | a·σ
+ *    σ = id | σ ↑n | a·σ
  *
- * where lift σ  ==  #0·(σ ∘ nil ↑)  == #0·(σ ↑)
- *   and   σ ↑n  ==  (σ ∘ ↑n)
+ * where   σ ↑n  ==  (σ ∘ ↑n)
+ *   and lift σ  ==  #0·(σ ↑)
  *   and     #n  ==  [#0, ↑n]
  *
  *    (λt₁)t₂       ==>  [t₁, t₂·nil]
  *    [λt, σ]       ==>  λ[t, lift σ]
- *    [t, nil]      ==>  t
+ *    [t, id]       ==>  t
  *    [#0, t·σ]     ==>  t
  *    [#i+1, t·σ]   ==>  [#i, σ]    (because => [[#i, ↑] t·σ] => [#i, ↑ ∘ t·σ])
  *    [#i, σ ↑n]    ==>  [[#i, σ], ↑n]
  *
  * Merging rules:
  *
- *    nil ∘ σ             ==>  σ
- *    σ ∘ nil             ==>  σ
- *    (σ ↑n₂) ↑n₁         ==>  σ ↑(n₁+n₂)
- *    σ ↑n₁ ∘ nil ↑n₂     ==>  σ ↑(n₁+n₂)
- *    σ₁ ↑n₁ ∘ (a·σ₂) ↑n₂ ==>  σ₁ ↑(n₁-1) ∘ σ₂ ↑n₂
- *    σ₁ ↑n ∘ a·σ₂        ==>  σ₁ ↑(n-1) ∘ σ₂
- *    a·σ₁ ∘ σ₂ ↑n        ==>  (a·σ₁ ∘ σ₂) ↑n
- *    a·σ₁ ∘ σ₂           ==>  [a, σ₂]·(σ₁ ∘ σ₂)
- *
- *    σ ∘ nil ↑n          ==>  σ ↑n
+ *    (σ ↑n₂) ↑n₁         ==>  σ ↑(n₁+n₂)                    {part of m1}
+ *    σ₁ ∘ id             ==>  σ₁                            {m2}
+ *    σ₁ ∘ σ₂ ↑n          ==>  (σ₁ ∘ σ₂) ↑n                  {part of m1}
+ *    id ∘ σ              ==>  σ                             {m3}
+ *    σ₁ ↑n ∘ a·σ₂        ==>  σ₁ ↑(n-1) ∘ σ₂                {m4 & m5}
+ *    a·σ₁ ∘ σ₂           ==>  [a, σ₂]·(σ₁ ∘ σ₂)             {m6}
  *
  * The optimisations used in FLINT would translate to:
  *
@@ -172,7 +168,7 @@ module U = Util
  *                        ==> [t₁, #0·(σ ↑) ∘ t₂·nil]
  *                        ==> [t₁, [#0, t₂·nil]·(σ ↑ ∘ t₂·nil)]
  *                        ==> [t₁, t₂·σ]
- *    [[t, σ], nil ↑n]    ==> [t, σ ∘ nil ↑n]
+ *    [[t, σ], id ↑n]     ==> [t, σ ∘ id ↑n]
  *                        ==> [t, σ ↑n]
  *
  * Confluence:
@@ -180,11 +176,13 @@ module U = Util
  *    a·σ₁ ∘ σ₂ ↑n        ==>  (a·σ₁ ∘ σ₂) ↑n
  *    a·σ₁ ∘ σ₂ ↑n        ==>  [a, σ₂ ↑n]·(σ₁ ∘ σ₂ ↑n)
  *
- * so we also need a rule
+ * so we might also need to make sure that
  *
  *     (a·σ₁ ∘ σ₂) ↑n    <==>  [a, σ₂ ↑n]·(σ₁ ∘ σ₂ ↑n)
  *
- * for confluence
+ * for confluence.  Which might boild down to adding a rule like
+ *
+ *     (a·σ₁) ↑n         <==>  [a, id ↑n]·(σ₁ ↑n)
  *)
 
 (* We define here substitutions which take a variable within a source context
@@ -208,29 +206,31 @@ type 'a subst = (* lexp subst *)
    * context Δₛ₁ΔₜΔₛ₂ where Δₛ₂ has size N and Δₜ has size M.  *)
   | Identity
   | Cons of 'a * 'a subst
-  | Shift of db_offset * 'a subst
+  | Shift of 'a subst * db_offset
   (* | Lift of db_index * db_offset *)
 
-(* Apply a substitution.  Also called `lookup`.  *)
-let apply (mkVar : 'b -> db_index -> 'a)
-          (mkShift: db_offset -> 'a -> 'a)
+(* Apply a substitution to a single variable.  *)
+let lookup (mkVar : 'b -> db_index -> 'a)
+          (mkShift: 'a -> db_offset -> 'a)
           (s: 'a subst) (l : 'b) (v:db_index) : 'a =
-  let rec apply' (o:db_offset) (s: 'a subst) (v:db_index) : 'a =
+  let rec lookup' (o:db_offset) (s: 'a subst) (v:db_index) : 'a =
     match s with
     | Identity -> mkVar l (v+o)
-    | Shift (o', s) -> apply' (o+o') s v
-    | Cons (e, s) -> if v>0 then apply' o s (v-1)
-                    else mkShift o e
-  in apply' 0 s v
+    | Shift (s, o') -> lookup' (o+o') s v
+    | Cons (e, s) -> if v>0 then lookup' o s (v-1)
+                    else mkShift e o
+  in lookup' 0 s v
 
-let mkShift (m:db_offset) s =
-  match s with Shift (n, s') -> Shift (n+m, s')
-             | _ -> if m>0 then Shift (m, s) else s
+let mkShift s (m:db_offset) =
+  if m>0 then
+    match s with Shift (s', n) -> Shift (s', n+m)
+               | _ -> Shift (s, m)
+  else s
 
 (* A substitution which adds M to every deBruijn index.
  * I.e. one that takes variables from a context Δₛ to an extended
  * context ΔₛΔₜ where Δₜ has size M.  *)
-let shift (m:db_offset) = mkShift m Identity
+let shift (m:db_offset) = mkShift Identity m
 
 (* The trivial substitution which doesn't do anything.  *)
 let identity = Identity
@@ -245,14 +245,9 @@ let compose (mkSusp : 'a -> 'a subst -> 'a)
     match s1, s2 with
     | (Identity, s2) -> s2
     | (s1, Identity) -> s1
-    | (Shift (o1, s1), Shift (o2, Identity)) -> Shift (o1+o2, s1)
-    | (s1, Shift (o, Identity)) -> Shift (o, s1)
-    | (Shift (o1, s1), Shift (o2, Cons (e, s2)))
-      -> compose' (mkShift (o1-1) s1) (mkShift o2 s2)
-    | (Shift (o1, s1), Cons (e, s2)) -> compose' (mkShift (o1-1) s1) s2
-    | (Cons (e, s1), Shift (o2, s2)) -> Shift (o2, compose' (Cons (e, s1)) s2)
+    | (s1, Shift (s2, o2)) -> mkShift (compose' s1 s2) o2
+    | (Shift (s1, o1), Cons (e, s2)) -> compose' (mkShift s1 (o1-1)) s2
     | (Cons (e, s1), s2) -> Cons (mkSusp e s2, compose' s1 s2)
-    | (_, Shift (_, Shift (_, _))) -> U.internal_error "Nested Shift!"
   in compose' s1 s2
 
 (* Adjust a substitution for use under one more binder.
@@ -260,7 +255,7 @@ let compose (mkSusp : 'a -> 'a subst -> 'a)
  * from Δs,x to Δₜ,x.
  * Also known as `lift`.  *)
 let sink (mkVar : 'b -> db_index -> 'a) (l:'b) (s:'a subst) =
-  Cons (mkVar l 0, mkShift 1 s)
+  Cons (mkVar l 0, mkShift s 1)
 
 (* Return a substitution which replaces #0 with `e`.  *)
 let substitute e = Cons (e, Identity)
