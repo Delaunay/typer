@@ -127,8 +127,9 @@ and eval_call ctx i lname args call =
             (* first lambda *)
             | Value (lxp), hd::tl -> (match lxp with
                 | Cons _ ->
-                    let cons_args = List.map (fun g -> (Aexplicit, (get_value_lexp g)))  args_val in
-                        Value(Call(lname, (cons_args)))
+                    let cons_args = List.map (fun g ->
+                        (Aexplicit, (get_value_lexp g)))  args_val in
+                            Value(Call(lname, (cons_args)))
                 | _ ->
                     (* Push first arg *)
                     let nctx = add_rte_variable None hd ctx in

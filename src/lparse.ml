@@ -117,8 +117,8 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
         | Pimm value -> (Imm(value),
             match value with
                 | Integer _ -> type_int
-                | Float _ -> type_float
-                | String _ -> lexp_error tloc "Could not find String"; dltype;
+                | Float _   -> type_float
+                | String _  -> type_string;
                 | _ -> lexp_error tloc "Could not find type";
                         pexp_print p; print_string "\n"; dltype)
 
@@ -156,17 +156,27 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
                 v, type0
 
         (* Pinductive *)
-        | Pinductive (label, [], ctors) ->
+        | Pinductive (label, formal_args, ctors) ->
+            let ctx = ref ctx in
+            (* (arg_kind * pvar * pexp option) list *)
+            let formal = List.map (fun (kind, var, opxp) ->
+                let ltp, _ = match opxp with
+                    | Some pxp -> _lexp_p_infer pxp !ctx (i + 1)
+                    | None -> dltype, dltype in
+
+                ctx := env_extend !ctx var None dltype;
+                    (kind, var, ltp)
+                ) formal_args in
+            (* (arg_kind * vdef * ltype) list *)
+
+            let ctx = !ctx in
             let map_ctor = lexp_parse_inductive ctors ctx i in
-            let v = Inductive(tloc, label, [], map_ctor) in
+            let v = Inductive(tloc, label, formal, map_ctor) in
                 v, type0
 
-        (* *)
-
-        | Plambda (kind, var, ptype, body) ->
-            let ltp, _ = match ptype with
-                | None -> dltype, dltype
-                | Some pt -> lexp_infer pt ctx in
+        (* This case can be inferred *)
+        | Plambda (kind, var, Some ptype, body) ->
+            let ltp, _ = lexp_infer ptype ctx in
 
             let nctx = env_extend ctx var None ltp in
             let lbody, lbtp = lexp_infer body nctx in
@@ -261,7 +271,12 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
 
                 Case(loc, tlxp, tltp, lpattern, dflt), (return_type)
 
-        | _ -> lexp_fatal tloc "Unhandled Pexp"
+        | Phastype (_, pxp, ptp) ->
+            let ltp, _ = lexp_infer ptp ctx in
+                (_lexp_p_check pxp ltp ctx (i + 1)), ltp
+
+        | _ -> pexp_print p; print_string "\n";
+            lexp_fatal tloc "Unhandled Pexp"
 
 and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
     let tloc = pexp_location p in
@@ -270,6 +285,35 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
     _global_lexp_trace := (i, tloc, p)::!_global_lexp_trace;
 
     match p with
+        (* This case cannot be inferred *)
+        | Plambda (kind, var, None, body) ->
+            (* Read var type from the provided type *)
+            let ltp, lbtp = match t with
+                | Arrow(kind, None, ltp, _, lbtp) -> ltp, lbtp
+                | _ -> lexp_error tloc "Type does not match"; dltype, dltype in
+
+            let nctx = env_extend ctx var None ltp in
+            let lbody = _lexp_p_check body lbtp nctx (i + 1) in
+
+                Lambda(kind, var, ltp, lbody)
+
+        | Pcall (Pvar(_, "expand_"), _args) ->(
+            let pargs = List.map pexp_parse _args in
+            let largs = _lexp_parse_all pargs ctx i in
+
+            let lxp = match largs with
+                | [lxp] -> lxp
+                | hd::tl -> lexp_error tloc "expand_ expects one lexp"; hd
+                | _ -> lexp_fatal tloc "expand_ expects one lexp" in
+
+            (* eval argument *)
+            let sxp = match eval lxp (from_lctx ctx) with
+                | Vsexp(sxp) -> sxp
+                | _ -> lexp_fatal tloc "expand_ expects sexp" in
+
+            let pxp = pexp_parse sxp in
+                _lexp_p_check pxp t ctx (i + 1))
+
     | _ -> let (e, inferred_t) = _lexp_p_infer p ctx (i + 1) in
         (* FIXME: check that inferred_t = t!  *)
         e
@@ -323,19 +367,9 @@ and lexp_call (fname: pexp) (_args: sexp list) ctx i =
                 Call(vf, new_args), ret_type
 
             (* Is it a macro ? *)
-            | Some Builtin (_, "expand_", _) ->(
-                let lxp = match largs with
-                    | [lxp] -> lxp
-                    | hd::tl -> lexp_error loc "expand_ one lexp"; hd
-                    | _ -> lexp_fatal loc "expand_ one lexp" in
-
-                (* eval argument *)
-                let sxp = match eval lxp (from_lctx ctx) with
-                    | Vsexp(sxp) -> sxp
-                    | _ -> lexp_fatal loc "expand_ expects sexp" in
-
-                let pxp = pexp_parse sxp in
-                    lexp_p_infer pxp ctx)
+            | Some Builtin (_, "expand_", _) ->
+                lexp_error loc "expand_ require type annotation";
+                dltype, dltype
 
             (* a builtin functions *)
             | Some e -> Call(e, new_args), ret_type
@@ -499,40 +533,22 @@ and _lexp_decls decls ctx i: (((vdef * lexp * ltype) list) * lexp_context) =
     let rec merge_decls (decls: (pvar * pexp * bool) list) merged acc:
                 ((location * pexp option * pexp option * int) SMap.t * string list)  =
 
-        (*  we cant evaluate here because variable are not in the environment *)
+        (*  we cant evaluate here because variables are not in the environment *)
         match decls with
             | [] -> merged, (List.rev acc)
-            | hd::tl ->
-                match hd with
-                (*  Type Info: Var:Type *)
-                | ((loc, name), type_info, true) -> begin
-                    try let (l, inst, _, i) = SMap.find name merged in
-                        let new_decl = (l, inst, Some type_info, i) in
-                        let nmerged = SMap.add name new_decl merged in
-                            (merge_decls tl nmerged acc)
-
+            | ((loc, name), pxp, bl)::tl ->
+                let (l, opxp, optp, i), acc = try (SMap.find name merged), acc
                     with Not_found ->
-                        (* add variable to ctx *)
-                        let new_decl = (loc, None, Some type_info, !idx) in
-                        let nmerged = SMap.add name new_decl merged in
-                            idx := !idx + 1;
-                            ctx := env_extend (!ctx) (loc, name) None dltype;
-                            (merge_decls tl nmerged (name::acc)) end
+                        idx := !idx + 1;
+                        ctx := env_extend (!ctx) (loc, name) None dltype;
+                        (loc, None, None, !idx - 1), (name::acc) in
 
-                (* Instruction: Var = expr *)
-                | ((loc, name), inst, false) -> begin
-                    try let (l, _, tp, i) = SMap.find name merged in
-                        let new_decl = (l, Some inst, tp, i) in
-                        let nmerged = SMap.add name new_decl merged in
-                            (merge_decls tl nmerged acc)
+                let new_decl = match bl with
+                    | true  -> (l, opxp, Some pxp, i)
+                    | false -> (l, Some pxp, optp, i) in
 
-                    with Not_found ->
-                        (* add variable to ctx *)
-                        let new_decl = (loc, Some inst, None, !idx) in
-                        let nmerged = SMap.add name new_decl merged in
-                            idx := !idx + 1;
-                            ctx := env_extend (!ctx) (loc, name) None dltype;
-                            (merge_decls tl nmerged (name::acc)) end in
+                let nmerged = SMap.add name new_decl merged in
+                    (merge_decls tl nmerged acc) in
 
     let mdecls, ord = merge_decls decls SMap.empty [] in
 
@@ -572,9 +588,9 @@ and _lexp_decls decls ctx i: (((vdef * lexp * ltype) list) * lexp_context) =
                 n := !n - 1;
 
             match opxp, otpxp with
-                | Some pxp, Some _ ->
+                | Some pxp, Some ptp ->
                     let ltp = env_lookup_type ctx vref in
-                    let lxp, _ = _lexp_p_infer pxp ctx (i + 1) in
+                    let lxp = _lexp_p_check pxp ltp ctx (i + 1) in
                         (env_set_var_info ctx vref (Some lxp) ltp);
                         lst := (vdef, lxp, ltp)::!lst
 

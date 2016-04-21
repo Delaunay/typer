@@ -57,6 +57,7 @@ let _ = (add_test "MACROS" "macros base" (fun () ->
         sqr_sexp = (node_ (symbol_ \"lambda_->_\") (symbol_ \"x\")
             (node_ (symbol_ \"_*_\") (symbol_ \"x\") (symbol_ \"x\")));
 
+        sqr : Int -> Int;
         sqr = (expand_ sqr_sexp);" in
 
     let rctx, lctx = eval_decl_str dcode lctx rctx in

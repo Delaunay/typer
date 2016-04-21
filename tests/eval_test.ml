@@ -97,8 +97,13 @@ let _ = (add_test "EVAL" "Let" (fun () ->
 let _ = (add_test "EVAL" "Lambda" (fun () ->
     reset_eval_trace ();
 
+    let dcode = "
+        sqr : Int -> Int;
+        sqr = lambda x -> x * x;
+    " in
+
     (* Declare lambda *)
-    let rctx, lctx = eval_decl_str "sqr = lambda x -> x * x;" lctx rctx in
+    let rctx, lctx = eval_decl_str dcode lctx rctx in
 
     (* Eval defined lambda *)
     let ret = eval_expr_str "(sqr 4);" lctx rctx in
@@ -113,7 +118,10 @@ let _ = (add_test "EVAL" "Nested Lambda" (fun () ->
     reset_eval_trace ();
 
     let code = "
+        sqr : Int -> Int;
         sqr = lambda x -> x * x;
+
+        cube : Int -> Int;
         cube = lambda x -> x * (sqr x);" in
 
     (* Declare lambda *)
@@ -204,9 +212,9 @@ let nat_decl = "
     zero = inductive-cons Nat zero;
     succ = inductive-cons Nat succ;
 
-    tonum : Nat -> Int;
-    tonum = lambda (x : Nat) -> case x
-            | (succ y) => (1 + (tonum y))
+    to-num : Nat -> Int;
+    to-num = lambda (x : Nat) -> case x
+            | (succ y) => (1 + (to-num y))
             | zero => 0;"
 ;;
 
@@ -226,7 +234,7 @@ let _ = (add_test "EVAL" "Inductive::Recursive Call" (fun () ->
 
     let rctx, lctx = eval_decl_str code lctx rctx in
 
-    let rcode = "(tonum zero); (tonum one); (tonum two);"in
+    let rcode = "(to-num zero); (to-num one); (to-num two);"in
 
     (* Eval defined lambda *)
     let ret = eval_expr_str rcode lctx rctx in
@@ -261,9 +269,9 @@ let _ = (add_test "EVAL" "Inductive::Nat Plus" (fun () ->
     let rctx, lctx = eval_decl_str code lctx rctx in
 
     let rcode = "
-        (tonum (plus zero two));
-        (tonum (plus two zero));
-        (tonum (plus two one));"in
+        (to-num (plus zero two));
+        (to-num (plus two zero));
+        (to-num (plus two one));"in
 
     (* Eval defined lambda *)
     let ret = eval_expr_str rcode lctx rctx in
@@ -348,19 +356,66 @@ let _ = (add_test "EVAL" "Partial Application" (fun () ->
             | _ -> failure ()
 ));;
 
-(*
+
+let list_decl = "
+List : Type;
 List = inductive_ (dList (a : Type)) (nil) (cons a (List a));
 
 nil = inductive-cons List nil;
 cons = inductive-cons List cons;
 
-length : (a : Type) => List a -> Nat;
-length = lambda a => lambda (xs : List a) ->
+% length : (a : Type) => List a -> Int;
+% length = lambda a =>
+length : List a -> Int;
+length = lambda (xs : List a) ->
     case xs
-        | nil => zero
-        | cons x xs => succ (length xs);
-*)
+        | nil => 0
+        | cons hd tl => (1 + length tl);
 
+% head : (a : Type) => List a -> a;
+% head = lambda a =>
+head : List a -> a;
+head = lambda (xs : List a) ->
+    case xs
+        | nil => nil
+        | cons hd tl => hd;
+
+% tail : (a : Type) => List a -> List a;
+% tail = lambda a =>
+tail : List a -> List a;
+tail = lambda (xs : List a) ->
+    case xs
+        | nil => nil
+        | cons hd tl => tl;
+";;
+
+let _ = (add_test "EVAL" "List" (fun () ->
+    reset_eval_trace ();
+
+    let dcode = list_decl ^ "
+        my_list = (cons 1 (cons 2 (cons 3 (cons 4 nil))));
+    " in
+
+    let rctx, lctx = eval_decl_str dcode lctx rctx in
+
+    let rcode = "(length my_list);
+                 (head my_list);
+                 (head (tail my_list));" in
+
+    (* Eval defined lambda *)
+    let ret = eval_expr_str rcode lctx rctx in
+        (* Expect a 3 results *)
+        match ret with
+            | [a; b; c] ->
+                let t1 = expect_equal_int (get_int a) 4 in
+                let t2 = expect_equal_int (get_int b) 1 in
+                let t3 = expect_equal_int (get_int c) 2 in
+                    if t1 = 0 && t2 = 0 && t3 = 0 then
+                        success ()
+                    else
+                        failure ()
+            | _ -> failure ()
+));;
 
 
 (* run all tests *)

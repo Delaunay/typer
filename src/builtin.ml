@@ -40,7 +40,6 @@ open Debruijn
 open Env       (* get_rte_variable *)
 
 
-
 let builtin_error loc msg =
     msg_error "BUILT-IN" loc msg;
     raise (internal_error msg)
@@ -115,12 +114,14 @@ let _generic_binary_iop name f loc (args_val: value_type list) (ctx: runtime_env
     (* i.e we don't need to push x and y in the context. *)
     (* We don't even need the context                    *)
     let l, r = match args_val with
-        | [a; b] -> (get_int a), (get_int b)
+        | [a; b] -> a, b
         | _ -> builtin_error loc (name ^ " expects 2 arguments") in
 
-        match l, r with
+        match (get_int l), (get_int r) with
             | Some v, Some w -> Value(Imm(Integer (loc, (f v w))))
-            | _ -> builtin_error loc (name ^ " expects Integers as arguments")
+            | _ ->
+                value_print l; print_string " "; value_print r;
+                builtin_error loc (name ^ " expects Integers as arguments")
 ;;
 
 let iadd_impl  = _generic_binary_iop "Integer::add"  (fun a b -> a + b)
@@ -128,6 +129,13 @@ let isub_impl  = _generic_binary_iop "Integer::sub"  (fun a b -> a - b)
 let imult_impl = _generic_binary_iop "Integer::mult" (fun a b -> a * b)
 let idiv_impl  = _generic_binary_iop "Integer::div"  (fun a b -> a / b)
 
+(*
+let eq_impl loc args_val ctx =
+    let l, r = match args_val with
+        | [a; b] -> a, b
+        | _ -> builtin_error loc "_=_ expects 2 arguments") in
+
+    conv_p l r *)
 
 (* loc is given by the compiler *)
 let none_fun = (fun loc args_val ctx ->
@@ -197,10 +205,11 @@ let builtin_expand  = Builtin (SexpType, "expand_", type_mexpand)
 (* Built-in list of types/functions *)
 (* Some of the information is redundant but it suppress a lot of warnings *)
 let typer_builtins = [
-(*    NAME  | LXP       | Type | impl      *)
-    ("Type" , type0     , type0, none_fun);
-    ("Int"  , type_int  , type0, none_fun);
-    ("Float", type_float, type0, none_fun);
+(*    NAME   | LXP        | Type | impl      *)
+    ("Type"  , type0      , type0, none_fun);
+    ("Int"   , type_int   , type0, none_fun);
+    ("Float" , type_float , type0, none_fun);
+    ("String", type_string, type0, none_fun);
 
 (* Built-in Functions *)
     ("_=_"  , builtin_eq,    type_eq,    none_fun);   (*  t  ->  t  -> bool *)

@@ -1,0 +1,123 @@
+%*
+%*      Typer Compiler
+%*
+%* ---------------------------------------------------------------------------
+%*
+%(*     Copyright (C) 2011-2016  Free Software Foundation, Inc.
+%*
+%*   Author: Pierre Delaunay <pierre.delaunay@hec.ca>
+%*   Keywords: languages, lisp, dependent types.
+%*
+%*   This file is part of Typer.
+%*
+%*   Typer is free software; you can redistribute it and/or modify it under the
+%*   terms of the GNU General Public License as published by the Free Software
+%*   Foundation, either version 3 of the License, or (at your option) any
+%*   later version.
+%*
+%*   Typer is distributed in the hope that it will be useful, but WITHOUT ANY
+%*   WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+%*   FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+%*   more details.
+%*
+%*   You should have received a copy of the GNU General Public License along
+%*   with this program.  If not, see <http://www.gnu.org/licenses/>.
+%*
+%* ---------------------------------------------------------------------------
+%*
+%*      Description:
+%*          Build a very basic symbolic differentiation library
+%*
+%*      Limitations:
+%*          - Only (add) and (mult)
+%*          - Only a single unknown
+%*          - Only Integer operations
+%*
+%* ---------------------------------------------------------------------------*)
+
+Sym : Type;
+Sym = inductive_ (dSym)
+    % leafs
+    (constant Int)
+    (placeholder String)
+
+    % Nodes
+    (add Sym Sym)
+    (mult Sym Sym)
+    (inv Sym)
+    (neg Sym);
+
+constant    = inductive-cons Sym constant;
+placeholder = inductive-cons Sym placeholder;
+add         = inductive-cons Sym add;
+mult        = inductive-cons Sym mult;
+inv         = inductive-cons Sym inv;
+neg         = inductive-cons Sym neg;
+
+div : Sym -> Sym -> Sym;
+div = lambda (up : Sym) ->
+    lambda (down : Sym) ->
+        (mult up (inv down));
+
+sub : Sym -> Sym -> Sym;
+sub = lambda (x : Sym) ->
+    lambda (y : Sym) ->
+        (add x (neg y));
+
+sqr : Sym -> Sym;
+sqr = lambda (x : Sym) ->
+    mult x x;
+
+zero = constant 0;
+one  = constant 1;
+two  = constant 2;
+
+% p should be even
+%pow : Sym -> Int -> Sym;
+%pow = lambda *x : Sym) -> lambda (p : Int) ->
+%    case p
+%        | 0 -> one
+%        | 1 -> x
+%        | _ -> mult (pow x (p / 2)) (pow x (p / 2));
+
+eval : Int -> Sym -> Int;
+eval = lambda (value : Int) ->
+    lambda (s : Sym) -> case s
+        | constant v => v
+        | placeholder _ => value
+        | add s1 s2 => ((eval value s1) + (eval value s2))
+        | mult s1 s2 => (eval value s1) * (eval value s2);
+%        | inv s => (1 / (eval value s))
+%        | neg s => (- (eval value s))
+
+%print : Sym -> Type;
+%print = lambda (s : Sym) ->
+%    case s
+%        | constant v => to-string v
+%        | placeholder n => to-string n
+%        | add s1 s2 => to-string s1 "+" s2
+%        | mult s1 s2 => to-string s1 "*" s2;
+%        | inv s => to-string "1/" s
+%        | neg s => to-string  "-" s;
+
+deriv : Sym -> Sym;
+deriv = lambda (s : Sym) ->
+    case s
+        | constant v => zero
+        | placeholder _ => one
+        | add s1 s2 => (add (deriv s1) (deriv s2))
+        | mult s1 s2 => let ds1 = (deriv s1); ds2 = (deriv s2); in
+            (add (mult ds1 s2) (mult ds2 s1));
+%        | inv s => let up = (deriv s); down = (mult s s); in
+%            (neg (div up (sqr down)))
+%        | neg s => (- (deriv s));
+
+y = placeholder "y";
+expr = mult y y;                % y ^ 2
+
+v1 = eval 4 expr;               % 16
+main = eval 4 (deriv expr);     % 8
+
+
+
+

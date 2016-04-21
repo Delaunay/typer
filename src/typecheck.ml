@@ -28,7 +28,7 @@ open Sexp
 (* open Myers *)
 (* open Grammar *)
 open Lexp
-open Builtin        (* type_float *)
+
 (* open Unify *)
 module S = Subst
 module L = List
@@ -174,7 +174,7 @@ let rec unsusp e s =            (* Push a suspension one level down.  *)
             | Some e -> Some (mkSusp e s))
 
 (********* Testing if a lexp is properly typed  *********)
-                           
+
 type varbind =
   | Variable
   | ForwardRef
@@ -288,4 +288,4 @@ let rec check ctx e =
       (* FIXME: If there are no branches nor default, then we have no
        * way to infer the type!  *)
       (* FIXME: Check branches and default!  *)
-      
+
