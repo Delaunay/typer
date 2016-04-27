@@ -467,10 +467,10 @@ and lexp_parse_inductive ctors ctx i =
 
 (*  Parse let declaration *)
 and lexp_p_decls decls ctx = _lexp_decls decls ctx 1
-and _lexp_decls decls ctx i: (((vdef * lexp * ltype) list) * lexp_context) =
+and _lexp_decls decls octx i: (((vdef * lexp * ltype) list) * lexp_context) =
     (* (pvar * pexp * bool) list * )
 
-    let ctx = ref ctx in
+    let ctx = ref octx in
     let mdecls = ref SMap.empty in
     let order = ref [] in
     let found = ref false in
@@ -497,7 +497,6 @@ and _lexp_decls decls ctx i: (((vdef * lexp * ltype) list) * lexp_context) =
                 | Some ltp -> (_lexp_p_check pxp ltp denv (i + 1)), ltp in
 
             (* update declaration *)
-            (* FIXME: modify env when lxp is found *)
             let new_decl = match bl with
                 | true  -> (if !found then () else ctx := env_extend (!ctx) (loc, name) None lxp);
                     (l, olxp, Some lxp, i)
@@ -512,6 +511,7 @@ and _lexp_decls decls ctx i: (((vdef * lexp * ltype) list) * lexp_context) =
     let ctx = !ctx in
     let mdecls = !mdecls in
     let order = !order in
+
     (* Cast Map to list *)
     let ndecls = List.map (fun name ->
         let (l, inst, tp, _) = SMap.find name mdecls in
@@ -523,9 +523,16 @@ and _lexp_decls decls ctx i: (((vdef * lexp * ltype) list) * lexp_context) =
                 | None, None         -> lexp_warning l "No expression, No Type";
                     ((l, name), dltype, dltype)) order in
 
-        (List.rev ndecls), ctx *)
+    let ndecls = (List.rev ndecls) in
 
-    let ctx = ref ctx in
+    (* Build a new environment using ndecls *)
+    (* or I could go through original decls *)
+    let ctx = List.fold_left (fun ctx ((l, name), lxp, ltp) ->
+            env_extend ctx (l, name) (Some lxp) ltp) octx ndecls in
+
+        ndecls, ctx *)
+
+    let ctx = ref octx in
     let idx = ref 0 in
 
     (* Merge Type info and declaration together

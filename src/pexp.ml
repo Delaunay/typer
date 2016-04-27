@@ -187,21 +187,13 @@ and pexp_p_actual_arg arg : (arg_kind * pvar option * pexp) =
   | e -> (Aexplicit, None, pexp_parse e)
 
 and pexp_p_formal_arg arg : (arg_kind * pvar * pexp option) =
-  (* FYI: None of the formal arg type work *)
-  (*  (a ::: Type) -> (a ::: Type) instead of (::: a Type)
-   *  (a :: Type)  -> (a ::  Type) instead of (:: a Type)
-   *  (a : Type)   -> (_:_ a Type) instead of (_:_ a Type)  *)
   match arg with
-  | Node (Symbol (_, ":::"), [Symbol s; e])
+  | Node (Symbol (_, "_:::_"), [Symbol s; e])
     -> (Aerasable, s, Some (pexp_parse e))
-  | Node (Symbol (_, "::"), [Symbol s; e])
+  | Node (Symbol (_, "_::_"), [Symbol s; e])
     -> (Aimplicit, s, Some (pexp_parse e))
-  | Node (Symbol (_, ":"), [Symbol s; e])
-    -> (Aexplicit, s, Some (pexp_parse e))
-  (* ------ FIXME: temp FIX ------ *)
   | Node (Symbol (_, "_:_"), [Symbol s; e])
     -> (Aexplicit, s, Some (pexp_parse e))
-  (* ------ --------------- ------ *)
   | Symbol s -> (Aexplicit, s, None)
   | _ -> sexp_print arg;
         (pexp_error (sexp_location arg) "Unrecognized formal arg");

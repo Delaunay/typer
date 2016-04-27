@@ -12,16 +12,14 @@ open Utest_lib
  * a = (lambda_->_ x (_+_ (_+_ x x) x)) *)
 let _ = (add_test "SEXP" "lambda x -> x + x" (fun () ->
 
-  let dcode = "lambda x -> x + x;" in
+    let dcode = "lambda x -> x + x;" in
 
-  let ret = sexp_parse_str dcode in
-    match ret with
-      | [n] ->(match n with
-        | Node(Symbol(_, "lambda"), [arg; body]) -> success ()
-            (* arg = Symbol(_, "x") *)
-            (* body = Node(Symbol(_, "_+_"), [Symbol(_, "x"); Symbol(_, "x")]) *)
-        | _ -> failure ())
-      | _ -> failure ()
+    let ret = sexp_parse_str dcode in
+        match ret with
+          | [Node(lbd, [x; add])] -> (match lbd, x, add with
+            | (Symbol(_, "lambda_->_"), Symbol(_, "x"),
+               Node(Symbol(_, "_+_"), [Symbol(_, "x"); Symbol(_, "x")])) -> success ())
+          | _ -> failure ()
 ));;
 
 

@@ -206,6 +206,7 @@ type 'a subst = (* lexp subst *)
    * context Δₛ₁ΔₜΔₛ₂ where Δₛ₂ has size N and Δₜ has size M.  *)
   | Identity
   | Cons of 'a * 'a subst
+  (* we enter a let/lambda/case/inductive (with formal args) *)
   | Shift of 'a subst * db_offset
   (* | Lift of db_index * db_offset *)
 

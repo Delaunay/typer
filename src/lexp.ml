@@ -665,8 +665,9 @@ and _lexp_to_str ctx exp =
 
         | Builtin (_, name, _) -> name
 
-        | Sort (_, _) -> "Sort"
-        | SortLevel _ -> "SortLevel"
+        | Sort (_, Stype lvl) -> (match lvl with
+            | SortLevel (SLn 0) -> "Type"
+            | SortLevel (SLn v) -> "Type" ^ (string_of_int v))
 
         | _ -> print_string "Printing Not Implemented"; ""
 

@@ -5,18 +5,19 @@ CPL_FILES := $(wildcard ./_build/src/*.cmo)
 TEST_FILES := $(wildcard ./tests/*_test.ml)
 
 OBFLAGS = -build-dir _build
-COMPILE_MODE = native
+# COMPILE_MODE = native
 
 all: ityper typer debug tests-build
 
 ifeq ($(OS), Windows_NT)
 # Windows need '-r' and building to native can be problematic (linking error)
 # So we build to byte instead
-
 OBFLAGS = $(OBFLAGS) -r
+endif
+
 COMPILE_MODE = byte
 
-endif
+
 
 
 typer:
