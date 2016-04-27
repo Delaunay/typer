@@ -90,6 +90,9 @@ let rec _eval lxp ctx i: (value_type) =
             let nctx = _eval_decls decls ctx i in
                 _eval inst nctx (i + 1)
 
+        (* I don't really know why Built-in is ever evaluated... but it is sometimes *)
+        | Builtin _ -> Vdummy
+
         (* Built-in Function *)
         | Call(Builtin(btype, str, ltp), args)->
             (* built-in does not have location info. So we extract it from args *)
@@ -105,13 +108,14 @@ let rec _eval lxp ctx i: (value_type) =
         (* Case *)
         | Case (loc, target, _, pat, dflt) -> (eval_case ctx i loc target pat dflt)
 
+
         | _ -> print_string "debug catch-all eval: ";
             lexp_print lxp; Value(Imm(String(dloc, "eval Not Implemented")))
 
 and eval_var ctx lxp v =
     let ((loc, name), idx) = v in
     try get_rte_variable (Some name) (idx) ctx
-    with Not_found ->
+    with e ->
         eval_error loc ("Variable: " ^ name ^ (str_idx idx) ^ " was not found ")
 
 and eval_call ctx i lname args call =
@@ -146,8 +150,9 @@ and eval_call ctx i lname args call =
 
             (* No more arguments *)
             | Closure (_, _), [] -> body
-            | Value (lxp), [] -> body
-            | _ -> eval_error dloc "Cannot eval function" in
+            | _, [] -> body
+            | _ -> value_print body;
+                eval_error dloc "Cannot eval function" in
 
         eval_call body args_val clean_ctx
 
@@ -331,16 +336,25 @@ let from_lctx (ctx: lexp_context): runtime_env =
     let bsize = List.length typer_builtins in
     let csize = get_size ctx in
 
+    (* add all variables *)
     for i = bsize to csize do
-        let (_, (_, name), exp, _) = !(Myers.nth (csize - i) env) in
+        let (_, (_, name), _, _) = !(Myers.nth (csize - i) env) in
+        rctx := add_rte_variable (Some name) Vdummy (!rctx)
+    done;
+
+    let diff = csize - bsize in
+
+    (* process all of them *)
+    for i = 0 to diff do
+        let j = diff - i (* - 1 *) in
+        let (_, (_, name), exp, _) = !(Myers.nth j env) in
 
         let vxp = match exp with
             | Some lxp -> (eval lxp !rctx)
             | None -> Vdummy in
 
-                rctx := add_rte_variable (Some name) vxp (!rctx)
+                rctx := set_rte_variable j (Some name) vxp (!rctx)
     done;
-
         !rctx
 
 

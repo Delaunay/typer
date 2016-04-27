@@ -1,0 +1,14 @@
+
+sqr_fun = node_ (symbol_ "lambda_->_") (symbol_ "x")
+    (node_ (symbol_ "_*_") (symbol_ "x") (symbol_ "x"));
+
+sqr_type = node_ (symbol_ "_->_") (symbol_ "Int") (symbol_ "Int");
+
+give_type : Sexp -> Sexp -> Sexp;
+give_type = lambda expr ->
+    lambda tp ->
+        node_ (symbol_ "_:_") expr tp;
+
+sqr = Macro_ (give_type sqr_fun sqr_type);
+
+main = (sqr 2);

@@ -56,9 +56,9 @@ let type_omega = Sort (dloc, StypeOmega)
 let type_level = Sort (dloc, StypeLevel)
 let type_level = Builtin (LevelType, "TypeLevel", type_level)
 
-
-let type_int = Builtin (IntType, "Int", type0)
+let type_int    = Builtin (IntType, "Int", type0)
 let type_float = Builtin (FloatType, "Float", type0)
+let type_sexp  = Builtin (SexpType, "sexp", type0)
 
 let op_binary t =  Arrow (Aexplicit, None, t, dloc,
                         Arrow (Aexplicit, None, t, dloc, t))
@@ -77,7 +77,7 @@ let type_eq = let lv = (dloc, "l") in
 let builtin_iadd  = Builtin (IAdd, "_+_", iop_binary)
 let builtin_imult = Builtin (IMult, "_*_", iop_binary)
 let builtin_eq    = Builtin (EqType, "_=_", type_eq)
-let builtin_sexp  = Builtin (SexpType, "sexp", type0)
+
 (*
 let builtin_fadd = Builtin (FAdd, "_+_", fop_binary)
 let builtin_fmult = Builtin (FMult, "_*_", fop_binary) *)
@@ -178,12 +178,12 @@ let make_float loc args_val ctx   = Value(type0)
 let type_string   = type0
 let type_mblock   = type0
 
-let type_msymbol  = Arrow (Aexplicit, None, type_string, dloc, builtin_sexp)
-let type_mstring  = Arrow (Aexplicit, None, type_string, dloc, builtin_sexp)
-let type_minteger = Arrow (Aexplicit, None, type_int,    dloc, builtin_sexp)
-let type_mfloat   = Arrow (Aexplicit, None, type_float,  dloc, builtin_sexp)
-let type_mnode    = Arrow (Aexplicit, None, builtin_sexp,dloc, builtin_sexp)
-let type_mexpand  = Arrow (Aexplicit, None, builtin_sexp,dloc, type0)
+let type_msymbol  = Arrow (Aexplicit, None, type_string, dloc, type_sexp)
+let type_mstring  = Arrow (Aexplicit, None, type_string, dloc, type_sexp)
+let type_minteger = Arrow (Aexplicit, None, type_int   , dloc, type_sexp)
+let type_mfloat   = Arrow (Aexplicit, None, type_float , dloc, type_sexp)
+let type_mnode    = Arrow (Aexplicit, None, type_sexp  , dloc, type_sexp)
+let type_mexpand  = Arrow (Aexplicit, None, type_sexp  , dloc, type0)
 
 let builtin_block   = Builtin (SexpType, "block_", type_mblock)
 let builtin_symbol  = Builtin (SexpType, "symbol_", type_msymbol)
@@ -191,8 +191,15 @@ let builtin_string  = Builtin (SexpType, "string_", type_mstring)
 let builtin_integer = Builtin (SexpType, "integer_", type_minteger)
 let builtin_float   = Builtin (SexpType, "float_", type_mfloat)
 let builtin_node    = Builtin (SexpType, "node_", type_mnode)
-let builtin_expand  = Builtin (SexpType, "expand_", type_mexpand)
+(* let builtin_expand  = Builtin (SexpType, "expand_", type_mexpand) *)
 
+let type_macro =
+    let ctors = SMap.empty in
+    let ctors = SMap.add "Macro_" [(Aexplicit, None, type_sexp)] ctors in
+        Inductive (dloc, (dloc, "built-in"), [], ctors)
+
+let builtin_macro = Cons (((dloc, "Macro"), (-4)), (dloc, "Macro_"))
+let macro_cons =  Arrow (Aexplicit, None, type_sexp  , dloc, type_macro)
 (*
  *  Should we have a function that
  *      -> returns a new context inside typer ? (So we need to add a ctx type too)
@@ -210,12 +217,14 @@ let typer_builtins = [
     ("Int"   , type_int   , type0, none_fun);
     ("Float" , type_float , type0, none_fun);
     ("String", type_string, type0, none_fun);
+    ("Sexp"  , type_sexp  , type0, none_fun);
+    ("Macro" , type_macro , type0, none_fun);
 
 (* Built-in Functions *)
-    ("_=_"  , builtin_eq,    type_eq,    none_fun);   (*  t  ->  t  -> bool *)
-    ("_+_"  , builtin_iadd,  iop_binary, iadd_impl);  (* int -> int -> int  *)
-    ("_*_"  , builtin_imult, iop_binary, imult_impl); (* int -> int -> int  *)
-
+    ("_=_"   , builtin_eq,    type_eq,    none_fun);   (*  t  ->  t  -> bool *)
+    ("_+_"   , builtin_iadd,  iop_binary, iadd_impl);  (* int -> int -> int  *)
+    ("_*_"   , builtin_imult, iop_binary, imult_impl); (* int -> int -> int  *)
+    ("Macro_", builtin_macro, macro_cons, none_fun);
 (*  Macro primitives *)
     ("block_"  , builtin_block  , type_mblock  , make_block);
     ("symbol_" , builtin_symbol , type_msymbol , make_symbol);
@@ -223,7 +232,7 @@ let typer_builtins = [
     ("integer_", builtin_integer, type_minteger, make_integer);
     ("float_"  , builtin_float  , type_mfloat  , make_float);
     ("node_"   , builtin_node   , type_mnode   , make_node);
-    ("expand_" , builtin_expand , type_mexpand , none_fun);
+    (* ("expand_" , builtin_expand , type_mexpand , none_fun); *)
 
 (* Macros primitives type ? *)
 

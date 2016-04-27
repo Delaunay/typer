@@ -1,0 +1,24 @@
+
+% define Sexp constructor
+Sexp : Type;
+Sexp = inductive_ (built-in) (block_ Sexp)
+    (symbol_ string) (string_ string) (integer_ Int) (float_ Float)
+    (node_ Sexp List Sexp);
+
+Macro : Type;
+Macro = inductive_ (built-in) (Macro_ sexp);
+
+%% Basic usage
+%
+%   sqr = (Macro_
+%       (node_ (symbol_ "lambda_->_") (symbol "x")
+%           (node_ "_*_" (symbol "x") (symbol "x"))));
+%
+%   (sqr 4); % <=>  4 * 4
+%
+%
+%% Using Quasi Quote `
+%
+%   sqr = (Macro_ (qq (lambda x -> ,x * ,x)));
+%
+%   (sqr 4); % <=>  4 * 4

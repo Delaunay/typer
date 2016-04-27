@@ -54,6 +54,7 @@ type builtin =
   | IMult
   | EqType
   | LevelType
+  | MacroType
 
 (* Pour la propagation des types bidirectionnelle, tout va dans `infer`,
  * sauf Lambda et Case qui vont dans `check`.  Je crois.  *)
@@ -583,6 +584,10 @@ and _lexp_to_str ctx exp =
         match k with
             | Aexplicit -> "->" | Aimplicit -> "=>" | Aerasable -> "≡>" in
 
+    let kindp_str k =
+        match k with
+            | Aexplicit -> ":" | Aimplicit -> "::" | Aerasable -> ":::" in
+
     match exp with
         | Imm(value) -> (match value with
             | String (_, s) -> tval ("\"" ^ s ^ "\"")
@@ -640,8 +645,17 @@ and _lexp_to_str ctx exp =
 
                     "(" ^ (fun_call (lexp_to_str fname)) ^ args ^ ")")
 
-        | Inductive (_, (_, name), _, ctors) ->
-            (keyword "inductive_") ^ " (" ^ name ^ ") " ^ (lexp_str_ctor ctx ctors)
+        | Inductive (_, (_, name), [], ctors) ->
+            (keyword "inductive_") ^ " (" ^ name ^") " ^
+                                            (lexp_str_ctor ctx ctors)
+
+        | Inductive (_, (_, name), args, ctors) ->
+            let args_str = List.fold_left (fun str (arg_kind, (_, name), ltype) ->
+                str ^ " (" ^ name ^ " " ^ (kindp_str arg_kind) ^ " " ^ (lexp_to_str ltype) ^ ")")
+                "" args in
+
+            (keyword "inductive_") ^ " (" ^ name ^ args_str ^") " ^
+                                            (lexp_str_ctor ctx ctors)
 
         | Case (_, target, tpe, map, dflt) ->(
             let str = (keyword "case ") ^ (lexp_to_str target) ^
@@ -667,7 +681,8 @@ and _lexp_to_str ctx exp =
 
         | Sort (_, Stype lvl) -> (match lvl with
             | SortLevel (SLn 0) -> "Type"
-            | SortLevel (SLn v) -> "Type" ^ (string_of_int v))
+            | SortLevel (SLn v) -> "Type" ^ (string_of_int v)
+            | _ -> "Type")
 
         | _ -> print_string "Printing Not Implemented"; ""
 

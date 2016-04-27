@@ -134,7 +134,7 @@ let set_rte_variable idx name (lxp: value_type) ctx =
     match (n, name) with
         | Some n1, Some n2 ->
             if (n1 != n2) then
-                env_error dloc ("Variable Name must Match:" ^ n1 ^ " " ^ n2)
+                env_error dloc ("Variable's Name must Match: " ^ n1 ^ " vs " ^ n2)
             else(
                 ref_cell := (name, lxp); ctx)
 

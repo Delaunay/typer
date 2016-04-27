@@ -143,16 +143,14 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
                 Let(tloc, decl, bdy), ltp
 
         (* ------------------------------------------------------------------ *)
-        | Parrow (kind, Some var, tp, loc, expr) ->
-            let ltyp, _ = lexp_infer tp ctx in
-            let lxp, _ = lexp_infer expr ctx in
-            let v = Arrow(kind, Some var, ltyp, tloc, lxp) in
-                v, type0
+        | Parrow (kind, ovar, tp, loc, expr) ->
+            let ltp, _ = lexp_infer tp ctx in
+            let ctx = match ovar with
+                | None -> ctx
+                | Some var ->  env_extend ctx var None ltp in
 
-        | Parrow (kind, None, tp, loc, expr) ->
-            let ltyp, _ = lexp_infer tp ctx in
             let lxp, _ = lexp_infer expr ctx in
-            let v = Arrow(kind, None, ltyp, tloc, lxp) in
+            let v = Arrow(kind, ovar, ltp, tloc, lxp) in
                 v, type0
 
         (* Pinductive *)
@@ -169,14 +167,25 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
                 ) formal_args in
             (* (arg_kind * vdef * ltype) list *)
 
+            (* -- Should I do that ?? --*)
+            let rec make_type args tp =
+                match args with
+                    | (kind, (loc, n), ltp)::tl ->
+                        make_type tl (Arrow(kind, Some (loc, n), ltp, loc, tp))
+                    | [] -> tp in
+
             let ctx = !ctx in
             let map_ctor = lexp_parse_inductive ctors ctx i in
             let v = Inductive(tloc, label, formal, map_ctor) in
-                v, type0
+                v, (make_type formal type0)
 
         (* This case can be inferred *)
-        | Plambda (kind, var, Some ptype, body) ->
-            let ltp, _ = lexp_infer ptype ctx in
+        | Plambda (kind, var, optype, body) ->
+            let ltp, _ = match optype with
+                | Some ptype -> lexp_infer ptype ctx
+                (* This case must have been lexp_p_check *)
+                | None -> lexp_error tloc "Lambda require type annotation";
+                    dltype, dltype in
 
             let nctx = env_extend ctx var None ltp in
             let lbody, lbtp = lexp_infer body nctx in
@@ -267,6 +276,7 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
                 | hd::tl, Some _ -> hd
                 | hd::tl, None -> hd
                 | _, Some v -> v
+                (* This will change *)
                 | _, None -> lexp_error loc "case with no branch ?"; dltype in
 
                 Case(loc, tlxp, tltp, lpattern, dflt), (return_type)
@@ -289,7 +299,7 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
         | Plambda (kind, var, None, body) ->
             (* Read var type from the provided type *)
             let ltp, lbtp = match t with
-                | Arrow(kind, None, ltp, _, lbtp) -> ltp, lbtp
+                | Arrow(kind, _, ltp, _, lbtp) -> ltp, lbtp
                 | _ -> lexp_error tloc "Type does not match"; dltype, dltype in
 
             let nctx = env_extend ctx var None ltp in
@@ -297,6 +307,7 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
 
                 Lambda(kind, var, ltp, lbody)
 
+        (*
         | Pcall (Pvar(_, "expand_"), _args) ->(
             let pargs = List.map pexp_parse _args in
             let largs = _lexp_parse_all pargs ctx i in
@@ -312,7 +323,7 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
                 | _ -> lexp_fatal tloc "expand_ expects sexp" in
 
             let pxp = pexp_parse sxp in
-                _lexp_p_check pxp t ctx (i + 1))
+                _lexp_p_check pxp t ctx (i + 1)) *)
 
     | _ -> let (e, inferred_t) = _lexp_p_infer p ctx (i + 1) in
         (* FIXME: check that inferred_t = t!  *)
@@ -350,16 +361,18 @@ and lexp_call (fname: pexp) (_args: sexp list) ctx i =
     let vf = (make_var name idx loc) in
 
     (* consume Arrows and args together *)
-    let rec get_return_type ltp args =
+    let rec get_return_type i ltp args =
         match ltp, args with
             | _, [] -> ltp
-            | Arrow(_, _, _, _, ltp), hd::tl -> (get_return_type ltp tl)
-            | _, _ -> lexp_warning loc "Too many args"; ltp in
+            | Arrow(_, _, _, _, ltp), hd::tl -> (get_return_type (i + 1) ltp tl)
+            | _, _ -> lexp_warning loc ("\""^ name ^
+                    "\" was provided with too many args. Expected: " ^
+                            (string_of_int i)); ltp in
 
-    let ret_type = get_return_type ltp new_args in
+    let ret_type = get_return_type 0 ltp new_args in
 
     (* Is the function built-in ? *)
-    (* built-in cannot be partially applied that us why we can get_return_type *)
+    (* built-in cannot be partially applied that is why we can get_return_type *)
     (* they can only if you redefine the operation *)
     if (is_lbuiltin idx ctx) then (
         match env_lookup_expr ctx ((loc, name), idx) with
@@ -367,9 +380,22 @@ and lexp_call (fname: pexp) (_args: sexp list) ctx i =
                 Call(vf, new_args), ret_type
 
             (* Is it a macro ? *)
-            | Some Builtin (_, "expand_", _) ->
-                lexp_error loc "expand_ require type annotation";
-                dltype, dltype
+            | Some Cons (((_, "Macro"), _), (_, "Macro_")) ->
+
+                let lxp = match largs with
+                    | [lxp] -> lxp
+                    | hd::tl -> lexp_error loc "Macro_ expects one lexp"; hd
+                    | _ -> lexp_fatal loc "Macro_ expects one lexp" in
+
+                let rctx = (from_lctx ctx) in
+
+                (* eval argument *)
+                let sxp = match eval lxp rctx with
+                    | Vsexp(sxp) -> sxp
+                    | v -> lexp_fatal loc "Macro_ expects sexp" in
+
+                let pxp = pexp_parse sxp in
+                    _lexp_p_infer pxp ctx (i + 1)
 
             (* a builtin functions *)
             | Some e -> Call(e, new_args), ret_type
@@ -466,73 +492,11 @@ and lexp_parse_inductive ctors ctx i =
       SMap.empty ctors
 
 (*  Parse let declaration *)
-and lexp_p_decls decls ctx = _lexp_decls decls ctx 1
-and _lexp_decls decls octx i: (((vdef * lexp * ltype) list) * lexp_context) =
-    (* (pvar * pexp * bool) list * )
+and lexp_p_decls decls ctx = _lexp_decls decls ctx 0
+and _lexp_decls decls ctx i: (((vdef * lexp * ltype) list) * lexp_context) =
+    (* (pvar * pexp * bool) list *)
 
-    let ctx = ref octx in
-    let mdecls = ref SMap.empty in
-    let order = ref [] in
-    let found = ref false in
-
-        List.iter (fun ((loc, name), pxp, bl) ->
-            (* Check if variable was already defined *)
-            let (l, olxp, oltp, _) = try found := true; SMap.find name !mdecls
-                with Not_found ->
-                    (* keep track of declaration order *)
-                    order := (name::!order);
-                    found := false;
-                    (* create  an empty element *)
-                    (loc, None, None, 0) in
-
-            (* create a dummy env for lexp_parse *)
-            let denv = env_extend (!ctx) (loc, name) None dltype in
-
-            (* Do we already have a type ? *)
-            let lxp, ltp = match oltp with
-                (* We infer *)
-                | None -> _lexp_p_infer pxp denv (i + 1)
-
-                (* We check *)
-                | Some ltp -> (_lexp_p_check pxp ltp denv (i + 1)), ltp in
-
-            (* update declaration *)
-            let new_decl = match bl with
-                | true  -> (if !found then () else ctx := env_extend (!ctx) (loc, name) None lxp);
-                    (l, olxp, Some lxp, i)
-                | false -> (if !found then () else ctx := env_extend (!ctx) (loc, name) (Some lxp) ltp);
-                    (l, Some lxp, oltp, i) in
-
-            (* Add Variable to the map *)
-            mdecls := SMap.add name new_decl !mdecls)
-
-            decls;
-
-    let ctx = !ctx in
-    let mdecls = !mdecls in
-    let order = !order in
-
-    (* Cast Map to list *)
-    let ndecls = List.map (fun name ->
-        let (l, inst, tp, _) = SMap.find name mdecls in
-            match inst, tp with
-                | Some lxp, Some ltp -> ((l, name), lxp, ltp)
-                | Some lxp, None     -> ((l, name), lxp, dltype)
-                | None, Some ltp     -> lexp_warning l "Type with no expression";
-                    ((l, name), dltype, ltp)
-                | None, None         -> lexp_warning l "No expression, No Type";
-                    ((l, name), dltype, dltype)) order in
-
-    let ndecls = (List.rev ndecls) in
-
-    (* Build a new environment using ndecls *)
-    (* or I could go through original decls *)
-    let ctx = List.fold_left (fun ctx ((l, name), lxp, ltp) ->
-            env_extend ctx (l, name) (Some lxp) ltp) octx ndecls in
-
-        ndecls, ctx *)
-
-    let ctx = ref octx in
+    let ctx = ref ctx in
     let idx = ref 0 in
 
     (* Merge Type info and declaration together

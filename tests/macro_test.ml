@@ -54,11 +54,16 @@ let _ = (add_test "MACROS" "macros base" (fun () ->
 
     (* define 'lambda x -> x * x' using macros *)
     let dcode = "
-        sqr_sexp = (node_ (symbol_ \"lambda_->_\") (symbol_ \"x\")
-            (node_ (symbol_ \"_*_\") (symbol_ \"x\") (symbol_ \"x\")));
+    sqr_fun = node_ (symbol_ \"lambda_->_\") (symbol_ \"x\")
+    (node_ (symbol_ \"_*_\") (symbol_ \"x\") (symbol_ \"x\"));
 
-        sqr : Int -> Int;
-        sqr = (expand_ sqr_sexp);" in
+    sqr_type = node_ (symbol_ \"_->_\") (symbol_ \"Int\") (symbol_ \"Int\");
+
+    has_type = lambda (expr : Sexp) ->
+        lambda (tp : Sexp) ->
+            node_ (symbol_ \"_:_\") expr tp;
+
+    sqr = Macro_ (has_type sqr_fun sqr_type);" in
 
     let rctx, lctx = eval_decl_str dcode lctx rctx in
 

@@ -1,0 +1,28 @@
+
+
+List : Type;
+List = inductive_ (dList (a : Type)) (nil) (cons a (List a));
+
+nil = inductive-cons List nil;
+cons = inductive-cons List cons;
+
+length : (a : Type) => List a -> Int;
+length = lambda a =>
+  lambda xs ->
+    case xs
+      | nil => 0
+      | cons hd tl => (1 + length tl);
+
+head : (a : Type) => List a -> a;
+head = lambda a =>
+  lambda xs ->
+    case xs
+      | nil => nil
+      | cons hd tl => hd;
+
+tail : (a : Type) => List a -> List a;
+tail = lambda a =>
+  lambda xs ->
+    case xs
+      | nil => nil
+      | cons hd tl => tl;
