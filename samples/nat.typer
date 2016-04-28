@@ -1,0 +1,32 @@
+Nat = inductive_ (dNat) (zero) (succ Nat);
+
+zero = inductive-cons Nat zero;
+succ = inductive-cons Nat succ;
+
+to-num : Nat -> Int;
+to-num = lambda (x : Nat) ->
+    case x
+        | (succ y) => (1 + (to-num y))
+        | zero => 0;
+
+one = (succ zero);
+two = (succ one);
+three = (succ two);
+
+plus : Nat -> Nat -> Nat;
+plus = lambda (x : Nat) ->
+    lambda (y : Nat) ->
+        case x
+            | zero => y
+            | succ z => succ (plus z y);
+
+
+n1 = (to-num zero);
+n2 = (to-num one);
+n3 = (to-num two);
+
+
+
+m1 = (to-num (plus zero two));    % 2
+m2 = (to-num (plus two zero));   % 2
+m3 = (to-num (plus two one));    % 3

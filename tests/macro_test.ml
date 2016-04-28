@@ -37,12 +37,6 @@ open Eval       (* reset_eval_trace *)
 open Builtin
 open Env
 
-let get_int lxp =
-    let lxp = get_value_lexp lxp in
-    match lxp with
-        | Imm(Integer(_, l)) -> l
-        | _ -> (-40);
-;;
 
 (* default environment *)
 let lctx = default_lctx ()
@@ -72,7 +66,7 @@ let _ = (add_test "MACROS" "macros base" (fun () ->
     let ret = eval_expr_str ecode lctx rctx in
 
         match ret with
-            | [r] -> expect_equal_int (get_int r) (3 * 3)
+            | [Vint(r)] -> expect_equal_int r (3 * 3)
             | _ -> failure ())
 );;
 

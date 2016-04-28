@@ -37,13 +37,6 @@ open Eval       (* reset_eval_trace *)
 open Builtin
 open Env
 
-let get_int lxp =
-    let lxp = get_value_lexp lxp in
-    match lxp with
-        | Imm(Integer(_, l)) -> l
-        | _ -> (-40);
-;;
-
 (* default environment *)
 let lctx = default_lctx ()
 let rctx = default_rctx ()
@@ -64,7 +57,7 @@ let _ = (add_test "EVAL" "Variable Cascade" (fun () ->
     let ret = eval_expr_str ecode lctx rctx in
 
         match ret with
-            | [r] -> expect_equal_int (get_int r) 10
+            | [Vint(r)] -> expect_equal_int r 10
             | _ -> failure ())
 );;
 
@@ -86,7 +79,7 @@ let _ = (add_test "EVAL" "Let" (fun () ->
     let ret = eval_expr_str ecode lctx rctx in
         (* Expect a single result *)
         match ret with
-            | [r] -> expect_equal_int (get_int r) 30
+            | [Vint(r)] -> expect_equal_int r 30
             | _ -> failure ())
 )
 ;;
@@ -109,7 +102,7 @@ let _ = (add_test "EVAL" "Lambda" (fun () ->
     let ret = eval_expr_str "(sqr 4);" lctx rctx in
         (* Expect a single result *)
         match ret with
-            | [r] -> expect_equal_int (get_int r) (4 * 4)
+            | [Vint(r)] -> expect_equal_int r (4 * 4)
             | _ -> failure ())
 )
 ;;
@@ -131,7 +124,7 @@ let _ = (add_test "EVAL" "Nested Lambda" (fun () ->
     let ret = eval_expr_str "(cube 4);" lctx rctx in
         (* Expect a single result *)
         match ret with
-            | [r] -> expect_equal_int (get_int r) (4 * 4 * 4)
+            | [Vint(r)] -> expect_equal_int r (4 * 4 * 4)
             | _ -> failure ())
 )
 ;;
@@ -175,7 +168,7 @@ let _ = (add_test "EVAL" "Inductive::Case" (fun () ->
         ctr0 = inductive-cons idt ctr0;   e = 20;
         ctr1 = inductive-cons idt ctr1;   f = 30;
         ctr2 = inductive-cons idt ctr2;   g = 40;
-        ctr3 = inductive-cons idt ctr2;   h = 50;
+        ctr3 = inductive-cons idt ctr3;   h = 50;
 
         a = (ctr1 (ctr2 ctr0));   y = 2;
         b = (ctr2 (ctr2 ctr0));   z = 3;
@@ -194,10 +187,10 @@ let _ = (add_test "EVAL" "Inductive::Case" (fun () ->
     let ret = eval_expr_str rcode lctx rctx in
         (* Expect 3 results *)
         match ret with
-            | [a; b; c] ->
-                let t1 = expect_equal_int (get_int a) 1 in
-                let t2 = expect_equal_int (get_int b) 2 in
-                let t3 = expect_equal_int (get_int c) 3 in
+            | [Vint(a); Vint(b); Vint(c)] ->
+                let t1 = expect_equal_int a 1 in
+                let t2 = expect_equal_int b 2 in
+                let t3 = expect_equal_int c 3 in
                     if t1 = 0 && t2 = 0 && t3 = 0 then
                         success ()
                     else
@@ -240,10 +233,10 @@ let _ = (add_test "EVAL" "Inductive::Recursive Call" (fun () ->
     let ret = eval_expr_str rcode lctx rctx in
         (* Expect a 3 results *)
         match ret with
-            | [a; b; c] ->
-                let t1 = expect_equal_int (get_int a) 0 in
-                let t2 = expect_equal_int (get_int b) 1 in
-                let t3 = expect_equal_int (get_int c) 2 in
+            | [Vint(a); Vint(b); Vint(c)] ->
+                let t1 = expect_equal_int a 0 in
+                let t2 = expect_equal_int b 1 in
+                let t3 = expect_equal_int c 2 in
                     if t1 = 0 && t2 = 0 && t3 = 0 then
                         success ()
                     else
@@ -277,10 +270,10 @@ let _ = (add_test "EVAL" "Inductive::Nat Plus" (fun () ->
     let ret = eval_expr_str rcode lctx rctx in
         (* Expect a 3 results *)
         match ret with
-            | [a; b; c] ->
-                let t1 = expect_equal_int (get_int a) 2 in
-                let t2 = expect_equal_int (get_int b) 2 in
-                let t3 = expect_equal_int (get_int c) 3 in
+            | [Vint(a); Vint(b); Vint(c)] ->
+                let t1 = expect_equal_int a 2 in
+                let t2 = expect_equal_int b 2 in
+                let t3 = expect_equal_int c 3 in
                     if t1 = 0 && t2 = 0 && t3 = 0 then
                         success ()
                     else
@@ -314,11 +307,11 @@ let _ = (add_test "EVAL" "Mutually Recursive Definition" (fun () ->
     let ret = eval_expr_str rcode lctx rctx in
         (* Expect a 3 results *)
         match ret with
-            | [a; b; c; d] ->
-                let t1 = expect_equal_int (get_int a) 1 in
-                let t2 = expect_equal_int (get_int b) 0 in
-                let t3 = expect_equal_int (get_int c) 0 in
-                let t4 = expect_equal_int (get_int d) 1 in
+            | [Vint(a); Vint(b); Vint(c); Vint(d)] ->
+                let t1 = expect_equal_int a 1 in
+                let t2 = expect_equal_int b 0 in
+                let t3 = expect_equal_int c 0 in
+                let t4 = expect_equal_int d 1 in
                     if t1 = 0 && t2 = 0 && t3 = 0 && t4 = 0 then
                         success ()
                     else
@@ -345,10 +338,10 @@ let _ = (add_test "EVAL" "Partial Application" (fun () ->
     let ret = eval_expr_str rcode lctx rctx in
         (* Expect a 3 results *)
         match ret with
-            | [a; b; c] ->
-                let t1 = expect_equal_int (get_int a) 2 in
-                let t2 = expect_equal_int (get_int b) 3 in
-                let t3 = expect_equal_int (get_int c) 4 in
+            | [Vint(a); Vint(b); Vint(c)] ->
+                let t1 = expect_equal_int a 2 in
+                let t2 = expect_equal_int b 3 in
+                let t3 = expect_equal_int c 4 in
                     if t1 = 0 && t2 = 0 && t3 = 0 then
                         success ()
                     else
@@ -364,29 +357,26 @@ List = inductive_ (dList (a : Type)) (nil) (cons a (List a));
 nil = inductive-cons List nil;
 cons = inductive-cons List cons;
 
-% length : (a : Type) => List a -> Int;
-% length = lambda a =>
-length : List a -> Int;
-length = lambda (xs : List a) ->
+length : (a : Type) => List a -> Int;
+length = lambda a =>
+  lambda xs ->
     case xs
-        | nil => 0
-        | cons hd tl => (1 + length tl);
+      | nil => 0
+      | cons hd tl => (1 + length a tl);
 
-% head : (a : Type) => List a -> a;
-% head = lambda a =>
-head : List a -> a;
-head = lambda (xs : List a) ->
+head : (a : Type) => List a -> a;
+head = lambda a =>
+  lambda xs ->
     case xs
-        | nil => nil
-        | cons hd tl => hd;
+      | nil => nil
+      | cons hd tl => hd;
 
-% tail : (a : Type) => List a -> List a;
-% tail = lambda a =>
-tail : List a -> List a;
-tail = lambda (xs : List a) ->
+tail : (a : Type) => List a -> List a;
+tail = lambda a =>
+  lambda xs ->
     case xs
-        | nil => nil
-        | cons hd tl => tl;
+      | nil => nil
+      | cons hd tl => tl;
 ";;
 
 let _ = (add_test "EVAL" "List" (fun () ->
@@ -398,18 +388,18 @@ let _ = (add_test "EVAL" "List" (fun () ->
 
     let rctx, lctx = eval_decl_str dcode lctx rctx in
 
-    let rcode = "(length my_list);
-                 (head my_list);
-                 (head (tail my_list));" in
+    let rcode = "(length Int my_list);
+                 (head Int my_list);
+                 (head Int (tail Int my_list));" in
 
     (* Eval defined lambda *)
     let ret = eval_expr_str rcode lctx rctx in
         (* Expect a 3 results *)
         match ret with
-            | [a; b; c] ->
-                let t1 = expect_equal_int (get_int a) 4 in
-                let t2 = expect_equal_int (get_int b) 1 in
-                let t3 = expect_equal_int (get_int c) 2 in
+            | [Vint(a); Vint(b); Vint(c)] ->
+                let t1 = expect_equal_int a 4 in
+                let t2 = expect_equal_int b 1 in
+                let t3 = expect_equal_int c 2 in
                     if t1 = 0 && t2 = 0 && t3 = 0 then
                         success ()
                     else

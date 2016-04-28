@@ -82,26 +82,6 @@ let builtin_eq    = Builtin (EqType, "_=_", type_eq)
 let builtin_fadd = Builtin (FAdd, "_+_", fop_binary)
 let builtin_fmult = Builtin (FMult, "_*_", fop_binary) *)
 
-(*      Math Functions       *)
-let get_int (lxp: value_type): (int option) =
-    let lxp = get_value_lexp lxp in
-    match lxp with
-        | Imm(Integer(_, l)) -> Some l
-        | _ -> None
-;;
-
-let get_string (lxp: value_type): (string option) =
-    let lxp = get_value_lexp lxp in
-    match lxp with
-        | Imm(String(_, l)) -> Some l
-        | _ -> None
-;;
-
-let get_sexp (lxp: value_type): (sexp option) =
-    match lxp with
-        | Vsexp l -> Some l
-        | _ -> None
-;;
 
 (* Builtin of builtin * string * ltype *)
 let _generic_binary_iop name f loc (args_val: value_type list) (ctx: runtime_env) =
@@ -117,8 +97,8 @@ let _generic_binary_iop name f loc (args_val: value_type list) (ctx: runtime_env
         | [a; b] -> a, b
         | _ -> builtin_error loc (name ^ " expects 2 arguments") in
 
-        match (get_int l), (get_int r) with
-            | Some v, Some w -> Value(Imm(Integer (loc, (f v w))))
+        match l, r with
+            | Vint(v), Vint(w) -> Vint(f v w)
             | _ ->
                 value_print l; print_string " "; value_print r;
                 builtin_error loc (name ^ " expects Integers as arguments")
@@ -147,33 +127,29 @@ let make_symbol loc args_val ctx  =
         | [r] -> r
         | _ -> builtin_error loc ("symbol_ expects 1 argument") in
 
-    let s = get_string lxp in
-        match s with
-            | Some str -> Vsexp(Symbol(loc, str))
+        match lxp with
+            | Vstring(str) -> Vsexp(Symbol(loc, str))
             | _ -> builtin_error loc ("symbol_ expects one string as argument")
 
 
 let make_node loc args_val ctx    =
 
-    let head, args = match args_val with
-        | hd::tl -> (get_sexp hd), tl
+    let op, args = match args_val with
+        | Vsexp(s)::tl -> s, tl
+        | _::tl -> builtin_error loc ("node_ expects sexp as operator")
         | _ -> builtin_error loc ("node_ expects at least 2 arguments") in
 
-    let op = match head with
-        | Some sxp -> sxp
-        | None -> builtin_error loc ("node_ expects sexp as operator") in
-
-    let s = List.map (fun g -> match get_sexp g with
-        | Some sxp -> sxp
-        | None -> builtin_error loc ("node_ expects sexp as arguments")) args in
+    let s = List.map (fun g -> match g with
+        | Vsexp(sxp) -> sxp
+        | _ -> builtin_error loc ("node_ expects sexp as arguments")) args in
 
         Vsexp(Node(op, s))
 
 
-let make_block loc args_val ctx   = Value(type0)
-let make_string loc args_val ctx  = Value(type0)
-let make_integer loc args_val ctx = Value(type0)
-let make_float loc args_val ctx   = Value(type0)
+let make_block loc args_val ctx   = Vdummy
+let make_string loc args_val ctx  = Vdummy
+let make_integer loc args_val ctx = Vdummy
+let make_float loc args_val ctx   = Vdummy
 
 let type_string   = type0
 let type_mblock   = type0
@@ -272,7 +248,7 @@ let default_rctx () =
     (* populate ctx *)
     List.fold_left
       (fun ctx (name, lxp, ltp, f) ->
-        add_rte_variable (Some name) (Value(lxp)) ctx)
+        add_rte_variable (Some name) (Vdummy) ctx)
        rctx
        typer_builtins
 ;;

@@ -167,17 +167,17 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
                 ) formal_args in
             (* (arg_kind * vdef * ltype) list *)
 
-            (* -- Should I do that ?? --*)
+            (* -- Should I do that ?? --* )
             let rec make_type args tp =
                 match args with
                     | (kind, (loc, n), ltp)::tl ->
                         make_type tl (Arrow(kind, Some (loc, n), ltp, loc, tp))
-                    | [] -> tp in
+                    | [] -> tp in *)
 
             let ctx = !ctx in
             let map_ctor = lexp_parse_inductive ctors ctx i in
             let v = Inductive(tloc, label, formal, map_ctor) in
-                v, (make_type formal type0)
+                v, type0
 
         (* This case can be inferred *)
         | Plambda (kind, var, optype, body) ->
@@ -330,7 +330,96 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
         e
 
 (*  Identify Call Type and return processed call *)
-and lexp_call (fname: pexp) (_args: sexp list) ctx i =
+and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
+    let loc = pexp_location fun_name in
+
+    (*  Process Arguments *)
+    let pargs = List.map pexp_parse sargs in
+    let largs = _lexp_parse_all pargs ctx i in
+    let new_args = List.map (fun g -> (Aexplicit, g)) largs in
+
+    (* consume Arrows and args together *)
+    let rec get_return_type i ltp args =
+        match ltp, args with
+            | _, [] -> ltp
+            | Arrow(_, _, _, _, ltp), hd::tl -> (get_return_type (i + 1) ltp tl)
+            | _, _ -> lexp_warning loc
+                ("Function was provided with too many args. Expected: " ^
+                            (string_of_int i)); ltp in
+
+    (*  Vanilla     : sqr is inferred and (lambda x -> x * x) is returned
+     *  Macro       : sqr is returned
+     *  Constructor : a constructor is returned
+     *  Anonymous   : lambda                                                  *)
+
+    (* retrieve function's body *)
+    let body, ltp = _lexp_p_infer fun_name ctx (i + 1) in
+    let ret_type = get_return_type 0 ltp new_args in
+
+    (* handle named functions*)
+    let named_call (loc, name) =
+        try (*  Check if the function was defined *)
+            let idx = senv_lookup name ctx in
+            let vf = (make_var name idx loc) in
+
+            (* Replace a built-in name by builtin so they can be recognized
+             * during eval                                                    *)
+            if (is_lbuiltin idx ctx) then (
+                match env_lookup_expr ctx ((loc, name), idx) with
+                    | None -> lexp_error loc "Unknown builtin";
+                        Call(vf, new_args), ret_type
+
+                    (* a builtin functions *)
+                    | Some e -> Call(e, new_args), ret_type
+            )
+            else Call(vf, new_args), ret_type
+        with Not_found ->
+            lexp_error loc ("The function \"" ^ name ^ "\" was not defined");
+            let vf = (make_var name (-1) loc) in
+                Call(vf, new_args), ltp in
+
+    (* determine function type *)
+    match fun_name, ltp with
+        (* Anonymous *)
+        | ((Plambda _), _) -> Call(body, new_args), ltp
+
+        (* Call to a macro *)
+        | (Pvar (loc, name), Inductive _) ->
+            (* look up for definition *)
+            let idx = senv_lookup name ctx in
+            let vf = (make_var name idx loc) in
+
+            (* Get the macro *)
+            let lxp = match env_lookup_expr ctx ((loc, name), idx) with
+                | None -> lexp_fatal loc "The macro cannot be expanded";
+                | Some e -> e in
+
+            print_string "HERE";
+
+            let rctx = (from_lctx ctx) in
+
+            print_string "HERE";
+
+            let sxp = match eval lxp rctx with
+                | Vsexp(sxp) -> sxp
+                | v -> value_print v;
+                    lexp_fatal loc "Macro_ expects sexp" in
+
+            let pxp = pexp_parse sxp in
+            (* Generated Code *)
+            let lxp, ltp = _lexp_p_infer pxp ctx (i + 1) in
+                Call(lxp, new_args), ltp
+
+        (* Call to Vanilla or constructor *)
+        | (Pvar v, _) -> named_call v
+
+        (* Constructor. This case is rarely used *)
+        | (Pcons(_, v), _) -> named_call v
+
+        | e, _ -> lexp_fatal (pexp_location e) "This expression cannot be called"
+
+
+    (*
     (*  Process Arguments *)
     let pargs = List.map pexp_parse _args in
     let largs = _lexp_parse_all pargs ctx i in
@@ -353,6 +442,11 @@ and lexp_call (fname: pexp) (_args: sexp list) ctx i =
 
     (* retrieve function body *)
     let body, ltp = _lexp_p_infer fname ctx (i + 1) in
+
+    (* Check if macro *)
+    let _ = match ltp with
+        | Inductive (_, (_, "built-in"), [], _) -> lexp_print body; print_string "\n";
+        | _ -> () in
 
     try
 
@@ -381,7 +475,8 @@ and lexp_call (fname: pexp) (_args: sexp list) ctx i =
 
             (* Is it a macro ? *)
             | Some Cons (((_, "Macro"), _), (_, "Macro_")) ->
-
+                Call(vf, new_args), type_macro
+                (*
                 let lxp = match largs with
                     | [lxp] -> lxp
                     | hd::tl -> lexp_error loc "Macro_ expects one lexp"; hd
@@ -395,7 +490,7 @@ and lexp_call (fname: pexp) (_args: sexp list) ctx i =
                     | v -> lexp_fatal loc "Macro_ expects sexp" in
 
                 let pxp = pexp_parse sxp in
-                    _lexp_p_infer pxp ctx (i + 1)
+                    _lexp_p_infer pxp ctx (i + 1) *)
 
             (* a builtin functions *)
             | Some e -> Call(e, new_args), ret_type
@@ -406,7 +501,7 @@ and lexp_call (fname: pexp) (_args: sexp list) ctx i =
         (*  Don't stop even if an error was found *)
         lexp_error loc ("The function \"" ^ name ^ "\" was not defined");
         let vf = (make_var name (-1) loc) in
-            Call(vf, new_args), ltp end
+            Call(vf, new_args), ltp end *)
 
 (*  Read a pattern and create the equivalent representation *)
 and lexp_read_pattern pattern exp target ctx:

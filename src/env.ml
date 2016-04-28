@@ -51,30 +51,41 @@ let str_idx idx = "[" ^ (string_of_int idx) ^ "]"
 
 (*  currently, we don't do much *)
 type value_type =
-    | Value of lexp
+    | Vint of int
+    | Vstring of string
+    | Vcons of symbol * value_type list
+    | Vbuiltin
     | Closure of lexp * (((string option * value_type) ref myers) * (int * int))
     (* Macro type *)
     | Vsexp of sexp
     (* Unable to eval during macro expansion, only throw if the value is used *)
     | Vdummy
 
-let get_value_lexp (vtp: value_type) =
-    match vtp with
-        | Value s -> s
-        | Closure (s, _) -> s
-        | _ -> env_error dloc "Does not hold a lexp"
-
-let value_print (vtp: value_type) =
+let rec value_print (vtp: value_type) =
     match vtp with
         | Closure (lxp, _) ->
             print_string ("Closure(" ^ (_lexp_to_str (!debug_ppctx) lxp) ^ ")")
-        | Value s -> lexp_print s
         | Vsexp sxp -> sexp_print sxp
-        | _ -> print_string "value_print_dummy"
+        | Vint(i) -> print_int i;
+        | Vstring(s) -> print_string ("\"" ^ s ^ "\"")
+        | Vcons ((_, n), []) -> print_string n
+        | Vcons ((_, n), args) ->
+            print_string ("(" ^ n);
+                List.iter (fun arg -> print_string " "; value_print arg) args;
+            print_string ")";
 
 
-let value_location (vtp: value_type) = lexp_location (get_value_lexp vtp)
+        | Vdummy -> print_string "value_print_dummy"
+        | Vbuiltin -> print_string "value_print_builtin"
+        | _ -> print_string "value_print_bug"
 
+
+let value_location (vtp: value_type) =
+    match vtp with
+        | Vcons ((loc, _), _) -> loc
+        | Closure (lxp, _) -> lexp_location lxp
+        (* location info was lost or never existed *)
+        | _ -> dloc
 
 (*  Runtime Environ *)
 type env_cell = (string option * value_type) ref
@@ -161,6 +172,8 @@ let select_n (ctx: runtime_env) n: runtime_env =
 
     ((!r), a)
 
+(*  This removes temporary variables from the environment *)
+(*  and create a clean context free of function arguments *)
 let temp_ctx (ctx: runtime_env): runtime_env =
     let (l, (osize, _)) = ctx in
     let tsize = length l in
