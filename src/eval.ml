@@ -74,14 +74,14 @@ let rec _eval lxp ctx i: (value_type) =
     match lxp with
         (*  Leafs           *)
         (* ---------------- *)
-        | Imm(Integer (_, i))     -> Vint(i)
-        | Imm(String (_, s))      -> Vstring(s)
-        | Inductive (_, _, _, _)  -> Vdummy
-        | Cons (_, label)         -> Vcons (label, [])
-        | Lambda (_, _, _, lxp)   -> Closure(lxp, ctx)
-        | Builtin _               -> Vbuiltin
+        | Imm(Integer (_, i))       -> Vint(i)
+        | Imm(String (_, s))        -> Vstring(s)
+        | Inductive (_, _, _, _)    -> Vdummy
+        | Cons (_, label)           -> Vcons (label, [])
+        | Lambda (_, _, _, lxp)     -> Closure(lxp, ctx)
+        | Builtin (btype, str, _)   -> Vbuiltin(btype, str)
 
-        (*  Return a value stored in the env        *)
+        (*  Return a value stored in env        *)
         | Var((loc, name), idx) as e -> eval_var ctx e ((loc, name), idx)
 
         (*  Nodes           *)
@@ -90,21 +90,11 @@ let rec _eval lxp ctx i: (value_type) =
             let nctx = _eval_decls decls ctx i in
                 _eval inst nctx (i + 1)
 
-        (* Built-in Function *)
-        | Call(Builtin(btype, str, ltp), args)->
-            (* built-in does not have location info. So we extract it from args *)
-            let tloc = match args with
-                | (_, hd)::tl -> lexp_location hd
-                | _ -> dloc in
-            let args_val = List.map (fun (k, e) -> _eval e ctx (i + 1)) args in
-                (get_builtin_impl btype str ltp tloc) tloc args_val ctx
-
         (* Function call *)
-        | Call (lname, args) as call -> eval_call ctx i lname args call
+        | Call (lname, args) -> eval_call ctx i lname args
 
         (* Case *)
         | Case (loc, target, _, pat, dflt) -> (eval_case ctx i loc target pat dflt)
-
 
         | _ -> print_string "debug catch-all eval: ";
             lexp_print lxp; Vstring("eval Not Implemented")
@@ -115,16 +105,30 @@ and eval_var ctx lxp v =
     with e ->
         eval_error loc ("Variable: " ^ name ^ (str_idx idx) ^ " was not found ")
 
-and eval_call ctx i lname args call =
-    (* create a clean environment *)
-    let args_val = List.map (fun (k, e) -> _eval e ctx (i + 1)) args in
-    let clean_ctx = temp_ctx ctx in
+and eval_call ctx i lname args =
+    let loc = lexp_location lname in
+    let args = List.map (fun (k, e) -> _eval e ctx (i + 1)) args in
+    let f = _eval lname ctx (i + 1) in
 
-    (* get function body *)
-    let body = _eval lname ctx (i + 1) in
+    (*
+    let eval_call' f arg =
+        match f with
+            | Vcons(label, fields) ->
+                Vcons (label, arg::fields)
 
-    let rec eval_call body args ctx =
-        match body, args with
+            | Closure (lxp, ctx) ->
+                _eval lxp (add_rte_variable None arg ctx) (i + 1)
+
+            | Vbuiltin (btype, str) ->
+                (get_builtin_impl btype str loc) loc [] (add_rte_variable None arg ctx)
+
+            | _ -> value_print f;
+                    eval_error loc "Cannot eval function" in
+
+        List.fold_left eval_call' f args *)
+
+    let rec eval_call f args ctx =
+        match f, args with
             | Vcons (n, []), _ -> Vcons(n, args)
 
             (* we add an argument to the closure *)
@@ -133,16 +137,18 @@ and eval_call ctx i lname args call =
                 let ret = _eval lxp nctx (i + 1) in
                     eval_call ret tl nctx
 
-            (* No more arguments *)
-            | Closure (_, _), [] -> body
+            | Vbuiltin (btype, str), args ->
+                (* lookup the built-in implementation and call it *)
+                (get_builtin_impl btype str loc) loc args ctx
 
             (* return result of eval *)
-            | _, [] -> body
+            | Closure (_, _), [] -> f
+            | _, [] -> f
 
-            | _ -> value_print body;
-                eval_error dloc "Cannot eval function" in
+            | _ -> value_print f;
+                eval_error loc "Cannot eval function" in
 
-        eval_call body args_val clean_ctx
+        eval_call f args ctx
 
 and eval_case ctx i loc target pat dflt =
     (* Eval target *)
@@ -160,7 +166,7 @@ and eval_case ctx i loc target pat dflt =
             (* -- Crash -- *)
             eval_error loc "Target is not a Constructor" in
 
-    let ctor_n = List.length args in
+    (* let ctor_n = List.length args in *)
 
     (*  Check if a default is present *)
     let run_default df =
@@ -186,7 +192,8 @@ and eval_case ctx i loc target pat dflt =
         (*  Get working pattern *)
         let key, (_, pat_args, exp) = SMap.min_binding sol in
 
-        (* build context (List.fold2 has problem with some cases) *)
+        (* build context (List.fold2 has problem with some cases)  *)
+        (* This is more robust                                     *)
         let rec fold2 nctx pats args =
             match pats, args with
                 | (Some (_, (_, name)))::pats, arg::args ->
@@ -267,9 +274,9 @@ let eval_all lxps rctx silent =
 (* build a rctx from a lctx *)
 let from_lctx (ctx: lexp_context): runtime_env =
     let ((_, _), env, _) = ctx in
-    let rctx = ref (default_rctx ()) in
+    let rctx = ref make_runtime_ctx in
 
-    (* Skip builtins *)
+    (* Skip builtins: They are already in default_rctx()  *)
     let bsize = List.length typer_builtins in
     let csize = get_size ctx in
 
@@ -295,7 +302,3 @@ let from_lctx (ctx: lexp_context): runtime_env =
                 rctx := set_rte_variable j (Some name) vxp (!rctx)
     done;
         !rctx
-
-
-
-

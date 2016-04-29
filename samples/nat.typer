@@ -25,8 +25,6 @@ n1 = (to-num zero);
 n2 = (to-num one);
 n3 = (to-num two);
 
-
-
-m1 = (to-num (plus zero two));    % 2
+m1 = (to-num (plus zero two));   % 2
 m2 = (to-num (plus two zero));   % 2
 m3 = (to-num (plus two one));    % 3

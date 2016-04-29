@@ -54,7 +54,7 @@ type value_type =
     | Vint of int
     | Vstring of string
     | Vcons of symbol * value_type list
-    | Vbuiltin
+    | Vbuiltin of builtin * string
     | Closure of lexp * (((string option * value_type) ref myers) * (int * int))
     (* Macro type *)
     | Vsexp of sexp
@@ -74,11 +74,8 @@ let rec value_print (vtp: value_type) =
                 List.iter (fun arg -> print_string " "; value_print arg) args;
             print_string ")";
 
-
+        | Vbuiltin(_, str) -> print_string str
         | Vdummy -> print_string "value_print_dummy"
-        | Vbuiltin -> print_string "value_print_builtin"
-        | _ -> print_string "value_print_bug"
-
 
 let value_location (vtp: value_type) =
     match vtp with
@@ -178,9 +175,10 @@ let temp_ctx (ctx: runtime_env): runtime_env =
     let (l, (osize, _)) = ctx in
     let tsize = length l in
         (* Check if temporary variables are present *)
-        if tsize != osize then
-            (* remove them *)
-            (select_n ctx osize)
+        if tsize != osize then(
+            (* remove them
+            print_string "temp ctx was useful\n"; *)
+            (select_n ctx osize))
         else
             ctx
 ;;

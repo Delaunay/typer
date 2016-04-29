@@ -339,12 +339,12 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
     let new_args = List.map (fun g -> (Aexplicit, g)) largs in
 
     (* consume Arrows and args together *)
-    let rec get_return_type i ltp args =
+    let rec get_return_type name i ltp args =
         match ltp, args with
             | _, [] -> ltp
-            | Arrow(_, _, _, _, ltp), hd::tl -> (get_return_type (i + 1) ltp tl)
+            | Arrow(_, _, _, _, ltp), hd::tl -> (get_return_type name (i + 1) ltp tl)
             | _, _ -> lexp_warning loc
-                ("Function was provided with too many args. Expected: " ^
+                (name ^ " was provided with too many args. Expected: " ^
                             (string_of_int i)); ltp in
 
     (*  Vanilla     : sqr is inferred and (lambda x -> x * x) is returned
@@ -354,13 +354,13 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
 
     (* retrieve function's body *)
     let body, ltp = _lexp_p_infer fun_name ctx (i + 1) in
-    let ret_type = get_return_type 0 ltp new_args in
+    (* let ret_type = get_return_type 0 ltp new_args in *)
 
-    (* handle named functions*)
-    let named_call (loc, name) =
+    let handle_named_call (loc, name) =
         try (*  Check if the function was defined *)
             let idx = senv_lookup name ctx in
             let vf = (make_var name idx loc) in
+            let ret_type = get_return_type name 0 ltp new_args in
 
             (* Replace a built-in name by builtin so they can be recognized
              * during eval                                                    *)
@@ -378,130 +378,52 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
             let vf = (make_var name (-1) loc) in
                 Call(vf, new_args), ltp in
 
+    let handle_macro_call (loc, name) =
+        (* look up for definition *)
+        let idx = try senv_lookup name ctx
+            with Not_found ->
+                lexp_fatal loc ("Could not find Variable: " ^ name) in
+
+        (* Get the macro *)
+        let lxp = try match env_lookup_expr ctx ((loc, name), idx) with
+            | None -> lexp_fatal loc "The macro cannot be expanded";
+            | Some e -> e
+            with Not_found ->
+                lexp_fatal loc (name ^ " was found but " ^ (string_of_int idx) ^
+                    " is not a correct index.") in
+
+        let rctx = try (from_lctx ctx)
+            with e ->
+                lexp_fatal loc "Could not convert lexp context into rte context" in
+
+        let sxp = match eval lxp rctx with
+            (* (Macro_ sexp) is returned *)
+            | Vcons(_, [Vsexp(sxp)]) -> sxp
+            | v -> value_print v; print_string "\n";
+                lexp_fatal loc "Macro_ expects sexp" in
+
+        let pxp = pexp_parse sxp in
+        (* Generated Code *)
+        let lxp, ltp = _lexp_p_infer pxp ctx (i + 1) in
+            Call(lxp, new_args), ltp in
+
     (* determine function type *)
     match fun_name, ltp with
         (* Anonymous *)
         | ((Plambda _), _) -> Call(body, new_args), ltp
 
         (* Call to a macro *)
-        | (Pvar (loc, name), Inductive _) ->
-            (* look up for definition *)
-            let idx = senv_lookup name ctx in
-            let vf = (make_var name idx loc) in
-
-            (* Get the macro *)
-            let lxp = match env_lookup_expr ctx ((loc, name), idx) with
-                | None -> lexp_fatal loc "The macro cannot be expanded";
-                | Some e -> e in
-
-            print_string "HERE";
-
-            let rctx = (from_lctx ctx) in
-
-            print_string "HERE";
-
-            let sxp = match eval lxp rctx with
-                | Vsexp(sxp) -> sxp
-                | v -> value_print v;
-                    lexp_fatal loc "Macro_ expects sexp" in
-
-            let pxp = pexp_parse sxp in
-            (* Generated Code *)
-            let lxp, ltp = _lexp_p_infer pxp ctx (i + 1) in
-                Call(lxp, new_args), ltp
+        | (Pvar (l, n), Builtin(tp, "Macro", _)) when tp = MacroType ->
+             handle_macro_call (l, n)
 
         (* Call to Vanilla or constructor *)
-        | (Pvar v, _) -> named_call v
+        | (Pvar v, _) -> handle_named_call v
 
         (* Constructor. This case is rarely used *)
-        | (Pcons(_, v), _) -> named_call v
+        | (Pcons(_, v), _) -> handle_named_call v
 
         | e, _ -> lexp_fatal (pexp_location e) "This expression cannot be called"
 
-
-    (*
-    (*  Process Arguments *)
-    let pargs = List.map pexp_parse _args in
-    let largs = _lexp_parse_all pargs ctx i in
-    let new_args = List.map (fun g -> (Aexplicit, g)) largs in
-
-    (* check if anonymous *)
-    match fname with
-        (* arg_kind * pvar * pexp option * pexp *)
-        | Plambda _ -> let lbd, ltype = _lexp_p_infer fname ctx (i + 1) in
-            Call(lbd, new_args), ltype
-
-        | _ -> begin
-
-    (* get function name *)
-    let name, loc = match fname with
-        | Pvar(loc, nm) -> nm, loc
-        | Pcons (_, (loc, nm)) -> nm, loc
-        | _->
-            lexp_fatal (pexp_location fname) "This expression cannot be called" in
-
-    (* retrieve function body *)
-    let body, ltp = _lexp_p_infer fname ctx (i + 1) in
-
-    (* Check if macro *)
-    let _ = match ltp with
-        | Inductive (_, (_, "built-in"), [], _) -> lexp_print body; print_string "\n";
-        | _ -> () in
-
-    try
-
-    (*  Check if the function was defined *)
-    let idx = senv_lookup name ctx in
-    let vf = (make_var name idx loc) in
-
-    (* consume Arrows and args together *)
-    let rec get_return_type i ltp args =
-        match ltp, args with
-            | _, [] -> ltp
-            | Arrow(_, _, _, _, ltp), hd::tl -> (get_return_type (i + 1) ltp tl)
-            | _, _ -> lexp_warning loc ("\""^ name ^
-                    "\" was provided with too many args. Expected: " ^
-                            (string_of_int i)); ltp in
-
-    let ret_type = get_return_type 0 ltp new_args in
-
-    (* Is the function built-in ? *)
-    (* built-in cannot be partially applied that is why we can get_return_type *)
-    (* they can only if you redefine the operation *)
-    if (is_lbuiltin idx ctx) then (
-        match env_lookup_expr ctx ((loc, name), idx) with
-            | None -> lexp_error loc "Unknown builtin";
-                Call(vf, new_args), ret_type
-
-            (* Is it a macro ? *)
-            | Some Cons (((_, "Macro"), _), (_, "Macro_")) ->
-                Call(vf, new_args), type_macro
-                (*
-                let lxp = match largs with
-                    | [lxp] -> lxp
-                    | hd::tl -> lexp_error loc "Macro_ expects one lexp"; hd
-                    | _ -> lexp_fatal loc "Macro_ expects one lexp" in
-
-                let rctx = (from_lctx ctx) in
-
-                (* eval argument *)
-                let sxp = match eval lxp rctx with
-                    | Vsexp(sxp) -> sxp
-                    | v -> lexp_fatal loc "Macro_ expects sexp" in
-
-                let pxp = pexp_parse sxp in
-                    _lexp_p_infer pxp ctx (i + 1) *)
-
-            (* a builtin functions *)
-            | Some e -> Call(e, new_args), ret_type
-    )
-    else Call(vf, new_args), ret_type
-
-    with Not_found ->
-        (*  Don't stop even if an error was found *)
-        lexp_error loc ("The function \"" ^ name ^ "\" was not defined");
-        let vf = (make_var name (-1) loc) in
-            Call(vf, new_args), ltp end *)
 
 (*  Read a pattern and create the equivalent representation *)
 and lexp_read_pattern pattern exp target ctx:

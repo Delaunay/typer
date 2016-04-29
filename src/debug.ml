@@ -189,25 +189,35 @@ let str_split str sep =
         List.rev (!ret));;
 
 let debug_lexp_decls decls =
-
+    let sep = " : " in
     List.iter (fun e ->
             let ((loc, name), lxp, ltp) = e in
 
             print_string " ";
             lalign_print_string (lexp_to_string lxp) 15;
-            print_string "["; print_loc loc; print_string "]  ";
+            print_string "["; print_loc loc; print_string "]";
 
             let str = _lexp_str_decls (!debug_ppctx) [e] in
 
+            (* First col size = 15 + 1 + 2 + 3 + 5 + 6
+             *                = 32                          *)
+
             let str = match str with
-                | hd::tl -> print_string hd; print_string "\n"; tl
+                | fst::tl -> print_string (sep ^ fst); print_string "\n"; tl
                 | _ -> [] in
 
             (* inefficient but makes things pretty iff -fmt-pretty=on *)
             let str = List.flatten (List.map (fun g -> str_split g '\n') str) in
 
+            let str = match str with
+                | scd::tl ->
+                    print_string " FILE: ";
+                    lalign_print_string loc.file 25;
+                    print_string (sep ^ scd); print_string "\n"; tl
+                | _ -> [] in
+
             List.iter (fun g ->
-                print_string (make_line ' ' 34);
+                print_string ((make_line ' ' 32) ^ sep);
                 print_string g; print_string "\n")
                 str;
 

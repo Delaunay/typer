@@ -85,17 +85,14 @@ let builtin_fmult = Builtin (FMult, "_*_", fop_binary) *)
 
 (* Builtin of builtin * string * ltype *)
 let _generic_binary_iop name f loc (args_val: value_type list) (ctx: runtime_env) =
-    (* We don't have to access context because:                   *)
-    (*  x + y is parsed as Call(_+_ x y)                          *)
-    (* Partial application handling aggregates arguments in a ctx *)
-    (* once all arguments are present Call(_+_ x y) is called     *)
-    (* First, its arguments are evaluated which is where x, y are replaced        *)
-    (* by their value in the context then _generic_binary_iop handle the function *)
-    (* i.e we don't need to push x and y in the context. *)
-    (* We don't even need the context                    *)
-    let l, r = match args_val with
-        | [a; b] -> a, b
-        | _ -> builtin_error loc (name ^ " expects 2 arguments") in
+
+    (*
+    let l, r = get_rte_variable None 0 ctx,
+               get_rte_variable None 1 ctx  in *)
+
+   let l, r = match args_val with
+        | [l; r] -> l, r
+        | _ -> builtin_error loc (name ^ " expects 2 Integers arguments") in
 
         match l, r with
             | Vint(v), Vint(w) -> Vint(f v w)
@@ -169,13 +166,12 @@ let builtin_float   = Builtin (SexpType, "float_", type_mfloat)
 let builtin_node    = Builtin (SexpType, "node_", type_mnode)
 (* let builtin_expand  = Builtin (SexpType, "expand_", type_mexpand) *)
 
-let type_macro =
-    let ctors = SMap.empty in
-    let ctors = SMap.add "Macro_" [(Aexplicit, None, type_sexp)] ctors in
-        Inductive (dloc, (dloc, "built-in"), [], ctors)
 
 let builtin_macro = Cons (((dloc, "Macro"), (-4)), (dloc, "Macro_"))
-let macro_cons =  Arrow (Aexplicit, None, type_sexp  , dloc, type_macro)
+let type_macro    = Builtin (MacroType, "Macro", type0)
+let macro_cons    = Arrow (Aexplicit, None, type_sexp, dloc, type_macro)
+
+
 (*
  *  Should we have a function that
  *      -> returns a new context inside typer ? (So we need to add a ctx type too)
@@ -222,7 +218,7 @@ let _builtin_lookup =
         SMap.empty typer_builtins
 
 
-let get_builtin_impl btype str ltp loc =
+let get_builtin_impl btype str loc =
     try SMap.find str _builtin_lookup
     with Not_found ->
         builtin_error loc "Requested Built-in does not exist"

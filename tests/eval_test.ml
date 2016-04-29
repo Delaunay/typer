@@ -362,7 +362,7 @@ length = lambda a =>
   lambda xs ->
     case xs
       | nil => 0
-      | cons hd tl => (1 + length a tl);
+      | cons hd tl => (1 + (length a tl));
 
 head : (a : Type) => List a -> a;
 head = lambda a =>

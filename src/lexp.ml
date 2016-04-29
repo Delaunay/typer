@@ -622,13 +622,18 @@ and _lexp_to_str ctx exp =
 
         | Call(fname, args) -> (
             (*  get function name *)
-            let str, idx = match fname with
-                | Var((_, name), idx) -> name, idx
-                | Builtin (_, name, _) -> name, 0
-                | _ -> (error "unkwn"), -1 in
+            let str, idx, inner_parens, outer_parens = match fname with
+                | Var((_, name), idx)  -> name, idx, false, true
+                | Builtin (_, name, _) -> name,  0,  false, true
+                | Lambda _             -> "__",  0,  true,  false
+                | Cons _               -> "__",  0,  false, false
+                | _                    -> "__", -1,  true,  true  in
 
             let binop_str op (_, lhs) (_, rhs) =
                 (lexp_to_str lhs) ^ op ^ (lexp_to_str rhs) in
+
+            let add_parens bl str =
+                if bl then "(" ^ str ^ ")" else str in
 
             match (str, args) with
                 (* Special Operators *)
@@ -643,7 +648,10 @@ and _lexp_to_str ctx exp =
                         (fun str (_, lxp) -> str ^ " " ^ (lexp_to_str lxp))
                         "" args in
 
-                    "(" ^ (fun_call (lexp_to_str fname)) ^ args ^ ")")
+                    let str = fun_call (lexp_to_str fname) in
+                    let str = add_parens inner_parens str in
+                    let str = str ^ args in
+                        add_parens outer_parens str)
 
         | Inductive (_, (_, name), [], ctors) ->
             (keyword "inductive_") ^ " (" ^ name ^") " ^
