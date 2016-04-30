@@ -56,8 +56,6 @@ open Env
 
 
 
-
-
 let dloc = dummy_location;;
 let dummy_decl = Imm(String(dloc, "Dummy"));;
 
@@ -236,31 +234,37 @@ let main () =
 
         let filename = List.hd (!arg_files) in
 
-        print_string (make_title " ERRORS ");
-
         (* get pretokens*)
+        print_string yellow;
         let pretoks = prelex_file filename in
+        print_string reset;
 
         (if (get_p_option "pretok") then(
             print_string (make_title " PreTokens");
             debug_pretokens_print_all pretoks; print_string "\n"));
 
         (* get sexp/tokens *)
+        print_string yellow;
         let toks = lex default_stt pretoks in
+        print_string reset;
 
         (if (get_p_option "tok") then(
             print_string (make_title " Base Sexp");
             debug_sexp_print_all toks; print_string "\n"));
 
         (* get node sexp  *)
+        print_string yellow;
         let nodes = sexp_parse_all_to_list default_grammar toks (Some ";") in
+        print_string reset;
 
         (if (get_p_option "sexp") then(
             print_string (make_title " Node Sexp ");
             debug_sexp_print_all nodes; print_string "\n"));
 
         (* Parse All Declaration *)
+        print_string yellow;
         let pexps = pexp_decls_all nodes in
+        print_string reset;
 
         (if (get_p_option "pexp") then(
             print_string (make_title " Pexp ");
@@ -269,13 +273,16 @@ let main () =
         (* get lexp *)
         let ctx = default_lctx () in
 
+        print_string yellow;
         let lexps, nctx =
             try lexp_p_decls pexps ctx
             with e -> (
+                print_string reset;
                 print_lexp_ctx (!_global_lexp_ctx);
                 print_lexp_trace ();
                 raise e
             ) in
+        print_string reset;
 
         (if (get_p_option "lexp") then(
             print_string (make_title " Lexp ");
@@ -286,11 +293,14 @@ let main () =
 
         (* Eval declaration *)
         let rctx = default_rctx () in
-        let rctx = (try eval_decls lexps rctx
+        print_string yellow;
+        let rctx = (try eval_decls lexps rctx;
             with e ->
+                print_string reset;
                 print_rte_ctx (!_global_eval_ctx);
                 print_eval_trace ();
                 raise e) in
+        print_string reset;
 
         (if (get_p_option "rctx") then(
             print_rte_ctx rctx; print_string "\n"));
@@ -301,7 +311,6 @@ let main () =
         (try
             (* Check if main is present *)
             let main = (senv_lookup "main" nctx) in
-            (* Push main args here if any *)
 
             (* get main body *)
             let body = (get_rte_variable (Some "main") main rctx) in

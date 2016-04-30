@@ -151,7 +151,7 @@ let set_rte_variable idx name (lxp: value_type) ctx =
 
 (* This function is used when we enter a new scope                         *)
 (* it saves the size of the environment before temp var are added          *)
-(* it allow us to remove temporary variables when we enter a new scope     *)
+(* it allow us to remove temporary variables when we enter a new scope     * )
 let local_ctx ctx =
     let (l, (_, _)) = ctx in
     let osize = length l in
@@ -181,7 +181,7 @@ let temp_ctx (ctx: runtime_env): runtime_env =
             (select_n ctx osize))
         else
             ctx
-;;
+;; *)
 
 (* Select the n first variable present in the env *)
 let nfirst_rte_var n ctx =

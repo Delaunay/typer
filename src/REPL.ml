@@ -144,7 +144,7 @@ let _ieval f str  lctx rctx =
     let pxps = ipexp_parse nods in
     let lxps, lctx = ilexp_parse pxps lctx in
     let v, rctx = ieval lxps rctx in
-        v, lctx, (local_ctx rctx)
+        v, lctx, rctx
 ;;
 
 let ieval_string = _ieval prelex_string

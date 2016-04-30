@@ -21,11 +21,14 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.  *)
 
 open Util
+open Fmt
+
 open Sexp
 open Pexp
+
 open Myers
 open Grammar
-open Fmt
+
 (* open Unify *)
 module S = Subst
 
@@ -593,7 +596,7 @@ and _lexp_to_str ctx exp =
             | String (_, s) -> tval ("\"" ^ s ^ "\"")
             | Integer(_, s) -> tval (string_of_int s)
             | Float  (_, s) -> tval (string_of_float s)
-            | _ -> internal_error "Wrong Imm value.")
+            | e -> sexp_to_str e)
 
         | Var ((loc, name), idx) -> name ^ (index idx) ;
 

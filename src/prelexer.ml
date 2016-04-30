@@ -156,13 +156,19 @@ let prelex_string str =
     let fin = open_in "_temp_hack" in
     prelex "string" fin 1 [] []
 
-let rec pretokens_print pretokens =
-  List.iter (fun pt ->
-             print_string " ";
-             match pt with
-               | Preblock(_,pts,_)
-                 -> print_string "{"; pretokens_print pts; print_string " }"
-               | Pretoken(_, str) -> print_string str
-               | Prestring(_, str)
-                 -> print_string "\""; print_string str; print_string "\"")
-            pretokens
+
+let rec _pretokens_to_str pretok =
+    match pretok with
+        | Preblock(_,pts,_) ->  "{" ^ (
+            List.fold_left (fun str pts -> str ^ " " ^ (_pretokens_to_str pts))
+                "" pts) ^ " }"
+        | Pretoken(_, str)  -> str
+        | Prestring(_, str) -> "\"" ^ str ^ "\""
+
+let pretokens_to_str pretokens =
+  List.fold_left (fun str pt -> str ^ (_pretokens_to_str pt)) "" pretokens
+
+
+let pretokens_print p = print_string (pretokens_to_str p)
+
+

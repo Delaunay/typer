@@ -76,6 +76,7 @@ let rec _eval lxp ctx i: (value_type) =
         (* ---------------- *)
         | Imm(Integer (_, i))       -> Vint(i)
         | Imm(String (_, s))        -> Vstring(s)
+        | Imm(sxp)                  -> Vsexp(sxp)
         | Inductive (_, _, _, _)    -> Vdummy
         | Cons (_, label)           -> Vcons (label, [])
         | Lambda (_, _, _, lxp)     -> Closure(lxp, ctx)
@@ -129,6 +130,7 @@ and eval_call ctx i lname args =
 
     let rec eval_call f args ctx =
         match f, args with
+            (* | Vcons ((_, "quote"), _), [vsxp] -> vsxp *)
             | Vcons (n, []), _ -> Vcons(n, args)
 
             (* we add an argument to the closure *)
@@ -225,9 +227,6 @@ and _eval_decls (decls: ((vdef * lexp * ltype) list))
         add_rte_variable (Some name) Vdummy ctx)
         ctx decls in
 
-    (* local ctx saves the number of declared variable inside ctx      *)
-    (* This is used to remove temporary variables when entering a Call *)
-    let ctx = local_ctx ctx in
     let n = (List.length decls) - 1 in
 
     (* Read declarations once and push them *)

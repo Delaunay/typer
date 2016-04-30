@@ -56,9 +56,9 @@ let type_omega = Sort (dloc, StypeOmega)
 let type_level = Sort (dloc, StypeLevel)
 let type_level = Builtin (LevelType, "TypeLevel", type_level)
 
-let type_int    = Builtin (IntType, "Int", type0)
+let type_int   = Builtin (IntType  , "Int"  , type0)
 let type_float = Builtin (FloatType, "Float", type0)
-let type_sexp  = Builtin (SexpType, "sexp", type0)
+let type_sexp  = Builtin (SexpType , "Sexp" , type0)
 
 let op_binary t =  Arrow (Aexplicit, None, t, dloc,
                         Arrow (Aexplicit, None, t, dloc, t))
@@ -142,6 +142,26 @@ let make_node loc args_val ctx    =
 
         Vsexp(Node(op, s))
 
+(* Takes one sexp and 6 function returning a sexp                       *)
+(* Sexp -> (Sexp -> Sexp) -> (Sexp -> Sexp) -> (Sexp -> Sexp)
+        -> (Sexp -> Sexp) -> (Sexp -> Sexp) -> (Sexp -> Sexp)
+        -> (Sexp -> Sexp)                                               *)
+let sexp_dispatch loc args ctx =
+
+    let sxp, nd, sym, str, it, flt, blk = match args with
+        | [Vsexp(sxp), nd, sym, str, it, flt, blk] ->
+            sxp, nd, sym, str, it, flt, blk
+        | _ -> builtin_error loc "sexp_dispatch expects 5 arguments" in
+
+    match sxp with
+        | Node _    -> nd
+        | Symbol _  -> sym
+        | String _  -> str
+        | Integer _ -> it
+        | Float _   -> flt
+        | Block _   -> blk
+        | _ -> builtin_error loc "sexp_dispatch error"
+
 
 let make_block loc args_val ctx   = Vdummy
 let make_string loc args_val ctx  = Vdummy
@@ -168,8 +188,11 @@ let builtin_node    = Builtin (SexpType, "node_", type_mnode)
 
 
 let builtin_macro = Cons (((dloc, "Macro"), (-4)), (dloc, "Macro_"))
+(* let builtin_quote = Cons (((dloc, "Macro"), (-4)), (dloc, "quote")) *)
+let builtin_qq    = Cons (((dloc, "Macro"), (-4)), (dloc, "qquote"))
 let type_macro    = Builtin (MacroType, "Macro", type0)
 let macro_cons    = Arrow (Aexplicit, None, type_sexp, dloc, type_macro)
+let quote_cons    = Arrow (Aexplicit, None, type0, dloc, type_sexp)
 
 
 (*
@@ -197,6 +220,8 @@ let typer_builtins = [
     ("_+_"   , builtin_iadd,  iop_binary, iadd_impl);  (* int -> int -> int  *)
     ("_*_"   , builtin_imult, iop_binary, imult_impl); (* int -> int -> int  *)
     ("Macro_", builtin_macro, macro_cons, none_fun);
+    (*("'"     , builtin_quote, quote_cons, none_fun); *)
+    ("qquote"    , builtin_qq   , quote_cons, none_fun);
 (*  Macro primitives *)
     ("block_"  , builtin_block  , type_mblock  , make_block);
     ("symbol_" , builtin_symbol , type_msymbol , make_symbol);
@@ -208,8 +233,8 @@ let typer_builtins = [
 
 (* Macros primitives type ? *)
 
-
 ]
+
 
 (* Make built-in lookup table *)
 let _builtin_lookup =

@@ -338,6 +338,10 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
     let largs = _lexp_parse_all pargs ctx i in
     let new_args = List.map (fun g -> (Aexplicit, g)) largs in
 
+    let from_lctx ctx = try (from_lctx ctx)
+        with e ->
+            lexp_fatal loc "Could not convert lexp context into rte context" in
+
     (* consume Arrows and args together *)
     let rec get_return_type name i ltp args =
         match ltp, args with
@@ -392,11 +396,7 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
                 lexp_fatal loc (name ^ " was found but " ^ (string_of_int idx) ^
                     " is not a correct index.") in
 
-        let rctx = try (from_lctx ctx)
-            with e ->
-                lexp_fatal loc "Could not convert lexp context into rte context" in
-
-        let sxp = match eval lxp rctx with
+        let sxp = match eval lxp (from_lctx ctx) with
             (* (Macro_ sexp) is returned *)
             | Vcons(_, [Vsexp(sxp)]) -> sxp
             | v -> value_print v; print_string "\n";
@@ -407,6 +407,30 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
         let lxp, ltp = _lexp_p_infer pxp ctx (i + 1) in
             Call(lxp, new_args), ltp in
 
+    let handle_qq loc =
+        (* In quasi quote we need to traverse the sexp tree and evaluate
+         * (uq) calls                                                         *)
+
+        let rec seek_n_replace sxp =
+            match sxp with
+                | Node (Symbol(_, "uquote"), [arg]) ->(
+                     let parg = pexp_parse arg in
+                     let larg, _ = _lexp_p_infer parg ctx i in
+                     let vsxp = eval larg (from_lctx ctx) in
+                        match vsxp with
+                            | Vint    (i)   -> Integer(loc, i)
+                            | Vstring (s)   -> String (loc, s)
+                            | Vsexp(sxp)    -> sxp
+                            | _ -> lexp_warning loc "Sexp was expected"; Epsilon)
+
+                | Node (op, lst)     -> Node(op, (List.map seek_n_replace lst))
+                | _ -> sxp in
+
+        let sxp = match sargs with
+            | [sxp] -> seek_n_replace sxp
+            | _ -> lexp_error loc "qquote expects a sexp"; Epsilon in
+                Imm(sxp), type_sexp in
+
     (* determine function type *)
     match fun_name, ltp with
         (* Anonymous *)
@@ -415,6 +439,13 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
         (* Call to a macro *)
         | (Pvar (l, n), Builtin(tp, "Macro", _)) when tp = MacroType ->
              handle_macro_call (l, n)
+
+        | (Pvar (l, "qquote"), _) -> handle_qq l
+
+        (* Call to quote * )
+        | (Pvar (l, "'"), _) -> (match (handle_named_call (l, "'")), sargs with
+            | (Call (n, _), ltp), [sxp] -> Call(n, [(Aexplicit, Imm(sxp))]), ltp
+            | e, _ -> lexp_warning loc "quote operator expects one argument"; e) *)
 
         (* Call to Vanilla or constructor *)
         | (Pvar v, _) -> handle_named_call v
