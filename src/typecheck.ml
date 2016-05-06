@@ -159,8 +159,8 @@ let rec unsusp e s =            (* Push a suspension one level down.  *)
                             cases in
       Inductive (l, label, nargs, ncases)
   | Cons _ -> e
-  | Case (l, e, it, cases, default)
-    -> Case (l, mkSusp e s, mkSusp it s,
+  | Case (l, e, it, ret, cases, default)
+    -> Case (l, mkSusp e s, mkSusp it s, mkSusp ret s,
             SMap.map (fun (l, cargs, e)
                       -> let s' = L.fold_left (fun s carg
                                               -> match carg with
@@ -251,6 +251,8 @@ let rec check ctx e =
         | _ -> (U.msg_error "TC" (lexp_location t)
                            "Formal arg type is not a type!"; ()));
        Arrow (ak, Some v, t, l,
+              (* FIXME: If ak is Aerasable, make sure the var only appears
+               * in type annotations.  *)
               check (Myers.cons (0, Some v, Variable, t) ctx) e))
   | Call (f, args)
     -> let ft = check ctx f in
@@ -281,11 +283,10 @@ let rec check ctx e =
       let tct = arg_loop args (Stype (SortLevel (SLn 0))) ctx in
       (* FIXME: Check cases!  *)
       tct
-  (* | Case (l, e, it, branches, default)
-   *   -> let et = check ctx e in *)
+  (*| Case (l, e, it, branches, default)
+    -> let et = check ctx e in
       (* FIXME: Check that `et` is derived from `it`.
-       * E.g. `et` could be `List Int` while `it` is `List`.  *)
-      (* FIXME: If there are no branches nor default, then we have no
-       * way to infer the type!  *)
-      (* FIXME: Check branches and default!  *)
-
+       * E.g. if `et` is `List Int` then `it` should be `List`.  *)
+      SMap.iter (fun name (l, vdefs, branch)
+                 ->
+   *)

@@ -232,6 +232,7 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
                 Cons((vr, -1), sym), dltype)
 
         (* Pcase *)
+        (* FIXME: This should be in lexp_p_check!  *)
         | Pcase (loc, target, patterns) ->
 
             let tlxp, tltp = lexp_infer target ctx in
@@ -277,9 +278,9 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
                 | hd::tl, None -> hd
                 | _, Some v -> v
                 (* This will change *)
-                | _, None -> lexp_error loc "case with no branch ?"; dltype in
-
-                Case(loc, tlxp, tltp, lpattern, dflt), (return_type)
+                | _, None -> lexp_error loc "case with no branch ?"; dltype
+            in Case (loc, tlxp, tltp, return_type, lpattern, dflt),
+               (return_type)
 
         | Phastype (_, pxp, ptp) ->
             let ltp, _ = lexp_infer ptp ctx in

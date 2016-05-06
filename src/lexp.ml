@@ -79,6 +79,7 @@ type ltype = lexp
    | Cons of vref * symbol (* = Type info * ctor_name  *)
    | Case of location * lexp
              * ltype (* The base inductive type over which we switch.  *)
+             * ltype (* The type of the return value of all branches *)
              * (location * (arg_kind * vdef) option list * lexp) SMap.t
              * lexp option               (* Default.  *)
  (*   (\* For logical metavars, there's no substitution.  *\)
@@ -250,7 +251,7 @@ let rec lexp_location e =
   | Call (f,_) -> lexp_location f
   | Inductive (l,_,_,_) -> l
   | Cons (_,(l,_)) -> l
-  | Case (l,_,_,_,_) -> l
+  | Case (l,_,_,_,_,_) -> l
   | Susp (e, _) -> lexp_location e
   (* | Susp (_, e) -> lexp_location e
    * | Metavar ((l,_),_,_) -> l *)
@@ -549,6 +550,9 @@ and _lexp_print ctx e = print_string (_lexp_to_str ctx e)
 (* If I remember correctly ocaml doc, concat string is actually terrible *)
 (* It might be better to use a Buffer. *)
 and lexp_to_str exp = _lexp_to_str (!debug_ppctx) exp
+
+(* FIXME: We don't want lexp_to_str, instead we want lexp_to_pexp (aka
+ * "unparse"), which we can then combine with pexp_to_sexp, etc...  *)
 and _lexp_to_str ctx exp =
     (* create a string instead of printing *)
 
@@ -640,6 +644,10 @@ and _lexp_to_str ctx exp =
 
             match (str, args) with
                 (* Special Operators *)
+                (* FIXME: Get rid of these special cases:
+                 * Either use the boring (_+_ e1 e2) notation, or check the
+                 * grammar to decide when we can use the infix notation and
+                 * when to add parenthese.  *)
                 | ("_=_", [lhs; rhs]) -> binop_str " = " lhs rhs
                 | ("_+_", [lhs; rhs]) -> binop_str " + " lhs rhs
                 | ("_-_", [lhs; rhs]) -> binop_str " - " lhs rhs
@@ -662,15 +670,18 @@ and _lexp_to_str ctx exp =
 
         | Inductive (_, (_, name), args, ctors) ->
             let args_str = List.fold_left (fun str (arg_kind, (_, name), ltype) ->
-                str ^ " (" ^ name ^ " " ^ (kindp_str arg_kind) ^ " " ^ (lexp_to_str ltype) ^ ")")
+                str ^ " (" ^ name ^ " " ^ (kindp_str arg_kind) ^ " "
+                ^ (lexp_to_str ltype) ^ ")")
                 "" args in
 
             (keyword "inductive_") ^ " (" ^ name ^ args_str ^") " ^
                                             (lexp_str_ctor ctx ctors)
 
-        | Case (_, target, tpe, map, dflt) ->(
-            let str = (keyword "case ") ^ (lexp_to_str target) ^
-                                          " : " ^ (lexp_to_str tpe) in
+        | Case (_, target, tpe, _ret, map, dflt) ->(
+            let str = (keyword "case ") ^ (lexp_to_str target)
+            (* FIXME: `tpe' is the *base* type of `target`.  E.g. if `target`
+             * is a `List Int`, then `tpe` will be `List`.
+               ^ * " : " ^ (lexp_to_str tpe) *) in
             let arg_str arg =
                 List.fold_left (fun str v ->
                     match v with

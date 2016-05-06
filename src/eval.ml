@@ -95,7 +95,8 @@ let rec _eval lxp ctx i: (value_type) =
         | Call (lname, args) -> eval_call ctx i lname args
 
         (* Case *)
-        | Case (loc, target, _, pat, dflt) -> (eval_case ctx i loc target pat dflt)
+        | Case (loc, target, _, _, pat, dflt)
+          -> (eval_case ctx i loc target pat dflt)
 
         | _ -> print_string "debug catch-all eval: ";
             lexp_print lxp; Vstring("eval Not Implemented")
