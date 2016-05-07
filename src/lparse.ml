@@ -414,16 +414,35 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
                 lexp_fatal loc (name ^ " was found but " ^ (string_of_int idx) ^
                     " is not a correct index.") in
 
-        let sxp = match eval lxp (from_lctx ctx) with
-            (* (Macro_ sexp) is returned *)
-            | Vcons(_, [Vsexp(sxp)]) -> sxp
+        let rctx = (from_lctx ctx) in
+        let sxp = match eval lxp rctx with
+            (* This give me a closure to be evaluated with sargs *)
+            | Vcons(_, [Closure(body, rctx)]) ->(
+                (* Build typer list from ocaml list *)
+                let rsargs = List.rev sargs in
+
+                (* Get Constructor *)
+                let considx = senv_lookup "cons" ctx in
+                let nilidx  = senv_lookup  "nil" ctx in
+
+                let tcons = Var((dloc, "cons"), considx) in
+                let tnil  = Var((dloc,  "nil"),  nilidx) in
+
+                let arg = List.fold_left (fun tail elem ->
+                    Call(tcons, [(Aexplicit, (Imm(elem)));
+                                 (Aexplicit, tail)])) tnil rsargs in
+
+                let rctx = add_rte_variable None (eval arg rctx) rctx in
+                let r = eval body rctx in
+                    match r with
+                        | Vsexp(s) -> s
+                        | _ -> Epsilon)
+
             | v -> value_print v; print_string "\n";
                 lexp_fatal loc "Macro_ expects sexp" in
 
         let pxp = pexp_parse sxp in
-        (* Generated Code *)
-        let lxp, ltp = _lexp_p_infer pxp ctx (i + 1) in
-            Call(lxp, new_args), ltp in
+            _lexp_p_infer pxp ctx (i + 1)  in
 
     (*
     let handle_qq loc =
@@ -458,17 +477,9 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
         (* Anonymous *)
         | ((Plambda _), _) -> Call(body, new_args), ltp
 
-        (* Call to a macro *)
-        | (Pvar (l, n), Builtin((_, "Macro"), _)) ->
-             handle_macro_call (l, n)
-
-        (*
-        | (Pvar (l, "qquote"), _) -> handle_qq l *)
-
-        (* Call to quote * )
-        | (Pvar (l, "'"), _) -> (match (handle_named_call (l, "'")), sargs with
-            | (Call (n, _), ltp), [sxp] -> Call(n, [(Aexplicit, Imm(sxp))]), ltp
-            | e, _ -> lexp_warning loc "quote operator expects one argument"; e) *)
+        | (Pvar (l, n), Var((_, "Macro"), _)) ->
+            (* FIXME: check db_idx points too a Macro type *)
+            handle_macro_call (l, n)
 
         (* Call to Vanilla or constructor *)
         | (Pvar v, _) -> handle_named_call v
@@ -625,6 +636,7 @@ and _lexp_decls decls ctx i: (((vdef * lexp * ltype) list) * lexp_context) =
     (* Process declaration in itself*)
     let n = ref ((List.length ndecls) - 1) in
         List.iter (fun ((loc, name), opxp, otpxp) ->
+            _global_lexp_trace := [];
             let vdef = (loc, name) in
             let vref = (vdef, !n) in
                 n := !n - 1;

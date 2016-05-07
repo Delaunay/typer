@@ -110,14 +110,33 @@ let make_symbol loc args_val ctx  =
 
 let make_node loc args_val ctx    =
 
+    let tlist = match args_val with
+        | [lst] -> lst
+        | _ -> builtin_error loc "node_ expects one 'List Sexp'" in
+
+    (* Typer list to Ocaml list *)
+    let rec tlist2olist acc expr =
+        match expr with
+            | Vcons((_, "cons"), [hd; tl]) ->
+                tlist2olist (hd::acc) tl
+            | Vcons((_, "nil"), []) -> List.rev acc
+            | _ -> builtin_error loc "node_ expects one 'List Sexp'" in
+
+
+    let args_val = tlist2olist [] tlist in
+
     let op, args = match args_val with
         | Vsexp(s)::tl -> s, tl
         | _::tl -> builtin_error loc ("node_ expects sexp as operator")
         | _ -> builtin_error loc ("node_ expects at least 2 arguments") in
 
     let s = List.map (fun g -> match g with
-        | Vsexp(sxp) -> sxp
-        | _ -> builtin_error loc ("node_ expects sexp as arguments")) args in
+        | Vsexp(sxp)  -> sxp
+        (* eval transform sexp into those... *)
+        | Vint (i)    -> Integer(dloc, i)
+        | Vstring (s) -> String(dloc, s)
+        | _ -> value_print g;
+            builtin_error loc ("node_ expects sexp as arguments")) args in
 
         Vsexp(Node(op, s))
 
@@ -148,6 +167,30 @@ let make_string loc args_val ctx  = Vdummy
 let make_integer loc args_val ctx = Vdummy
 let make_float loc args_val ctx   = Vdummy
 
+let ttrue = Vcons((dloc, "True"), [])
+let tfalse = Vcons((dloc, "False"), [])
+let btyper b = if b then ttrue else tfalse
+
+let string_eq loc args_val ctx =
+    match args_val with
+        | [Vstring(s1); Vstring(s2)] -> btyper (s1 = s2)
+        | _ -> builtin_error loc "string_eq expects 2 strings"
+
+let int_eq loc args_val ctx =
+    match args_val with
+        | [Vint(s1); Vint(s2)] -> btyper (s1 = s2)
+        | _ -> builtin_error loc "int_eq expects 2 integer"
+
+let sexp_eq loc args_val ctx =
+    match args_val with
+        | [Vsexp(s1); Vsexp(s2)] -> (
+            match s1, s2 with
+                | Symbol(_, s1), Symbol(_, s2)   -> btyper (s1 = s2)
+                | String(_, s1), String(_, s2)   -> btyper (s1 = s2)
+                | Integer(_, s1), Integer(_, s2) -> btyper (s1 = s2)
+                | Float(_, s1), Float(_, s2)     -> btyper (s1 = s2)
+                | _ -> tfalse)
+        | _ -> builtin_error loc "int_eq expects 2 sexp"
 
 (*
  *  Should we have a function that
@@ -170,6 +213,9 @@ let typer_builtins_impl = [
     ("float_"        , make_float);
     ("node_"         , make_node);
     ("sexp_dispatch_", sexp_dispatch);
+    ("string_eq"     , string_eq);
+    ("int_eq"        , int_eq);
+    ("sexp_eq"       , sexp_eq);
 ]
 
 (* Make built-in lookup table *)

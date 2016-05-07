@@ -28,7 +28,7 @@
 %*      Description:
 %*          Define builtin types and functions
 %*
-%* ---------------------------------------------------------------------------*)
+%* ---------------------------------------------------------------------------
 
 % -----------------------------------------------------
 %       Base Types
@@ -46,6 +46,19 @@ _+_ = Built-in "_+_";
 
 _*_ : Int -> Int -> Int;
 _*_  = Built-in "_*_";
+
+Bool = inductive_ (Boolean) (True) (False);
+True = inductive-cons Bool True;
+False = inductive-cons Bool False;
+
+string_eq : String -> String -> Bool;
+string_eq = Built-in "string_eq";
+
+int_eq : Int -> Int -> Bool;
+int_eq = Built-in "int_eq";
+
+sexp_eq : Sexp -> Sexp -> Bool;
+sexp_eq = Built-in "sexp_eq";
 
 % -----------------------------------------------------
 %       List
@@ -100,10 +113,11 @@ integer_ = Built-in "integer_";
 float_   : Float       -> Sexp;
 float_   = Built-in "float_";
 
-Macro : Type;
+Macro  : Type;
 Macro  = inductive_ (dMacro) (Macro_ ((List Sexp) -> Sexp));
 Macro_ = inductive-cons Macro Macro_ ;
 
+% Type is not accurate yet
 sexp_dispatch_ : Sexp -> (Sexp -> Sexp) -> (Sexp -> Sexp) -> (Sexp -> Sexp)
     -> (Sexp -> Sexp) -> (Sexp -> Sexp) -> (Sexp -> Sexp) -> (Sexp -> Sexp);
 sexp_dispatch_ = Built-in "sexp_dispatch_";
