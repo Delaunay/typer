@@ -47,11 +47,11 @@ let builtin_error loc msg =
 
 
 (*                Builtin types               *)
-let dloc = dummy_location
+let dloc    = dummy_location
 let slevel0 = SortLevel (SLn 0)
 let slevel1 = SortLevel (SLn 1)
-let type0 = Sort (dloc, Stype slevel0)
-let type1 = Sort (dloc, Stype slevel1)
+let type0   = Sort (dloc, Stype slevel0)
+let type1      = Sort (dloc, Stype slevel1)
 let type_omega = Sort (dloc, StypeOmega)
 let type_level = Sort (dloc, StypeLevel)
 let type_level = Builtin ((dloc, "TypeLevel"), type_level)
@@ -128,7 +128,7 @@ let make_node loc args_val ctx    =
 let sexp_dispatch loc args ctx =
 
     let sxp, nd, sym, str, it, flt, blk = match args with
-        | [Vsexp(sxp), nd, sym, str, it, flt, blk] ->
+        | [Vsexp(sxp); nd; sym; str; it; flt; blk] ->
             sxp, nd, sym, str, it, flt, blk
         | _ -> builtin_error loc "sexp_dispatch expects 5 arguments" in
 
@@ -161,13 +161,15 @@ let make_float loc args_val ctx   = Vdummy
 
 (* Built-in list of types/functions *)
 let typer_builtins_impl = [
-    ("_+_"     , iadd_impl);
-    ("_*_"     , imult_impl);
-    ("block_"  , make_block);
-    ("symbol_" , make_symbol);
-    ("string_" , make_string);
-    ("integer_", make_integer);
-    ("node_"   , make_node);
+    ("_+_"           , iadd_impl);
+    ("_*_"           , imult_impl);
+    ("block_"        , make_block);
+    ("symbol_"       , make_symbol);
+    ("string_"       , make_string);
+    ("integer_"      , make_integer);
+    ("float_"        , make_float);
+    ("node_"         , make_node);
+    ("sexp_dispatch_", sexp_dispatch);
 ]
 
 (* Make built-in lookup table *)

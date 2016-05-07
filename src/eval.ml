@@ -140,9 +140,7 @@ and eval_case ctx i loc target pat dflt =
 
     (* extract constructor name and arguments *)
     let ctor_name, args = match v with
-        (* | Call(Var((_, cname), tp), args) -> cname, args *)
         | Vcons((_, cname), args)  -> cname, args
-
         | _ ->
             (* -- Debug print -- *)
             lexp_print target; print_string "\n";
@@ -150,32 +148,8 @@ and eval_case ctx i loc target pat dflt =
             (* -- Crash -- *)
             eval_error loc "Target is not a Constructor" in
 
-    (* let ctor_n = List.length args in *)
-
-    (*  Check if a default is present *)
-    let run_default df =
-        match df with
-            | Some lxp -> _eval lxp ctx (i + 1)
-            | None ->
-                (* -- Debug print -- *)
-                lexp_print target; print_string "\n";
-                value_print v;     print_string "\n";
-                (* -- Crash -- *)
-                eval_error loc "Match Failure" in
-
-    (*  Build a filter option *)
-    let is_true key (_, pat_args, _) =
-        (*let pat_n = List.length pat_args in (pat_n = ctor_n) &&  *)
-            (ctor_name = key) in
-
-    (*  Search for the working pattern *)
-    let sol = SMap.filter is_true pat in
-    if SMap.is_empty sol then
-        run_default dflt
-    else(
-        (*  Get working pattern *)
-        let key, (_, pat_args, exp) = SMap.min_binding sol in
-
+    (*  Get working pattern *)
+    try let (_, pat_args, exp) = SMap.find ctor_name pat in
         (* build context (List.fold2 has problem with some cases)  *)
         (* This is more robust                                     *)
         let rec fold2 nctx pats args =
@@ -184,14 +158,20 @@ and eval_case ctx i loc target pat dflt =
                     let nctx = add_rte_variable (Some name) arg nctx in
                         fold2 nctx pats args
                 | (_, None)::pats, arg::args ->  fold2 nctx pats args
-                (* Errors *)
+                (* Errors: those should not happen but they might  *)
+                (* List.fold2 would complain. we print more info   *)
                 | _::_, [] -> eval_warning loc "a) Eval::Case Pattern Error"; nctx
                 | [], _::_ -> eval_warning loc "b) Eval::Case Pattern Error"; nctx
                 (* Normal case *)
                 | [], [] -> nctx in
 
         let nctx = fold2 ctx pat_args args in
-            _eval exp nctx (i + 1))
+            _eval exp nctx (i + 1)
+
+    (* Run default *)
+    with Not_found -> (match dflt with
+        | Some lxp -> _eval lxp ctx (i + 1)
+        | _ -> eval_error loc "Match Failure")
 
 and build_arg_list args ctx i =
     (*  _eval every args *)

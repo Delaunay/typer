@@ -593,9 +593,9 @@ let lexp_print e = sexp_print (pexp_unparse (lexp_unparse e))
 
 type print_context = (bool * int * bool * bool * bool * bool* int)
 
-let pretty_ppctx  = ref (true , 0, true, false, true,  2, true)
-let compact_ppctx = ref (false, 0, true, false, true,  2, false)
-let debug_ppctx   = ref (false, 0, true, true , false, 2, true)
+let pretty_ppctx  = ref (true , 0, true, false, true,  4, true)
+let compact_ppctx = ref (false, 0, true, false, true,  4, false)
+let debug_ppctx   = ref (false, 0, true, true , false, 4, true)
 
 let rec lexp_print e = _lexp_print (!debug_ppctx) e
 and _lexp_print ctx e = print_string (_lexp_to_str ctx e)
@@ -617,7 +617,7 @@ and _lexp_to_str ctx exp =
     let lexp_to_str = _lexp_to_str ctx in
 
     (* internal context, when parsing let *)
-    let inter_ctx = (false, indent + 1, ptype, pindex, false, isize, color) in
+    let inter_ctx = (pretty, indent + 1, ptype, pindex, false, isize, color) in
 
     let lexp_to_stri idt e =
         _lexp_to_str (pretty, indent + idt, ptype, pindex, false, isize, color) e in
@@ -636,10 +636,10 @@ and _lexp_to_str ctx exp =
     let newline = (if pretty then "\n" else " ") in
     let nl = newline in
 
-    let keyword str = magenta ^ str ^ reset in
-    let error str   = red ^ str ^ reset in
-    let tval str = yellow ^ str ^ reset in
-    let fun_call str= cyan ^ str ^ reset in
+    let keyword str  = magenta ^ str ^ reset in
+    let error str    = red     ^ str ^ reset in
+    let tval str     = yellow  ^ str ^ reset in
+    let fun_call str = cyan    ^ str ^ reset in
 
     let index idx = let str = _index idx in if idx < 0 then (error str) else
         (green ^ str ^ reset) in
@@ -662,11 +662,22 @@ and _lexp_to_str ctx exp =
         | Var ((loc, name), idx) -> name ^ (index idx) ;
 
         | Let (_, decls, body)   ->
-            let decls = List.fold_left (fun str elem ->
-                str ^ elem ^ " ") "" (_lexp_str_decls inter_ctx decls) in
+            (* Print first decls without indent *)
+            let h1, decls, idt_lvl =
+                match _lexp_str_decls inter_ctx decls with
+                    | h1::decls -> h1, decls, 2
+                    | _ -> "", [], 1 in
 
-            (keyword "let ") ^ decls ^ (keyword "in ") ^ newline ^
-                (make_indent 1) ^ (lexp_to_stri 1 body)
+            let decls = List.fold_left (fun str elem ->
+                str ^ (make_indent 1) ^ elem ^ nl)
+                    (h1 ^ nl) decls  in
+
+            let n = String.length decls - 2 in
+            (* remove last newline *)
+            let decls = (String.sub decls 0 n) in
+
+            (keyword "let ") ^ decls ^ (keyword " in ") ^ newline ^
+                (make_indent idt_lvl) ^ (lexp_to_stri 1 body)
 
         | Arrow(k, Some (_, name), tp, loc, expr) ->
             "(" ^ name ^ " : " ^ (lexp_to_str tp) ^ ") " ^
@@ -780,16 +791,17 @@ and _lexp_str_decls ctx decls =
     let (pretty, indent, ptype, pindex, sepdecl, isize, _) = ctx in
     let lexp_to_str = _lexp_to_str ctx in
 
-    let make_indent idt = if pretty then (make_line ' ' ((idt + indent) * isize)) else "" in
+    (* let make_indent idt =
+        if pretty then (make_line ' ' ((idt + indent) * isize)) else "" in *)
+
     let sepdecl = (if sepdecl then "\n" else "") in
 
     let type_str name lxp = (if ptype then (
-        (make_indent 0) ^ name ^ " : " ^ (lexp_to_str lxp) ^ ";") else "") in
+         name ^ " : " ^ (lexp_to_str lxp) ^ ";") else "") in
 
     let ret = List.fold_left (fun str ((_, name), lxp, ltp) ->
         let str = if ptype then (type_str name ltp)::str else str in
-        ((make_indent 0) ^ name ^ " = " ^ (lexp_to_str lxp) ^ ";" ^
-            sepdecl)::str)
+            (name ^ " = " ^ (lexp_to_str lxp) ^ ";" ^ sepdecl)::str)
 
         [] decls in
         List.rev ret

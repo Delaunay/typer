@@ -224,7 +224,7 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
 
                 (* build Arrow type *)
                 let cons_type = List.fold_left (fun ltp (kind, v, tp) ->
-                    Arrow(kind, v, ltp, loc, tp)) inductive_type args in
+                    Arrow(kind, v, tp, loc, ltp)) inductive_type (List.rev args) in
 
                 Cons((vr, idx), sym), cons_type
 
@@ -233,56 +233,9 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
                 ("The inductive type: " ^ type_name ^ " was not declared");
                 Cons((vr, -1), sym), dltype)
 
-        (* Pcase *)
-        (* FIXME: This should be in lexp_p_check!  *)
+        (* Pcase: we can infer iff `patterns` is not empty *)
         | Pcase (loc, target, patterns) ->
-
-            let tlxp, tltp = lexp_infer target ctx in
-
-            let uniqueness_warn name =
-                lexp_warning loc ("Pattern " ^ name ^ " is a duplicate." ^
-                                       " It will override previous pattern.") in
-
-            let check_uniqueness loc name map = (
-                try let _ = SMap.find name map in uniqueness_warn name
-                with e -> ()) in
-
-            (* FIXME: check if case is exhaustive  *)
-
-            (* make a list of all branches return type *)
-            let texp = ref [] in
-
-            (*  Read patterns one by one *)
-            let rec loop ptrns merged dflt =
-                match ptrns with
-                    | [] -> merged, dflt
-                    | hd::tl ->
-                        let (pat, exp) = hd in
-                        (*  Create pattern context *)
-                        let (name, iloc, arg), nctx = lexp_read_pattern pat exp tlxp ctx in
-                        (*  parse using pattern context *)
-                        let exp, ltp = lexp_infer exp nctx in
-                            texp := ltp::!texp;
-
-                        if name = "_" then (
-                            (if dflt != None then uniqueness_warn name);
-                            loop tl merged (Some exp))
-                        else (
-                            check_uniqueness iloc name merged;
-                            let merged = SMap.add name (iloc, arg, exp) merged in
-                            loop tl merged dflt) in
-
-            let (lpattern, dflt) = loop patterns SMap.empty None in
-
-            (* FIXME: check return types are equivalent *)
-            let return_type = match (!texp), dflt with
-                | hd::tl, Some _ -> hd
-                | hd::tl, None -> hd
-                | _, Some v -> v
-                (* This will change *)
-                | _, None -> lexp_error loc "case with no branch ?"; dltype
-            in Case (loc, tlxp, tltp, return_type, lpattern, dflt),
-               (return_type)
+            lexp_case None (loc, target, patterns) ctx i
 
         | Phastype (_, pxp, ptp) ->
             let ltp, _ = lexp_infer ptp ctx in
@@ -299,7 +252,7 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
 
     match p with
         (* This case cannot be inferred *)
-        | Plambda (kind, var, None, body) ->
+        | Plambda (kind, var, None, body) ->(
             (* Read var type from the provided type *)
             let ltp, lbtp = match t with
                 | Arrow(kind, _, ltp, _, lbtp) -> ltp, lbtp
@@ -308,29 +261,78 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
             let nctx = env_extend ctx var None ltp in
             let lbody = _lexp_p_check body lbtp nctx (i + 1) in
 
-                Lambda(kind, var, ltp, lbody)
+                Lambda(kind, var, ltp, lbody))
 
-        (*
-        | Pcall (Pvar(_, "expand_"), _args) ->(
-            let pargs = List.map pexp_parse _args in
-            let largs = _lexp_parse_all pargs ctx i in
+        (* This is mostly for the case where no branches are provided *)
+        | Pcase (loc, target, patterns) ->
+            let lxp, _ = lexp_case (Some t) (loc, target, patterns) ctx i in
+                lxp
 
-            let lxp = match largs with
-                | [lxp] -> lxp
-                | hd::tl -> lexp_error tloc "expand_ expects one lexp"; hd
-                | _ -> lexp_fatal tloc "expand_ expects one lexp" in
+        | _ -> let (e, inferred_t) = _lexp_p_infer p ctx (i + 1) in
+            (* FIXME: check that inferred_t = t!  *)
+            e
 
-            (* eval argument *)
-            let sxp = match eval lxp (from_lctx ctx) with
-                | Vsexp(sxp) -> sxp
-                | _ -> lexp_fatal tloc "expand_ expects sexp" in
+(* Lexp.case cam be checked and inferred *)
+and lexp_case (rtype: lexp option) (loc, target, patterns) ctx i =
+    (* FIXME: check if case is exhaustive  *)
+    (* Helpers *)
+    let lexp_infer p ctx = _lexp_p_infer p ctx (i + 1) in
 
-            let pxp = pexp_parse sxp in
-                _lexp_p_check pxp t ctx (i + 1)) *)
+    let rtype = ref rtype in
 
-    | _ -> let (e, inferred_t) = _lexp_p_infer p ctx (i + 1) in
-        (* FIXME: check that inferred_t = t!  *)
-        e
+    let type_check ltp =
+        match !rtype with
+            (* FIXME: check if branch returns correct type *)
+            | Some rltp -> true
+             (* if rtype was not provided then we use the first branch as reference *)
+            | None -> rtype := (Some ltp); true in
+
+    let uniqueness_warn name =
+        lexp_warning loc ("Pattern " ^ name ^ " is a duplicate." ^
+                          " It will override previous pattern.") in
+
+    let check_uniqueness loc name map =
+        try let _ = SMap.find name map in uniqueness_warn name
+            with e -> () in
+
+    (* get target and its type *)
+    let tlxp, tltp = lexp_infer target ctx in
+
+    (* make a list of all branches return type *)
+    let texp = ref [] in
+
+    (*  Read patterns one by one *)
+    let fold_fun (merged, dflt) (pat, exp) =
+        (*  Create pattern context *)
+        let (name, iloc, arg), nctx = lexp_read_pattern pat exp tlxp ctx in
+
+        (*  parse using pattern context *)
+        let exp, ltp = lexp_infer exp nctx in
+            texp := ltp::!texp;
+
+        (* Check ltp type. Must be similar to rtype *)
+        (if type_check ltp then ()
+            else lexp_error iloc "Branch return type mismatch");
+
+        if name = "_" then (
+            (if dflt != None then uniqueness_warn name);
+                merged, (Some exp))
+        else (
+            check_uniqueness iloc name merged;
+            let merged = SMap.add name (iloc, arg, exp) merged in
+                merged, dflt) in
+
+    let (lpattern, dflt) =
+        List.fold_left fold_fun (SMap.empty, None) patterns in
+
+    let return_type = match (!texp), (!rtype) with
+        | hd::_, _ -> hd
+        | _    , Some v -> v
+
+        (* This is impossible *)
+        | _, None -> typer_unreachable "The case has no return type info" in
+
+    Case (loc, tlxp, tltp, return_type, lpattern, dflt), return_type
 
 (*  Identify Call Type and return processed call *)
 and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
@@ -693,6 +695,8 @@ and print_lexp_ctx ctx =
         print_string    " | ";  lalign_print_int (n - idx - 1) 7;
         print_string    " | ";
 
+        let ptr_str = "" in (*"    |            |         |            | " in *)
+
         try let (_, (_, name), exp, tp) = env_lookup_by_index (n - idx - 1) ctx in
 
             (*  Print env Info *)
@@ -701,9 +705,16 @@ and print_lexp_ctx ctx =
 
             let _ = (match exp with
                 | None -> print_string "<var>"
-                | Some exp -> lexp_print exp) in
+                | Some exp -> lexp_print exp)
+                    (* let str = _lexp_to_str (!debug_ppctx) exp in
+                    let str = (match str_split str '\n' with
+                        | hd::tl -> print_string (hd ^ "\n"); tl
+                        | _ -> []) in
 
-            print_string ": "; lexp_print tp; print_string "\n";
+                        List.iter (fun elem ->
+                            print_string (ptr_str ^ elem ^ "\n")) str) *)in
+
+            print_string (ptr_str ^ ": "); lexp_print tp; print_string "\n";
 
             _print (idx + 1) tl
 

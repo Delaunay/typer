@@ -4,6 +4,8 @@ Typer
 
 # How to build Typer
 
+Status [![Build Status](https://travis-ci.org/Delaunay/typer.svg?branch=master)](https://travis-ci.org/Delaunay/typer)
+
 ## Requirement
 
 * Ocaml 4.01

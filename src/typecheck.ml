@@ -54,7 +54,7 @@ and conv_p' (s1:lexp S.subst) (s2:lexp S.subst) e1 e2 : bool =
     | (Imm (String (_, i1)), Imm (String (_, i2))) -> i1 = i2
     | (SortLevel (sl1), SortLevel (sl2)) -> sl1 == sl2
     | (Sort (_, s1), Sort (_, s2)) -> s1 == s2
-    | (Builtin (b1, s1, _), Builtin (b2, s2, _)) -> b1 == b2 && s1 == s2
+    | (Builtin ((_, s1), _), Builtin ((_, s2), _)) -> s1 == s2
     (* BEWARE: When we'll make expand let-defined vars here, we'll have to
      * be careful not to introduce infinite-recursion.  *)
     | (Var (l1, v1), e2) when not (S.identity_p s1) ->
@@ -152,7 +152,7 @@ let rec check ctx e =
   | Sort (_, (Stype _))
     -> (U.msg_error "TC" (lexp_location e) "Non-level arg to Type!";
        B.type_omega)
-  | Builtin (_, _, t) -> t
+  | Builtin (_, t) -> t
   (* FIXME: Check recursive references.  *)
   | Var v -> lookup_type ctx v
   | Susp (e, s) -> check ctx (unsusp e s)

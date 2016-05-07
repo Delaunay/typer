@@ -133,6 +133,7 @@ let _ = (add_test "EVAL" "Nested Lambda" (fun () ->
  *  i.e the context should not grow                             *)
 let _ = (add_test "EVAL" "Infinite Recursion failure" (fun () ->
     reset_eval_trace ();
+    _typer_verbose := (-1);
 
     let code = "
         infinity : Int -> Int;
@@ -143,9 +144,11 @@ let _ = (add_test "EVAL" "Infinite Recursion failure" (fun () ->
     (* Expect throwing *)
     try         (*  use the silent version as an error will be thrown *)
         let _ = _eval_expr_str "(infinity 0);" lctx rctx true in
+            _typer_verbose := 20;
             failure ()
     with
         Internal_error m -> (
+            _typer_verbose := 20;
             if m = "Recursion Depth exceeded" then
                 success ()
             else

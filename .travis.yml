@@ -1,4 +1,9 @@
 language: ocaml
 
+addons:
+  apt:
+    packages:
+      - opam
+
 script: make tests
 

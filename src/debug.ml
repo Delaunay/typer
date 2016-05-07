@@ -164,30 +164,6 @@ let debug_pexp_print_all pexps =
         pexps
 ;;
 
-
-let str_split str sep =
-    let str = String.trim str in
-    let n = String.length str in
-
-    if n = 0 then []
-    else (
-
-        let ret = ref [] in
-        let buffer = Buffer.create 10 in
-            Buffer.add_char buffer (str.[0]);
-
-        for i = 1 to n - 1 do
-            if str.[i] = sep then (
-                ret := (Buffer.contents buffer)::(!ret);
-                Buffer.reset buffer)
-            else
-                Buffer.add_char buffer (str.[i]);
-        done;
-        (if (Buffer.length buffer) > 0 then
-            ret := (Buffer.contents buffer)::(!ret));
-
-        List.rev (!ret));;
-
 let debug_lexp_decls decls =
     let sep = " : " in
     List.iter (fun e ->
