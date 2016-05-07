@@ -54,17 +54,11 @@ let type0 = Sort (dloc, Stype slevel0)
 let type1 = Sort (dloc, Stype slevel1)
 let type_omega = Sort (dloc, StypeOmega)
 let type_level = Sort (dloc, StypeLevel)
-let type_level = Builtin (LevelType, "TypeLevel", type_level)
-
-let type_int   = Builtin (IntType  , "Int"  , type0)
-let type_float = Builtin (FloatType, "Float", type0)
-let type_sexp  = Builtin (SexpType , "Sexp" , type0)
+let type_level = Builtin ((dloc, "TypeLevel"), type_level)
 
 let op_binary t =  Arrow (Aexplicit, None, t, dloc,
                         Arrow (Aexplicit, None, t, dloc, t))
 
-let iop_binary = op_binary type_int
-let fop_binary = op_binary type_float
 let type_eq = let lv = (dloc, "l") in
    let tv = (dloc, "t") in
    Arrow (Aerasable, Some lv, type_level, dloc,
@@ -74,10 +68,6 @@ let type_eq = let lv = (dloc, "l") in
                         Arrow (Aexplicit, None, Var (tv, 1), dloc,
                                type0))))
 
-let builtin_iadd  = Builtin (IAdd, "_+_", iop_binary)
-let builtin_imult = Builtin (IMult, "_*_", iop_binary)
-let builtin_eq    = Builtin (EqType, "_=_", type_eq)
-
 (*
 let builtin_fadd = Builtin (FAdd, "_+_", fop_binary)
 let builtin_fmult = Builtin (FMult, "_*_", fop_binary) *)
@@ -85,10 +75,6 @@ let builtin_fmult = Builtin (FMult, "_*_", fop_binary) *)
 
 (* Builtin of builtin * string * ltype *)
 let _generic_binary_iop name f loc (args_val: value_type list) (ctx: runtime_env) =
-
-    (*
-    let l, r = get_rte_variable None 0 ctx,
-               get_rte_variable None 1 ctx  in *)
 
    let l, r = match args_val with
         | [l; r] -> l, r
@@ -163,37 +149,29 @@ let sexp_dispatch loc args ctx =
         | _ -> builtin_error loc "sexp_dispatch error"
 
 
+(* We need those ro build internal type *)
+let type_int      = Builtin((dloc, "Int")   , type0)
+let type_float    = Builtin((dloc, "Float") , type0)
+let type_sexp     = Builtin((dloc, "Sexp")  , type0)
+let type_string   = Builtin((dloc, "String"), type0)
+let type_macro    = Builtin((dloc, "Macro") , type0)
+let iop_binary    = op_binary type_int
+
 let make_block loc args_val ctx   = Vdummy
 let make_string loc args_val ctx  = Vdummy
 let make_integer loc args_val ctx = Vdummy
 let make_float loc args_val ctx   = Vdummy
 
-let type_string   = type0
-let type_mblock   = type0
-
 let type_msymbol  = Arrow (Aexplicit, None, type_string, dloc, type_sexp)
 let type_mstring  = Arrow (Aexplicit, None, type_string, dloc, type_sexp)
 let type_minteger = Arrow (Aexplicit, None, type_int   , dloc, type_sexp)
-let type_mfloat   = Arrow (Aexplicit, None, type_float , dloc, type_sexp)
 let type_mnode    = Arrow (Aexplicit, None, type_sexp  , dloc, type_sexp)
-let type_mexpand  = Arrow (Aexplicit, None, type_sexp  , dloc, type0)
-
-let builtin_block   = Builtin (SexpType, "block_", type_mblock)
-let builtin_symbol  = Builtin (SexpType, "symbol_", type_msymbol)
-let builtin_string  = Builtin (SexpType, "string_", type_mstring)
-let builtin_integer = Builtin (SexpType, "integer_", type_minteger)
-let builtin_float   = Builtin (SexpType, "float_", type_mfloat)
-let builtin_node    = Builtin (SexpType, "node_", type_mnode)
-(* let builtin_expand  = Builtin (SexpType, "expand_", type_mexpand) *)
-
+let type_mblock   = Arrow (Aexplicit, None, type_sexp  , dloc, type_sexp)
 
 let builtin_macro = Cons (((dloc, "Macro"), (-4)), (dloc, "Macro_"))
-(* let builtin_quote = Cons (((dloc, "Macro"), (-4)), (dloc, "quote")) *)
-let builtin_qq    = Cons (((dloc, "Macro"), (-4)), (dloc, "qquote"))
-let type_macro    = Builtin (MacroType, "Macro", type0)
+
 let macro_cons    = Arrow (Aexplicit, None, type_sexp, dloc, type_macro)
 let quote_cons    = Arrow (Aexplicit, None, type0, dloc, type_sexp)
-
 
 (*
  *  Should we have a function that
@@ -207,43 +185,37 @@ let quote_cons    = Arrow (Aexplicit, None, type0, dloc, type_sexp)
 (* Built-in list of types/functions *)
 (* Some of the information is redundant but it suppress a lot of warnings *)
 let typer_builtins = [
-(*    NAME   | LXP        | Type | impl      *)
-    ("Type"  , type0      , type0, none_fun);
-    ("Int"   , type_int   , type0, none_fun);
-    ("Float" , type_float , type0, none_fun);
-    ("String", type_string, type0, none_fun);
-    ("Sexp"  , type_sexp  , type0, none_fun);
-    ("Macro" , type_macro , type0, none_fun);
+(*    Name     | Type         | impl          *)
+    ("Type"    , type0        , none_fun);
+    ("Int"     , type0        , none_fun);
+    ("Float"   , type0        , none_fun);
+    ("String"  , type0        , none_fun);
+    ("Sexp"    , type0        , none_fun);
+    ("Macro"   , type0        , none_fun);
 
 (* Built-in Functions *)
-    ("_=_"   , builtin_eq,    type_eq,    none_fun);   (*  t  ->  t  -> bool *)
-    ("_+_"   , builtin_iadd,  iop_binary, iadd_impl);  (* int -> int -> int  *)
-    ("_*_"   , builtin_imult, iop_binary, imult_impl); (* int -> int -> int  *)
-    ("Macro_", builtin_macro, macro_cons, none_fun);
-    (*("'"     , builtin_quote, quote_cons, none_fun); *)
-    ("qquote"    , builtin_qq   , quote_cons, none_fun);
-(*  Macro primitives *)
-    ("block_"  , builtin_block  , type_mblock  , make_block);
-    ("symbol_" , builtin_symbol , type_msymbol , make_symbol);
-    ("string_" , builtin_string , type_mstring , make_string);
-    ("integer_", builtin_integer, type_minteger, make_integer);
-    ("float_"  , builtin_float  , type_mfloat  , make_float);
-    ("node_"   , builtin_node   , type_mnode   , make_node);
-    (* ("expand_" , builtin_expand , type_mexpand , none_fun); *)
+    ("_=_"     , type_eq      , none_fun);   (*  t  ->  t  -> bool *)
+    ("_+_"     , iop_binary   , iadd_impl);  (* int -> int -> int  *)
+    ("_*_"     , iop_binary   , imult_impl); (* int -> int -> int  *)
+    ("Macro_"  , macro_cons   , none_fun);
 
-(* Macros primitives type ? *)
+(*  Macro primitives *)
+    ("block_"  , type_mblock  , make_block);
+    ("symbol_" , type_msymbol , make_symbol);
+    ("string_" , type_mstring , make_string);
+    ("integer_", type_minteger, make_integer);
+    ("node_"   , type_mnode   , make_node);
+    (* ("expand_" , builtin_expand , type_mexpand , none_fun); *)
 
 ]
 
-
 (* Make built-in lookup table *)
 let _builtin_lookup =
-    List.fold_left (fun lkup (name, _, _, f) ->
+    List.fold_left (fun lkup (name, _, f) ->
         SMap.add name f lkup)
         SMap.empty typer_builtins
 
-
-let get_builtin_impl btype str loc =
+let get_builtin_impl str loc =
     try SMap.find str _builtin_lookup
     with Not_found ->
         builtin_error loc "Requested Built-in does not exist"
@@ -255,7 +227,8 @@ let default_lctx () =
 
     (* populate ctx *)
     List.fold_left
-      (fun ctx (name, lxp, ltp, _) ->
+      (fun ctx (name, ltp, _) ->
+        let lxp = Builtin((dloc, name), ltp) in
         env_extend ctx (dloc, name) (Some lxp) ltp)
       lctx
       typer_builtins
@@ -268,8 +241,9 @@ let default_rctx () =
 
     (* populate ctx *)
     List.fold_left
-      (fun ctx (name, lxp, ltp, f) ->
-        add_rte_variable (Some name) (Vdummy) ctx)
+      (fun ctx (name, _, f) ->
+        (* We don't have to call eval we know how to evaluate manually *)
+        add_rte_variable (Some name) (Vbuiltin(name)) ctx)
        rctx
        typer_builtins
 ;;

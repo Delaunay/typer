@@ -48,17 +48,6 @@ type label = symbol
 
 (*************** Elaboration to Lexp *********************)
 
-type builtin =
-  | IntType
-  | FloatType
-  | SexpType
-  | LexpType
-  | IAdd
-  | IMult
-  | EqType
-  | LevelType
-  | MacroType
-
 (* Pour la propagation des types bidirectionnelle, tout va dans `infer`,
  * sauf Lambda et Case qui vont dans `check`.  Je crois.  *)
 type ltype = lexp
@@ -66,7 +55,7 @@ type ltype = lexp
    | Imm of sexp                        (* Used for strings, ...  *)
    | SortLevel of sort_level
    | Sort of location * sort
-   | Builtin of builtin * string * ltype
+   | Builtin of vdef * ltype
    | Var of vref
    | Susp of lexp * lexp S.subst  (* Lazy explicit substitution: e[σ].  *)
    (* This "Let" allows recursion.  *)
@@ -270,11 +259,7 @@ let lexp_to_string e =
     | _ -> "not implemented"
 ;;
 
-let builtin_reduce b args arg =
-  match b,args,arg with
-  | IAdd, [(_,Imm (Integer (_, i1)))], (Imm (Integer (_, i2)))
-    -> Some (Imm (Integer (dummy_location, i1 + i2)))
-  | _ -> None
+
 
 (* Apply substitution `s' and then reduce to weak head normal form.
  * WHNF implies:
@@ -626,11 +611,11 @@ and _lexp_to_str ctx exp =
         | Call(fname, args) -> (
             (*  get function name *)
             let str, idx, inner_parens, outer_parens = match fname with
-                | Var((_, name), idx)  -> name, idx, false, true
-                | Builtin (_, name, _) -> name,  0,  false, true
-                | Lambda _             -> "__",  0,  true,  false
-                | Cons _               -> "__",  0,  false, false
-                | _                    -> "__", -1,  true,  true  in
+                | Var((_, name), idx)    -> name, idx, false, true
+                | Builtin ((_, name), _) -> name,  0,  false, true
+                | Lambda _               -> "__",  0,  true,  false
+                | Cons _                 -> "__",  0,  false, false
+                | _                      -> "__", -1,  true,  true  in
 
             let binop_str op (_, lhs) (_, rhs) =
                 (lexp_to_str lhs) ^ op ^ (lexp_to_str rhs) in
@@ -688,7 +673,7 @@ and _lexp_to_str ctx exp =
                 | Some df ->
                     str ^ nl ^ (make_indent 1) ^ "| _ => " ^ (lexp_to_stri 1 df))
 
-        | Builtin (_, name, _) -> name
+        | Builtin ((_, name), _) -> name
 
         | Sort (_, Stype lvl) -> (match lvl with
             | SortLevel (SLn 0) -> "Type"

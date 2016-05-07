@@ -1,6 +1,6 @@
 
 
-List : Type;
+List : Type -> Type;
 List = inductive_ (dList (a : Type)) (nil) (cons a (List a));
 
 nil = inductive-cons List nil;

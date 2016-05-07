@@ -49,12 +49,11 @@ let env_error loc msg =
 
 let str_idx idx = "[" ^ (string_of_int idx) ^ "]"
 
-(*  currently, we don't do much *)
 type value_type =
     | Vint of int
     | Vstring of string
     | Vcons of symbol * value_type list
-    | Vbuiltin of builtin * string
+    | Vbuiltin of string
     | Closure of lexp * (((string option * value_type) ref myers) * (int * int))
     (* Macro type *)
     | Vsexp of sexp
@@ -74,7 +73,7 @@ let rec value_print (vtp: value_type) =
                 List.iter (fun arg -> print_string " "; value_print arg) args;
             print_string ")";
 
-        | Vbuiltin(_, str) -> print_string str
+        | Vbuiltin(str) -> print_string str
         | Vdummy -> print_string "value_print_dummy"
 
 let value_location (vtp: value_type) =

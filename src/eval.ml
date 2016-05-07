@@ -80,7 +80,7 @@ let rec _eval lxp ctx i: (value_type) =
         | Inductive (_, _, _, _)    -> Vdummy
         | Cons (_, label)           -> Vcons (label, [])
         | Lambda (_, _, _, lxp)     -> Closure(lxp, ctx)
-        | Builtin (btype, str, _)   -> Vbuiltin(btype, str)
+        | Builtin ((_, str), _)     -> Vbuiltin(str)
 
         (*  Return a value stored in env        *)
         | Var((loc, name), idx) as e -> eval_var ctx e ((loc, name), idx)
@@ -111,26 +111,8 @@ and eval_call ctx i lname args =
     let args = List.map (fun (k, e) -> _eval e ctx (i + 1)) args in
     let f = _eval lname ctx (i + 1) in
 
-    (*
-    let eval_call' f arg =
-        match f with
-            | Vcons(label, fields) ->
-                Vcons (label, arg::fields)
-
-            | Closure (lxp, ctx) ->
-                _eval lxp (add_rte_variable None arg ctx) (i + 1)
-
-            | Vbuiltin (btype, str) ->
-                (get_builtin_impl btype str loc) loc [] (add_rte_variable None arg ctx)
-
-            | _ -> value_print f;
-                    eval_error loc "Cannot eval function" in
-
-        List.fold_left eval_call' f args *)
-
     let rec eval_call f args ctx =
         match f, args with
-            (* | Vcons ((_, "quote"), _), [vsxp] -> vsxp *)
             | Vcons (n, []), _ -> Vcons(n, args)
 
             (* we add an argument to the closure *)
@@ -139,12 +121,11 @@ and eval_call ctx i lname args =
                 let ret = _eval lxp nctx (i + 1) in
                     eval_call ret tl nctx
 
-            | Vbuiltin (btype, str), args ->
+            | Vbuiltin (str), args ->
                 (* lookup the built-in implementation and call it *)
-                (get_builtin_impl btype str loc) loc args ctx
+                (get_builtin_impl str loc) loc args ctx
 
             (* return result of eval *)
-            | Closure (_, _), [] -> f
             | _, [] -> f
 
             | _ -> value_print f;

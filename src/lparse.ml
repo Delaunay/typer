@@ -367,14 +367,18 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
             let ret_type = get_return_type name 0 ltp new_args in
 
             (* Replace a built-in name by builtin so they can be recognized
-             * during eval                                                    *)
+             * during eval         *)
             if (is_lbuiltin idx ctx) then (
                 match env_lookup_expr ctx ((loc, name), idx) with
                     | None -> lexp_error loc "Unknown builtin";
                         Call(vf, new_args), ret_type
 
                     (* a builtin functions *)
-                    | Some e -> Call(e, new_args), ret_type
+                    | Some Builtin((_, name), ltp) ->
+                        (* We keep loc info *)
+                        Call(Builtin((loc, name), ltp), new_args), ret_type
+
+                    | _ -> typer_unreachable "ill formed Builtin"
             )
             else Call(vf, new_args), ret_type
         with Not_found ->
@@ -407,12 +411,14 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
         let lxp, ltp = _lexp_p_infer pxp ctx (i + 1) in
             Call(lxp, new_args), ltp in
 
+    (*
     let handle_qq loc =
         (* In quasi quote we need to traverse the sexp tree and evaluate
          * (uq) calls                                                         *)
 
         let rec seek_n_replace sxp =
             match sxp with
+                (* Unquote *)
                 | Node (Symbol(_, "uquote"), [arg]) ->(
                      let parg = pexp_parse arg in
                      let larg, _ = _lexp_p_infer parg ctx i in
@@ -421,7 +427,9 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
                             | Vint    (i)   -> Integer(loc, i)
                             | Vstring (s)   -> String (loc, s)
                             | Vsexp(sxp)    -> sxp
-                            | _ -> lexp_warning loc "Sexp was expected"; Epsilon)
+                            | _ ->
+                                value_print vsxp;
+                                lexp_warning loc "Sexp was expected"; Epsilon)
 
                 | Node (op, lst)     -> Node(op, (List.map seek_n_replace lst))
                 | _ -> sxp in
@@ -429,7 +437,7 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
         let sxp = match sargs with
             | [sxp] -> seek_n_replace sxp
             | _ -> lexp_error loc "qquote expects a sexp"; Epsilon in
-                Imm(sxp), type_sexp in
+                Imm(sxp), type_sexp in *)
 
     (* determine function type *)
     match fun_name, ltp with
@@ -437,10 +445,11 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
         | ((Plambda _), _) -> Call(body, new_args), ltp
 
         (* Call to a macro *)
-        | (Pvar (l, n), Builtin(tp, "Macro", _)) when tp = MacroType ->
+        | (Pvar (l, n), Builtin((_, "Macro"), _)) ->
              handle_macro_call (l, n)
 
-        | (Pvar (l, "qquote"), _) -> handle_qq l
+        (*
+        | (Pvar (l, "qquote"), _) -> handle_qq l *)
 
         (* Call to quote * )
         | (Pvar (l, "'"), _) -> (match (handle_named_call (l, "'")), sargs with

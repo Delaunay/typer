@@ -45,8 +45,8 @@ let _ = (add_test "LEXP" "Built-in type Inference" (fun () ->
 
         match ret with
             (* (vdef * lexp * ltype) *)
-            | [(_, _, Builtin(_, "Int", _));
-               (_, _, Builtin(_, "Float", _))] ->
+            | [(_, _, Builtin((_, "Int"), _));
+               (_, _, Builtin((_, "Float"), _))] ->
                 success()
 
             | _ -> failure ()

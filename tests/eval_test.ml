@@ -351,7 +351,7 @@ let _ = (add_test "EVAL" "Partial Application" (fun () ->
 
 
 let list_decl = "
-List : Type;
+List : Type -> Type;
 List = inductive_ (dList (a : Type)) (nil) (cons a (List a));
 
 nil = inductive-cons List nil;

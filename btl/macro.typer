@@ -3,10 +3,10 @@
 Sexp : Type;
 Sexp = inductive_ (built-in) (block_ Sexp)
     (symbol_ string) (string_ string) (integer_ Int) (float_ Float)
-    (node_ Sexp List Sexp);
+    (node_ Sexp List Sexp) (Macro);
 
 Macro : Type;
-Macro = inductive_ (built-in) (Macro_ sexp);
+Macro = inductive_ (Macro) (Macro_ sexp);
 
 %% Basic usage
 %
@@ -22,3 +22,7 @@ Macro = inductive_ (built-in) (Macro_ sexp);
 %   sqr = (Macro_ (qq (lambda x -> ,x * ,x)));
 %
 %   (sqr 4); % <=>  4 * 4
+
+
+
+

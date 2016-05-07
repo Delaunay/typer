@@ -20,8 +20,12 @@ m1 = (sqr 2);
 %   The easy way
 %
 
+%Type List a =
+%    | Nil
+%    | Cons a (list a);
 
-sqr = Macro_ (qq (lambda (x : Int) -> x * x));
+
+sqr = Macro_ (qquote (lambda (x : Int) -> x * x));
 
 m2 = (sqr 2);
 
@@ -30,6 +34,46 @@ m2 = (sqr 2);
 %
 
 my_fun = let a = 2 in
-    Macro_ (qquote lambda (x : Int) -> x * (uquote a));
+    Macro_ lambda (x : Sexp) -> qquote ((uquote x) * (uquote (integer_ a))));
 
-main = (my_fun 3);
+my_fun =
+    Macro_ lambda (x : Sexp) -> qquote (lambda (y : Int) -> (uquote x) * (uquote y)));
+
+
+quote = Maocr_ quote
+quote e = case early
+    | Node ()
+
+main = (my_fun 3); 3 * 2
+
+
+%
+%   Hygiene
+%
+
+fun1 = lambda (x : Int) -> x * 2;
+fun2 = Macro_ (lambda (x : Int) -> (qquote x * (fun1 x)));
+fun1 = lambda (x : Int) -> x * 3;
+
+m3 = (fun2 2);   % if Hygienic == 8
+                 %        else == 12
+
+%
+%   Depends when the macro is lexp and evaluated...
+%   lexp_parsing the macro early would fix its index
+%   and prevent the presented issue
+%
+
+% We can force function inlining
+
+%sqr_inline = lambda (x : Int) ->
+%    let a = x in
+%        Macro_ (qquote ((uquote x) * ((uquote x))));
+
+
+% Macro_ (qquote (lambda (x : Int) -> x * x));
+% sqr2 = (inline (lambda (x : Int) -> x * x));
+
+
+
+

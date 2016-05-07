@@ -53,6 +53,9 @@ let _typer_verbose = ref 20
 exception Internal_error of string
 let internal_error s = raise (Internal_error s)
 
+exception Unreachable_error of string
+let typer_unreachable s = raise (Unreachable_error s)
+
 (*  File is not printed because currently we parse only one file... *)
 (*  Section is the name of the compilation step [for debugging]     *)
 (*  'prerr' output is ugly                                          *)
