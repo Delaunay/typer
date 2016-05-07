@@ -1,0 +1,4 @@
+language: ocaml
+
+script: make tests
+
