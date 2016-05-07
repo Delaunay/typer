@@ -199,10 +199,10 @@ and eval_case ctx i loc target pat dflt =
         (* This is more robust                                     *)
         let rec fold2 nctx pats args =
             match pats, args with
-                | (Some (_, (_, name)))::pats, arg::args ->
+                | (_, Some (_, name))::pats, arg::args ->
                     let nctx = add_rte_variable (Some name) arg nctx in
                         fold2 nctx pats args
-                | None::pats, arg::args ->  fold2 nctx pats args
+                | (_, None)::pats, arg::args ->  fold2 nctx pats args
                 (* Errors *)
                 | _::_, [] -> eval_warning loc "a) Eval::Case Pattern Error"; nctx
                 | [], _::_ -> eval_warning loc "b) Eval::Case Pattern Error"; nctx

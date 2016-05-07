@@ -20,7 +20,9 @@ more details.
 You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.  *)
 
-open Util
+module U = Util
+module L = List
+module SMap = U.SMap
 open Fmt
 
 open Sexp
@@ -37,7 +39,7 @@ module S = Subst
 (* Occurrence of a variable's symbol: we use DeBruijn index, and for
  * debugging purposes, we remember the name that was used in the source
  * code.  *)
-type vdef = location * string
+type vdef = U.location * string
 type db_index = int             (* DeBruijn index.  *)
 type db_offset = int            (* DeBruijn index offset.  *)
 type db_revindex = int          (* DeBruijn index counting from the root.  *)
@@ -65,25 +67,25 @@ type ltype = lexp
  and lexp =
    | Imm of sexp                        (* Used for strings, ...  *)
    | SortLevel of sort_level
-   | Sort of location * sort
+   | Sort of U.location * sort
    | Builtin of builtin * string * ltype
    | Var of vref
    | Susp of lexp * lexp S.subst  (* Lazy explicit substitution: e[σ].  *)
    (* This "Let" allows recursion.  *)
-   | Let of location * (vdef * lexp * ltype) list * lexp
-   | Arrow of arg_kind * vdef option * ltype * location * lexp
+   | Let of U.location * (vdef * lexp * ltype) list * lexp
+   | Arrow of arg_kind * vdef option * ltype * U.location * lexp
    | Lambda of arg_kind * vdef * ltype * lexp
    | Call of lexp * (arg_kind * lexp) list (* Curried call.  *)
-   | Inductive of location * label * ((arg_kind * vdef * ltype) list)
+   | Inductive of U.location * label * ((arg_kind * vdef * ltype) list)
                   * ((arg_kind * vdef option * ltype) list) SMap.t
    | Cons of vref * symbol (* = Type info * ctor_name  *)
-   | Case of location * lexp
+   | Case of U.location * lexp
              * ltype (* The base inductive type over which we switch.  *)
              * ltype (* The type of the return value of all branches *)
-             * (location * (arg_kind * vdef) option list * lexp) SMap.t
+             * (U.location * (arg_kind * vdef option) list * lexp) SMap.t
              * lexp option               (* Default.  *)
  (*   (\* For logical metavars, there's no substitution.  *\)
-  *   | Metavar of (location * string) * metakind * metavar ref
+  *   | Metavar of (U.location * string) * metakind * metavar ref
   * and metavar =
   *   (\* An uninstantiated var, along with a venv (stipulating over which vars
   *    * it should be closed), and its type.
@@ -105,10 +107,22 @@ type ltype = lexp
   | SLsucc of lexp
 
 
-(* let mk_susp s e = if VMap.is_empty s then e else Susp (s, e)
- * let mk_subst x v e = Susp (VMap.add x v VMap.empty, e) *)
+(********* Helper functions to use the Subst operations  *********)
+(* This basically "ties the knot" between Subst and Lexp.
+ * Maybe it would be cleaner to just move subst.ml into lexp.ml
+ * and be done with it.  *)
 
-let opt_map f x = match x with None -> None | Some x -> Some (f x)
+let rec mkSusp e s =
+  if S.identity_p s then e else
+    match e with
+    | Susp (e, s') -> mkSusp e (scompose s' s)
+    | Var (l,v) -> slookup s l v  (* Apply the substitution eagerly.  *)
+    | _ -> Susp (e, s)
+and scompose s1 s2 = S.compose mkSusp s1 s2
+and slookup s l v = S.lookup (fun l i -> Var (l, i))
+                             (fun e o -> mkSusp e (S.shift o))
+                             s l v
+let ssink = S.sink (fun l i -> Var (l, i))
 
 (**** The builtin elements ****)
 (*
@@ -126,7 +140,7 @@ let builtins =
   ] @
     List.map (fun bi -> match bi with
                      | Builtin (_, name, t) -> (name, Some bi, t)
-                     | _ -> internal_error "Registering a non-builtin")
+                     | _ -> U.internal_error "Registering a non-builtin")
              [type_level; type_int; type_float; type_eq]
 (* let var_bottom = Var (dloc, -1) *)
 
@@ -213,14 +227,14 @@ let id x = x
 (* let lexp_subst_subst s s' =
  *   let s' = VMap.map (fun e -> mk_susp s e) s' in
  *   VMap.fold (fun v e s -> if VMap.mem v s
- *                        then (internal_error "Overlapping substs")
+ *                        then (U.internal_error "Overlapping substs")
  *                        else VMap.add v e s)
  *             s s' *)
 
 let lexp_max_sort (k1, k2) =
   match k1,k2 with
   | Sort (_,l1), Sort (_, l2) -> max l1 l2
-  | _ -> internal_error "finding the max of non-sorts!"
+  | _ -> U.internal_error "finding the max of non-sorts!"
 
 (* Invert a substitution.  I.e. return s' such that s'(s(e))=e.
  * It is allowed to presume that e is closed in `venv'.  *)
@@ -241,10 +255,10 @@ let rec lexp_location e =
   match e with
   | Sort (l,_) -> l
   | SortLevel (SLsucc e) -> lexp_location e
-  | SortLevel (SLn _) -> dummy_location
+  | SortLevel (SLn _) -> U.dummy_location
   | Imm s -> sexp_location s
   | Var ((l,_),_) -> l
-  | Builtin _ -> dummy_location
+  | Builtin _ -> U.dummy_location
   | Let (l,_,_) -> l
   | Arrow (_,_,_,l,_) -> l
   | Lambda (_,(l,_),_,_) -> l
@@ -255,6 +269,64 @@ let rec lexp_location e =
   | Susp (e, _) -> lexp_location e
   (* | Susp (_, e) -> lexp_location e
    * | Metavar ((l,_),_,_) -> l *)
+
+
+(********* Normalizing a term *********)
+
+let vdummy = (U.dummy_location, "dummy")
+let maybev mv = match mv with None -> vdummy | Some v -> v
+
+let rec unsusp e s =            (* Push a suspension one level down.  *)
+  match e with
+  | Imm _ -> e
+  | SortLevel _ -> e
+  | Sort (l, Stype e) -> Sort (l, Stype (mkSusp e s))
+  | Sort (l, _) -> e
+  | Builtin _ -> e
+  | Var ((l,_) as lv,v) -> U.msg_error "SUSP" l "¡Susp(Var)!"; slookup s lv v
+  | Susp (e,s') -> U.msg_error "SUSP" (lexp_location e) "¡Susp(Susp)!";
+                  mkSusp e (scompose s' s)
+  | Let (l, defs, e)
+    -> let s' = L.fold_left (fun s (v, _, _) -> ssink v s) s defs in
+      let (_,ndefs) = L.fold_left (fun (s,ndefs) (v, def, ty)
+                                   -> (ssink v s,
+                                      (v, mkSusp e s', mkSusp ty s) :: ndefs))
+                                  (s, []) defs in
+      Let (l, ndefs, mkSusp e s')
+  | Arrow (ak, v, t1, l, t2)
+    -> Arrow (ak, v, mkSusp t1 s, l, mkSusp t2 (ssink (maybev v) s))
+  | Lambda (ak, v, t, e) -> Lambda (ak, v, mkSusp t s, mkSusp e (ssink v s))
+  | Call (f, args) -> Call (mkSusp f s,
+                           L.map (fun (ak, arg) -> (ak, mkSusp arg s)) args)
+  | Inductive (l, label, args, cases)
+    -> let (_, nargs) = L.fold_left (fun (s, nargs) (ak, v, t)
+                                    -> (ssink v s, (ak, v, mkSusp t s) :: nargs))
+                                   (s, []) args in
+      let ncases = SMap.map (fun args
+                             -> let (_, ncase)
+                                 = L.fold_left (fun (s, nargs) (ak, v, t)
+                                                -> (ssink (maybev v) s,
+                                                   (ak, v, mkSusp t s)
+                                                   :: nargs))
+                                               (s, []) args in
+                               ncase)
+                            cases in
+      Inductive (l, label, nargs, ncases)
+  | Cons _ -> e
+  | Case (l, e, it, ret, cases, default)
+    -> Case (l, mkSusp e s, mkSusp it s, mkSusp ret s,
+            SMap.map (fun (l, cargs, e)
+                      -> let s' = L.fold_left (fun s carg
+                                              -> match carg with
+                                                | (_,None) -> s
+                                                | (_,Some v) -> ssink v s)
+                                             s cargs in
+                        (l, cargs, mkSusp e s'))
+                     cases,
+            match default with
+            | None -> default
+            | Some e -> Some (mkSusp e s))
+
 
 
 let lexp_to_string e =
@@ -269,13 +341,12 @@ let lexp_to_string e =
     | Cons _ -> "inductive-cons"
     | Case _ -> "case"
     | _ -> "not implemented"
-;;
 
-let builtin_reduce b args arg =
-  match b,args,arg with
-  | IAdd, [(_,Imm (Integer (_, i1)))], (Imm (Integer (_, i2)))
-    -> Some (Imm (Integer (dummy_location, i1 + i2)))
-  | _ -> None
+(* let builtin_reduce b args arg =
+ *   match b,args,arg with
+ *   | IAdd, [(_,Imm (Integer (_, i1)))], (Imm (Integer (_, i2)))
+ *     -> Some (Imm (Integer (U.dummy_location, i1 + i2)))
+ *   | _ -> None *)
 
 (* Apply substitution `s' and then reduce to weak head normal form.
  * WHNF implies:
@@ -395,11 +466,11 @@ and lexp_unparse e : pexp =
   | Sort (l, StypeOmega) -> Pvar (l, "TypeΩ")
   | Sort (l, Stype e)
     -> Pcall (Pvar (l, "Type"), [pexp_unparse (lexp_unparse e)])
-  | SortLevel (SLn n) -> Pimm (Integer (dummy_location, n))
+  | SortLevel (SLn n) -> Pimm (Integer (U.dummy_location, n))
   | SortLevel (SLsucc e) -> Pcall (Pvar (lexp_location e, "S"),
                                   [pexp_unparse (lexp_unparse e)])
   | Imm s -> Pimm s
-  | Builtin (b,name,t) -> Pvar (dummy_location, name)
+  | Builtin (b,name,t) -> Pvar (U.dummy_location, name)
   | Var v -> Pvar (lexp_unparse_v v)
   | Let (l,decls,e)
     -> Plet (l, lexp_unparse_decls decls,
@@ -423,7 +494,7 @@ and lexp_unparse e : pexp =
   | Cons (Var v, tag)
     -> Pcons (lexp_unparse_v v, tag)
   | Cons (_,_)
-    -> (internal_error "Can't print a non-Var-typed Constructor")
+    -> (U.internal_error "Can't print a non-Var-typed Constructor")
   | Case (l, e, t, branches, default)
     -> Pcase (l, lexp_unparse e,
              (* FIXME!!  *)
@@ -438,7 +509,7 @@ and lexp_unparse e : pexp =
    *    | MetaSet e -> lexp_unparse e
    *    | _ -> Pmetavar v) (\* FIXME: losing the ref.  *\)
    * | Susp (s,e) -> lexp_unparse (lexp_whnf s e) *)
-    (* (internal_error "Can't print a Susp") *)
+    (* (U.internal_error "Can't print a Susp") *)
 
 let lexp_print e = sexp_print (pexp_unparse (lexp_unparse e))
 
@@ -450,7 +521,7 @@ let lexp_print e = sexp_print (pexp_unparse (lexp_unparse e))
  *     | _ -> e
  *   and vmap_getval (v : var) =
  *     match VMap.find v env with (Some e, _) -> follow e
- *                              | _ -> Var (dummy_location, v) in
+ *                              | _ -> Var (U.dummy_location, v) in
  *   match e with
  *   | Sort (l, Stype e) -> Sort (l, Stype (SortLevel (SLsucc e)))
  *   | Sort (l, StypeOmega)
@@ -461,7 +532,7 @@ let lexp_print e = sexp_print (pexp_unparse (lexp_unparse e))
  *   | Imm (Integer _) -> type_int
  *   | Imm (Float _) -> type_float
  *   | Builtin (_,_,t) -> t
- *   (\* | Imm (String _) -> Var (dummy_location, var_string) *\)
+ *   (\* | Imm (String _) -> Var (U.dummy_location, var_string) *\)
  *   | Imm s -> let l = sexp_location s in
  *             msg_error l "Unrecognized sexp in lexp"; mk_meta_dummy env l
  *   | Var (_,name) -> snd (VMap.find name env)
@@ -472,7 +543,7 @@ let lexp_print e = sexp_print (pexp_unparse (lexp_unparse e))
  *               body
  *   | Arrow _ -> type0             (\* FIXME! *\)
  *   | Lambda (ak, ((l,v) as var),t,e) ->
- *     Arrow (ak, Some var, t, dummy_location,
+ *     Arrow (ak, Some var, t, U.dummy_location,
  *            lexp_type (VMap.add v (None, t) env) e)
  *   | Call (f, args) ->
  *     let ft = lexp_type env f in
@@ -685,8 +756,8 @@ and _lexp_to_str ctx exp =
             let arg_str arg =
                 List.fold_left (fun str v ->
                     match v with
-                        | None -> str ^ " _"
-                        | Some (_, (_, n)) -> str ^ " " ^ n) "" arg in
+                        | (_,None) -> str ^ " _"
+                        | (_, Some (_, n)) -> str ^ " " ^ n) "" arg in
 
 
             let str = SMap.fold (fun k (_, arg, exp) str ->

@@ -24,7 +24,7 @@ module U = Util
 module SMap = U.SMap
 (* open Lexer *)
 open Sexp
-(* open Pexp *)
+module P = Pexp
 (* open Myers *)
 (* open Grammar *)
 open Lexp
@@ -35,24 +35,6 @@ module L = List
 module B = Builtin
 
 let conv_erase = true              (* If true, conv ignores erased terms. *)
-
-(********* Helper functions to use the Subst operations  *********)
-(* This basically "ties the knot" between Subst and Lexp.
- * Maybe it would be cleaner to just move subst.ml into lexp.ml
- * and be done with it.  *)
-
-let rec mkSusp e s =
-  if S.identity_p s then e else
-    match e with
-    | Susp (e, s') -> mkSusp e (scompose s' s)
-    | Var (l,v) -> slookup s l v  (* Apply the substitution eagerly.  *)
-    | _ -> Susp (e, s)
-and scompose s1 s2 = S.compose mkSusp s1 s2
-and slookup s l v = S.lookup (fun l i -> Var (l, i))
-                             (fun e o -> mkSusp e (S.shift o))
-                             s l v
-let ssink = S.sink (fun l i -> Var (l, i))
-
 
 (********* Testing if two types are "convertible" aka "equivalent"  *********)
 
@@ -117,62 +99,6 @@ and conv_p' (s1:lexp S.subst) (s2:lexp S.subst) e1 e2 : bool =
 and conv_p e1 e2 = conv_p' S.identity S.identity e1 e2
 
 
-(********* Normalizing a term *********)
-
-let vdummy = (U.dummy_location, "dummy")
-let maybev mv = match mv with None -> vdummy | Some v -> v
-
-let rec unsusp e s =            (* Push a suspension one level down.  *)
-  match e with
-  | Imm _ -> e
-  | SortLevel _ -> e
-  | Sort (l, Stype e) -> Sort (l, Stype (mkSusp e s))
-  | Sort (l, _) -> e
-  | Builtin _ -> e
-  | Var ((l,_) as lv,v) -> U.msg_error "SUSP" l "¡Susp(Var)!"; slookup s lv v
-  | Susp (e,s') -> U.msg_error "SUSP" (lexp_location e) "¡Susp(Susp)!";
-                  mkSusp e (scompose s' s)
-  | Let (l, defs, e)
-    -> let s' = L.fold_left (fun s (v, _, _) -> ssink v s) s defs in
-      let (_,ndefs) = L.fold_left (fun (s,ndefs) (v, def, ty)
-                                   -> (ssink v s,
-                                      (v, mkSusp e s', mkSusp ty s) :: ndefs))
-                                  (s, []) defs in
-      Let (l, ndefs, mkSusp e s')
-  | Arrow (ak, v, t1, l, t2)
-    -> Arrow (ak, v, mkSusp t1 s, l, mkSusp t2 (ssink (maybev v) s))
-  | Lambda (ak, v, t, e) -> Lambda (ak, v, mkSusp t s, mkSusp e (ssink v s))
-  | Call (f, args) -> Call (mkSusp f s,
-                           L.map (fun (ak, arg) -> (ak, mkSusp arg s)) args)
-  | Inductive (l, label, args, cases)
-    -> let (_, nargs) = L.fold_left (fun (s, nargs) (ak, v, t)
-                                    -> (ssink v s, (ak, v, mkSusp t s) :: nargs))
-                                   (s, []) args in
-      let ncases = SMap.map (fun args
-                             -> let (_, ncase)
-                                 = L.fold_left (fun (s, nargs) (ak, v, t)
-                                                -> (ssink (maybev v) s,
-                                                   (ak, v, mkSusp t s)
-                                                   :: nargs))
-                                               (s, []) args in
-                               ncase)
-                            cases in
-      Inductive (l, label, nargs, ncases)
-  | Cons _ -> e
-  | Case (l, e, it, ret, cases, default)
-    -> Case (l, mkSusp e s, mkSusp it s, mkSusp ret s,
-            SMap.map (fun (l, cargs, e)
-                      -> let s' = L.fold_left (fun s carg
-                                              -> match carg with
-                                                | None -> s
-                                                | Some (ak, v) -> ssink v s)
-                                             s cargs in
-                        (l, cargs, mkSusp e s'))
-                     cases,
-            match default with
-            | None -> default
-            | Some e -> Some (mkSusp e s))
-
 (********* Testing if a lexp is properly typed  *********)
 
 type varbind =
@@ -183,7 +109,13 @@ type varbind =
 let lookup_type ctx vref =
   let (_, i) = vref in
   let (_, _, _, t) = Myers.nth i ctx in
-  Susp (t, S.shift (i + 1))
+  mkSusp t (S.shift (i + 1))
+
+let lookup_value ctx vref =
+  let (_, i) = vref in
+  match Myers.nth i ctx with
+  | (o, _, LetDef v, _) -> Some (unsusp v (S.shift (i + 1 - o)))
+  | _ -> None
 
 let assert_type e t t' =
   if conv_p t t' then ()
@@ -208,9 +140,18 @@ let rec check ctx e =
   match e with
   | Imm (Float (_, _)) -> B.type_float
   | Imm (Integer (_, _)) -> B.type_int
+  | Imm (Epsilon|Block (_, _, _)|Symbol _|String (_, _)|Node (_, _))
+    -> (U.msg_error "TC" (lexp_location e) "Unsupported immediate value!";
+       B.type_int)
   | SortLevel (_) -> B.type_level
   | Sort (l, Stype (SortLevel (SLn n)))
     -> Sort (l, Stype (SortLevel (SLn (1 + n))))
+  | Sort (_, (StypeOmega|StypeLevel))
+    -> (U.msg_error "TC" (lexp_location e) "Reached Unreachable sorts!";
+       B.type_omega)
+  | Sort (_, (Stype _))
+    -> (U.msg_error "TC" (lexp_location e) "Non-level arg to Type!";
+       B.type_omega)
   | Builtin (_, _, t) -> t
   (* FIXME: Check recursive references.  *)
   | Var v -> lookup_type ctx v
@@ -242,9 +183,9 @@ let rec check ctx e =
        | (Sort (_, _), _) -> (U.msg_error "TC" (lexp_location t2)
                             "Not a proper type";
                              Sort (l, StypeOmega))
-       | (_, Sort (_, _)) -> (U.msg_error "TC" (lexp_location t1)
-                            "Not a proper type";
-                             Sort (l, StypeOmega)))
+       | (_, _) -> (U.msg_error "TC" (lexp_location t1)
+                               "Not a proper type";
+                   Sort (l, StypeOmega)))
   | Lambda (ak, ((l,_) as v), t, e)
     -> ((match check ctx t with
         | Sort _ -> ()
@@ -274,19 +215,84 @@ let rec check ctx e =
         match args with
         | [] -> Sort (l, s)
         | (ak, v, t)::args
-          -> match check ctx t with
-            | Sort (_, s')
-              -> Arrow (ak, Some v, t, lexp_location t,
-                       (* FIXME: `sort_compose` doesn't do what we want!  *)
-                       arg_loop args (sort_compose l s s')
-                                (Myers.cons (0, Some v, Variable, t) ctx)) in
+          -> let s' = match check ctx t with
+              | Sort (_, s') -> s'
+              | _ -> (U.msg_error "TC" (lexp_location t)
+                                 "Field type is not a Type!";
+                     Stype (SortLevel (SLn 0))) in
+            Arrow (ak, Some v, t, lexp_location t,
+                   (* FIXME: `sort_compose` doesn't do what we want!  *)
+                   arg_loop args (sort_compose l s s')
+                            (Myers.cons (0, Some v, Variable, t) ctx)) in
       let tct = arg_loop args (Stype (SortLevel (SLn 0))) ctx in
       (* FIXME: Check cases!  *)
       tct
-  (*| Case (l, e, it, branches, default)
-    -> let et = check ctx e in
-      (* FIXME: Check that `et` is derived from `it`.
-       * E.g. if `et` is `List Int` then `it` should be `List`.  *)
-      SMap.iter (fun name (l, vdefs, branch)
-                 ->
-   *)
+  | Case (l, e, it, ret, branches, default)
+    -> let rec call_split e =
+        match e with
+        | Call (f, args) -> let (f',args') = call_split f in (f', args' @ args)
+        | _ -> (e,[]) in
+      (match call_split (check ctx e) with
+       | Inductive (_, _, fargs, constructors), aargs ->
+          let rec mksubst s fargs aargs =
+            match fargs, aargs with
+            | [], [] -> s
+            | _farg::fargs, (_ak, aarg)::aargs
+              (* We don't check aarg's type, because we assume that `check`
+               * returns a valid type.  *)
+              -> mksubst (S.cons aarg s) fargs aargs
+            | _,_ -> (U.msg_error "TC" l
+                                 "Wrong arg number to inductive type!"; s) in
+          let s = mksubst S.identity fargs aargs in
+          SMap.iter
+            (fun name (l, vdefs, branch)
+             -> let fieldtypes = SMap.find name constructors in
+               let rec mkctx ctx s vdefs fieldtypes =
+                 match vdefs, fieldtypes with
+                 | [], [] -> ctx
+                 (* FIXME: If ak is Aerasable, make sure the var only
+                  * appears in type annotations.  *)
+                 | (ak, vdef)::vdefs, (ak', vdef', ftype)::fieldtypes
+                   -> mkctx (Myers.cons (0, vdef, Variable, mkSusp ftype s) ctx)
+                           (S.cons (Var ((match vdef with Some vd -> vd
+                                                        | None -> (l, "_")),
+                                         0)) s)
+                           vdefs fieldtypes
+                 | _,_ -> (U.msg_error "TC" l
+                                      "Wrong number of args to constructor!";
+                          ctx) in
+               let nctx = mkctx ctx s vdefs fieldtypes in
+               assert_type branch ret (check nctx branch))
+            branches;
+          (match default with
+           | Some d -> assert_type d ret (check ctx d)
+           | _ -> ())
+       | _,_ -> U.msg_error "TC" l "Case on a non-inductive type!");
+      ret
+  | Cons (vr, (_, name))
+    -> (match lookup_value ctx vr with
+       | Some (Inductive (l, _, fargs, constructors) as it)
+         -> let fieldtypes = SMap.find name constructors in
+           let rec indtype fargs start_index =
+             match fargs with
+             | [] -> []
+             | (ak, vd, _)::fargs -> (ak, Var (vd, start_index))
+                                    :: indtype fargs (start_index - 1) in
+           let rec fieldargs fieldtypes =
+             match fieldtypes with
+             | [] -> Call (it, indtype fargs (L.length fieldtypes
+                                             + L.length fargs - 1))
+             | (ak, vd, ftype) :: fieldtypes
+               -> Arrow (ak, vd, ftype, lexp_location ftype,
+                                       fieldargs fieldtypes) in
+           let rec buildtype fargs =
+             match fargs with
+             | [] -> fieldargs fieldtypes
+             | (ak, ((l,_) as vd), atype) :: fargs
+               -> Arrow (P.Aerasable, Some vd, atype, l,
+                        buildtype fargs) in
+           buildtype fargs
+       | _ -> (U.msg_error "TC" (lexp_location e)
+                          "Cons of a non-inductive type!";
+              B.type_int))
+
