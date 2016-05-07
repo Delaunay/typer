@@ -1,0 +1,68 @@
+%       Base Types
+% -----------------------------------------------------
+
+Type   = Built-in "Type";
+Int    = Built-in "Int";
+Float  = Built-in "Float";
+String = Built-in "String";
+Sexp   = Built-in "Sexp";
+
+% Basic operators
+_+_ : Int -> Int -> Int;
+_+_ = Built-in "_+_";
+
+_*_ : Int -> Int -> Int;
+_*_  = Built-in "_*_";
+
+%       List
+% -----------------------------------------------------
+
+List : Type -> Type;
+List = inductive_ (dList (a : Type)) (nil) (cons a (List a));
+
+nil = inductive-cons List nil;
+cons = inductive-cons List cons;
+
+length : (a : Type) => List a -> Int;
+length = lambda a =>
+  lambda xs ->
+    case xs
+      | nil => 0
+      | cons hd tl => (1 + (length a tl));
+
+head : (a : Type) => List a -> a;
+head = lambda a =>
+  lambda xs ->
+    case xs
+      | nil => nil
+      | cons hd tl => hd;
+
+tail : (a : Type) => List a -> List a;
+tail = lambda a =>
+  lambda xs ->
+    case xs
+      | nil => nil
+      | cons hd tl => tl;
+
+%       Macro
+% -----------------------------------------------------
+
+block_   : (List Sexp) -> Sexp;
+block_   = Built-in "block_";
+
+symbol_  : String      -> Sexp;
+symbol_  = Built-in "symbol_";
+
+string_  : String      -> Sexp;
+string_  = Built-in "string_";
+
+node_    : (List Sexp) -> Sexp;
+node_    = Built-in "node_";
+
+integer_ : Int         -> Sexp;
+integer_ = Built-in "integer_";
+
+Macro : Type;
+Macro = inductive_ (dMacro) (Macro_ Type);
+Macro_ = inductive-cons Macro Macro_ ;
+

@@ -955,12 +955,6 @@ This should allow HOAS-style encodings like
       | App exp exp
       | Lam (IO (exp -> exp))
 
-* Universe polymorphism
-Agda seems to do:
-- Add Level as a new special type (with 0 and S constructors and without elim).
-- Define: "Set : Πl:Level.Set(S l)".
-- Give Πl:Level.e a "non-Set" type to disallow "deep" polymorphism.
-
 * Strong elimination of large types
 *** From "Recursive Families of Inductive Types" by Capretta
 Strong elimination is the elimination rule for inductive types in which the
@@ -1387,6 +1381,12 @@ when they're only used in irrelevant args might relieve the tension.
 *** pruning: [Pientka, PhD, Sec. 3.1.2; Abel & Pientka, TLCA 2011]
 
 * Universes
+** Universe polymorphism
+Agda seems to do:
+- Add Level as a new special type (with 0 and S constructors and without elim).
+- Define: "Set : Πl:Level.Set(S l)".
+- Give Πl:Level.e a "non-Set" type to disallow "deep" polymorphism.
+
 ** PTS versions
 
 *** universes with baked in ~subsumption

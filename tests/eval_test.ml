@@ -350,39 +350,10 @@ let _ = (add_test "EVAL" "Partial Application" (fun () ->
 ));;
 
 
-let list_decl = "
-List : Type -> Type;
-List = inductive_ (dList (a : Type)) (nil) (cons a (List a));
-
-nil = inductive-cons List nil;
-cons = inductive-cons List cons;
-
-length : (a : Type) => List a -> Int;
-length = lambda a =>
-  lambda xs ->
-    case xs
-      | nil => 0
-      | cons hd tl => (1 + (length a tl));
-
-head : (a : Type) => List a -> a;
-head = lambda a =>
-  lambda xs ->
-    case xs
-      | nil => nil
-      | cons hd tl => hd;
-
-tail : (a : Type) => List a -> List a;
-tail = lambda a =>
-  lambda xs ->
-    case xs
-      | nil => nil
-      | cons hd tl => tl;
-";;
-
 let _ = (add_test "EVAL" "List" (fun () ->
     reset_eval_trace ();
 
-    let dcode = list_decl ^ "
+    let dcode = "
         my_list = (cons 1 (cons 2 (cons 3 (cons 4 nil))));
     " in
 

@@ -95,7 +95,8 @@ let rec _eval lxp ctx i: (value_type) =
         | Call (lname, args) -> eval_call ctx i lname args
 
         (* Case *)
-        | Case (loc, target, _, pat, dflt) -> (eval_case ctx i loc target pat dflt)
+        | Case (loc, target, _, _, pat, dflt)
+          -> (eval_case ctx i loc target pat dflt)
 
         | _ -> print_string "debug catch-all eval: ";
             lexp_print lxp; Vstring("eval Not Implemented")
@@ -179,10 +180,10 @@ and eval_case ctx i loc target pat dflt =
         (* This is more robust                                     *)
         let rec fold2 nctx pats args =
             match pats, args with
-                | (Some (_, (_, name)))::pats, arg::args ->
+                | (_, Some (_, name))::pats, arg::args ->
                     let nctx = add_rte_variable (Some name) arg nctx in
                         fold2 nctx pats args
-                | None::pats, arg::args ->  fold2 nctx pats args
+                | (_, None)::pats, arg::args ->  fold2 nctx pats args
                 (* Errors *)
                 | _::_, [] -> eval_warning loc "a) Eval::Case Pattern Error"; nctx
                 | [], _::_ -> eval_warning loc "b) Eval::Case Pattern Error"; nctx
@@ -257,7 +258,7 @@ let from_lctx (ctx: lexp_context): runtime_env =
     let rctx = ref make_runtime_ctx in
 
     (* Skip builtins: They are already in default_rctx()  *)
-    let bsize = List.length typer_builtins in
+    let bsize = 1 in
     let csize = get_size ctx in
 
     (* add all variables *)

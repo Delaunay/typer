@@ -1,5 +1,3 @@
-
-
 List : Type -> Type;
 List = inductive_ (dList (a : Type)) (nil) (cons a (List a));
 
@@ -26,5 +24,3 @@ tail = lambda a =>
     case xs
       | nil => nil
       | cons hd tl => tl;
-
-

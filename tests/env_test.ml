@@ -30,6 +30,7 @@ open Utest_lib
 
 open Sexp
 open Lexp
+open Lparse
 
 open Builtin
 open Env

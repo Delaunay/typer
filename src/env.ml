@@ -55,8 +55,7 @@ type value_type =
     | Vcons of symbol * value_type list
     | Vbuiltin of string
     | Closure of lexp * (((string option * value_type) ref myers) * (int * int))
-    (* Macro type *)
-    | Vsexp of sexp
+    | Vsexp of sexp             (* Values passed to macros.  *)
     (* Unable to eval during macro expansion, only throw if the value is used *)
     | Vdummy
 

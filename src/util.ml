@@ -37,8 +37,7 @@ let print_loc (loc: location) =
     print_string "ln ";
     Fmt.ralign_print_int loc.line 3;
     print_string ", cl ";
-    Fmt.ralign_print_int loc.column 3;
-;;
+    Fmt.ralign_print_int loc.column 3
 
 (*
  *  -1 - Nothing    (* During testing we may want to produce errors *)
@@ -93,6 +92,7 @@ let print_trace name max elem_to_string print_elem trace =
             print_string (elem_to_string g); print_string ": ";
             print_elem g; print_string "\n");
 
-    print_string (Fmt.make_sep '=');
+    print_string (Fmt.make_sep '=')
 
 
+let opt_map f x = match x with None -> None | Some x -> Some (f x)

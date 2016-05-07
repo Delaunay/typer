@@ -258,5 +258,9 @@ let compose (mkSusp : 'a -> 'a subst -> 'a)
 let sink (mkVar : 'b -> db_index -> 'a) (l:'b) (s:'a subst) =
   Cons (mkVar l 0, mkShift s 1)
 
+(* Return a substitution which replaces #0 with `e` and the applies `s`
+ * to the rest.  *)
+let cons e s = Cons (e, s)
+
 (* Return a substitution which replaces #0 with `e`.  *)
 let substitute e = Cons (e, Identity)

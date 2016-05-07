@@ -370,7 +370,7 @@ let pexp_decls_all (nodes: sexp list): ((pvar * pexp * bool) list) =
 ;;
 
 (*      String Parsing
- * ------------------------ *)
+ * --------------------------------------------------------- *)
 
 (* Lexp helper *)
 let _pexp_expr_str (str: string) (tenv: bool array)

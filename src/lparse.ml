@@ -34,6 +34,9 @@ open Util
 open Fmt
 open Myers
 
+open Prelexer
+open Lexer
+
 open Sexp
 open Pexp
 open Lexp
@@ -48,7 +51,6 @@ open Builtin
 (* Shortcut => Create a Var *)
 let make_var name index loc =
     Var(((loc, name), index))
-;;
 
 let dlxp = type0
 let dltype = type0
@@ -58,7 +60,7 @@ let lexp_warning = msg_warning "LPARSE"
 let lexp_error = msg_error "LPARSE"
 let lexp_fatal = msg_fatal "LPARSE"
 
-let _global_lexp_ctx = ref make_lexp_context;;
+let _global_lexp_ctx = ref make_lexp_context
 let _global_lexp_trace = ref []
 
 (*  The main job of lexp (currently) is to determine variable name (index)
@@ -232,6 +234,7 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
                 Cons((vr, -1), sym), dltype)
 
         (* Pcase *)
+        (* FIXME: This should be in lexp_p_check!  *)
         | Pcase (loc, target, patterns) ->
 
             let tlxp, tltp = lexp_infer target ctx in
@@ -277,9 +280,9 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
                 | hd::tl, None -> hd
                 | _, Some v -> v
                 (* This will change *)
-                | _, None -> lexp_error loc "case with no branch ?"; dltype in
-
-                Case(loc, tlxp, tltp, lpattern, dflt), (return_type)
+                | _, None -> lexp_error loc "case with no branch ?"; dltype
+            in Case (loc, tlxp, tltp, return_type, lpattern, dflt),
+               (return_type)
 
         | Phastype (_, pxp, ptp) ->
             let ltp, _ = lexp_infer ptp ctx in
@@ -364,23 +367,32 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
         try (*  Check if the function was defined *)
             let idx = senv_lookup name ctx in
             let vf = (make_var name idx loc) in
-            let ret_type = get_return_type name 0 ltp new_args in
 
             (* Replace a built-in name by builtin so they can be recognized
              * during eval         *)
             if (is_lbuiltin idx ctx) then (
                 match env_lookup_expr ctx ((loc, name), idx) with
                     | None -> lexp_error loc "Unknown builtin";
-                        Call(vf, new_args), ret_type
+                        let ret_type = get_return_type name 0 ltp new_args in
+                            Call(vf, new_args), ret_type
+
+                    | Some Builtin((_, "Built-in"), ltp) ->(
+                        match largs with
+                            | [Imm (String (_, str)) ] ->
+                                Builtin((loc, str), ltp), ltp
+                            | _ -> typer_unreachable "cannot be reached")
 
                     (* a builtin functions *)
                     | Some Builtin((_, name), ltp) ->
                         (* We keep loc info *)
-                        Call(Builtin((loc, name), ltp), new_args), ret_type
+                        Call(Builtin((loc, name), ltp), new_args), ltp
 
                     | _ -> typer_unreachable "ill formed Builtin"
             )
-            else Call(vf, new_args), ret_type
+            else
+            let ret_type = get_return_type name 0 ltp new_args in
+                Call(vf, new_args), ret_type
+
         with Not_found ->
             lexp_error loc ("The function \"" ^ name ^ "\" was not defined");
             let vf = (make_var name (-1) loc) in
@@ -467,7 +479,7 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
 
 (*  Read a pattern and create the equivalent representation *)
 and lexp_read_pattern pattern exp target ctx:
-          ((string * location * (arg_kind * vdef) option list) * lexp_context) =
+          ((string * location * (arg_kind * vdef option) list) * lexp_context) =
 
     match pattern with
         | Ppatany (loc) ->            (* Catch all expression nothing to do  *)
@@ -502,7 +514,7 @@ and lexp_read_pattern pattern exp target ctx:
 
 (*  Read patterns inside a constructor *)
 and lexp_read_pattern_args args ctx:
-                   (((arg_kind * vdef) option list) * lexp_context)=
+                   (((arg_kind * vdef option) list) * lexp_context)=
 
     let rec loop args acc ctx =
         match args with
@@ -511,14 +523,14 @@ and lexp_read_pattern_args args ctx:
                 let (_, pat) = hd in
                 match pat with
                     (* Nothing to do *)
-                    | Ppatany (loc) -> loop tl (None::acc) ctx
+                    | Ppatany (loc) -> loop tl ((Aexplicit, None)::acc) ctx
                     | Ppatvar ((loc, name) as var) ->
                         (*  Add var *)
                         let nctx = env_extend ctx var None dltype in
-                        let nacc = (Some (Aexplicit, var))::acc in
+                        let nacc = (Aexplicit, Some var)::acc in
                             loop tl nacc nctx
                     | _ -> lexp_error dloc "Constructor inside a Constructor";
-                           loop tl (None::acc) ctx)
+                           loop tl ((Aexplicit, None)::acc) ctx)
 
     in loop args [] ctx
 
@@ -721,11 +733,10 @@ and lexp_print_var_info ctx =
         print_string ": ";
         lexp_print tp;
         print_string "\n")
-    done;
-;;
+    done
 
 
-let lexp_parse_all p ctx = _lexp_parse_all p ctx 1;;
+let lexp_parse_all p ctx = _lexp_parse_all p ctx 1
 
 
 (* add dummy definition helper *)
@@ -733,47 +744,68 @@ let add_def name ctx =
     let var = (dloc, name) in
     let ctx = senv_add_var var ctx in
     env_add_var_info (0, var, None, dlxp) ctx
+
+(*      Default context with builtin types
+ * --------------------------------------------------------- *)
+
+(* Make lxp context with built-in types *)
+let default_lctx () =
+    (* Empty context *)
+    let lctx = make_lexp_context in
+    let lxp = Builtin((dloc, "Built-in"), type0) in
+    let lctx = env_extend lctx (dloc, "Built-in") (Some lxp) type0 in
+
+    (* Read BTL files *)
+    let pres = prelex_file "./btl/types.typer" in
+    let sxps = lex default_stt pres in
+    let nods = sexp_parse_all_to_list default_grammar sxps (Some ";") in
+
+    let pxps = pexp_decls_all nods in
+    let _, lctx = lexp_p_decls pxps lctx in
+        lctx
+;;
+
+(* Make runtime context with built-in types *)
+let default_rctx () =
+    try (from_lctx (default_lctx ()))
+        with e ->
+            lexp_fatal dloc "Could not convert lexp context into rte context"
 ;;
 
 
 (*      String Parsing
- * ------------------------ *)
+ * --------------------------------------------------------- *)
 
 (* Lexp helper *)
 let _lexp_expr_str (str: string) (tenv: bool array)
             (grm: grammar) (limit: string option) (ctx: lexp_context) =
     let pxps = _pexp_expr_str str tenv grm limit in
         lexp_parse_all pxps ctx
-;;
 
 (* specialized version *)
 let lexp_expr_str str lctx =
     _lexp_expr_str str default_stt default_grammar (Some ";") lctx
-;;
 
 let _lexp_decl_str (str: string) tenv grm limit ctx =
     let pxps = _pexp_decl_str str tenv grm limit in
         lexp_p_decls pxps ctx
-;;
 
 (* specialized version *)
 let lexp_decl_str str lctx =
     _lexp_decl_str str default_stt default_grammar (Some ";") lctx
-;;
+
 
 
 (*  Eval String
- * ---------------------- *)
+ * --------------------------------------------------------- *)
 (* Because we cant include lparse in eval.ml *)
 
 let _eval_expr_str str lctx rctx silent =
     let lxps = lexp_expr_str str lctx in
         (eval_all lxps rctx silent)
-;;
 
 let eval_expr_str str lctx rctx = _eval_expr_str str lctx rctx false
 
 let eval_decl_str str lctx rctx =
     let lxps, lctx = lexp_decl_str str lctx in
         (eval_decls lxps rctx), lctx
-;;

@@ -1,12 +1,24 @@
 
-% define Sexp constructor
-Sexp : Type;
-Sexp = inductive_ (built-in) (block_ Sexp)
-    (symbol_ string) (string_ string) (integer_ Int) (float_ Float)
-    (node_ Sexp List Sexp) (Macro);
+
+block_   : (List Sexp) -> Sexp;
+block_   = Built-in block_;
+
+symbol_  : String      -> Sexp;
+symbol_  = Built-in symbol_;
+
+string_  : String      -> Sexp;
+string_  = Built-in string_;
+
+node_    : (List Sexp) -> Sexp;
+node_    = Built-in node_;
+
+integer_ : Int         -> Sexp;
+integer_ = Built-in integer_;
 
 Macro : Type;
-Macro = inductive_ (Macro) (Macro_ sexp);
+Macro = inductive_ (dMacro) (Macro_ Type);
+Macro_ = inductive-cons Macro Macro_;
+
 
 %% Basic usage
 %
@@ -22,7 +34,3 @@ Macro = inductive_ (Macro) (Macro_ sexp);
 %   sqr = (Macro_ (qq (lambda x -> ,x * ,x)));
 %
 %   (sqr 4); % <=>  4 * 4
-
-
-
-
