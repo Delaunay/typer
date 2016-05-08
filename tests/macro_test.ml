@@ -50,7 +50,7 @@ let _ = (add_test "MACROS" "macros base" (fun () ->
     let dcode = "
     sqr = Macro_ (lambda (x : List Sexp) ->
         let hd = head Sexp x in
-            (node_ (cons (symbol_ \"_*_\") (cons hd (cons hd nil)))));
+            (node_ (symbol_ \"_*_\") (cons hd (cons hd nil))));
     " in
 
     let rctx, lctx = eval_decl_str dcode lctx rctx in

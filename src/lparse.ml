@@ -62,6 +62,7 @@ let lexp_fatal = msg_fatal "LPARSE"
 
 let _global_lexp_ctx = ref make_lexp_context
 let _global_lexp_trace = ref []
+let btl_folder = ref "./btl/"
 
 (*  The main job of lexp (currently) is to determine variable name (index)
  *  and to regroup type specification with their variable
@@ -419,20 +420,9 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
             (* This give me a closure to be evaluated with sargs *)
             | Vcons(_, [Closure(body, rctx)]) ->(
                 (* Build typer list from ocaml list *)
-                let rsargs = List.rev sargs in
+                let arg = olist2tlist_rte sargs in
 
-                (* Get Constructor *)
-                let considx = senv_lookup "cons" ctx in
-                let nilidx  = senv_lookup  "nil" ctx in
-
-                let tcons = Var((dloc, "cons"), considx) in
-                let tnil  = Var((dloc,  "nil"),  nilidx) in
-
-                let arg = List.fold_left (fun tail elem ->
-                    Call(tcons, [(Aexplicit, (Imm(elem)));
-                                 (Aexplicit, tail)])) tnil rsargs in
-
-                let rctx = add_rte_variable None (eval arg rctx) rctx in
+                let rctx = add_rte_variable None arg rctx in
                 let r = eval body rctx in
                     match r with
                         | Vsexp(s) -> s
@@ -779,7 +769,7 @@ let default_lctx () =
     let lctx = env_extend lctx (dloc, "Built-in") (Some lxp) type0 in
 
     (* Read BTL files *)
-    let pres = prelex_file "./btl/types.typer" in
+    let pres = prelex_file (!btl_folder ^ "types.typer") in
     let sxps = lex default_stt pres in
     let nods = sexp_parse_all_to_list default_grammar sxps (Some ";") in
 

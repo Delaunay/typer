@@ -58,7 +58,7 @@ let _global_eval_trace = ref []
 let _global_eval_ctx = ref make_runtime_ctx
 let _eval_max_recursion_depth = ref 255
 let reset_eval_trace () = _global_eval_trace := []
-
+let _builtin_lookup = ref SMap.empty
 
 (* This is an internal definition
  * 'i' is the recursion depth used to print the call trace *)
@@ -200,7 +200,74 @@ and _eval_decls (decls: ((vdef * lexp * ltype) list))
         (n, ctx) decls in
 
         ctx
+(* -------------------------------------------------------------------------- *)
+(*              Builtin Implementation  (Some require eval)                   *)
 
+and typer_builtins_impl = [
+    ("_+_"           , iadd_impl);
+    ("_*_"           , imult_impl);
+    ("block_"        , make_block);
+    ("symbol_"       , make_symbol);
+    ("string_"       , make_string);
+    ("integer_"      , make_integer);
+    ("float_"        , make_float);
+    ("node_"         , make_node);
+    ("sexp_dispatch_", sexp_dispatch);
+    ("string_eq"     , string_eq);
+    ("int_eq"        , int_eq);
+    ("sexp_eq"       , sexp_eq);
+]
+
+and get_builtin_impl str loc =
+    (* Make built-in lookup table *)
+    (match (SMap.is_empty !_builtin_lookup) with
+        | true ->
+            _builtin_lookup := (List.fold_left (fun lkup (name, f) ->
+                SMap.add name f lkup) SMap.empty typer_builtins_impl)
+        | _ -> ());
+
+    try SMap.find str !_builtin_lookup
+    with Not_found ->
+        eval_error loc "Requested Built-in does not exist"
+
+(* Sexp -> (Sexp -> List Sexp -> Sexp) -> (String -> Sexp) ->
+    (String -> Sexp) -> (Int -> Sexp) -> (Float -> Sexp) -> (List Sexp -> Sexp)
+        ->  Sexp *)
+and sexp_dispatch loc args ctx =
+    let eval a b = _eval a b 1 in
+    let sxp, nd, sym, str, it, flt, blk, rctx = match args with
+        | [sxp; Closure(nd, rctx); Closure(sym, _);
+                Closure(str, _); Closure(it, _);
+                Closure(flt, _); Closure(blk, _)] ->
+            sxp, nd, sym, str, it, flt, blk, rctx
+        | _ ->  eval_error loc "sexp_dispatch expects 7 arguments" in
+
+    let sxp = match sxp with
+        | Vsexp(sxp)   -> sxp
+        | _ -> value_print sxp;
+            eval_error loc "sexp_dispatch expects a Sexp as 1st arg" in
+
+    match sxp with
+        | Node    (op, s)    ->(
+            let rctx = add_rte_variable None (Vsexp(op)) rctx in
+            let rctx = add_rte_variable None (olist2tlist_rte s) rctx in
+                match eval nd rctx with
+                    | Closure(nd, _) -> eval nd rctx
+                    | _ -> eval_error loc "Node has 2 arguments")
+
+        | Symbol  (_ , s)    ->
+             eval sym (add_rte_variable None (Vstring(s)) rctx)
+        | String  (_ , s)    ->
+             eval str (add_rte_variable None (Vstring(s)) rctx)
+        | Integer (_ , i)    ->
+             eval it (add_rte_variable None (Vint(i)) rctx)
+        | Float   (_ , f)    ->
+             eval flt (add_rte_variable None (Vfloat(f)) rctx) (*
+        | Block   (_ , s, _) ->
+             eval blk (add_rte_variable None (olist2tlist_rte s)) *)
+        | _ -> eval_error loc "sexp_dispatch error"
+
+(* -------------------------------------------------------------------------- *)
 and print_eval_result i lxp =
     print_string "     Out[";
     ralign_print_int i 2;

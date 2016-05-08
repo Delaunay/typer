@@ -45,7 +45,6 @@ let builtin_error loc msg =
     raise (internal_error msg)
 ;;
 
-
 (*                Builtin types               *)
 let dloc    = dummy_location
 let slevel0 = SortLevel (SLn 0)
@@ -73,7 +72,8 @@ let type_float = Builtin((dloc, "Float"), type0)
 let type_string = Builtin((dloc, "String"), type0)
 
 (* Builtin of builtin * string * ltype *)
-let _generic_binary_iop name f loc (args_val: value_type list) (ctx: runtime_env) =
+let _generic_binary_iop name f loc (args_val: value_type list)
+                                                    (ctx: runtime_env) =
 
    let l, r = match args_val with
         | [l; r] -> l, r
@@ -108,27 +108,46 @@ let make_symbol loc args_val ctx  =
             | _ -> builtin_error loc ("symbol_ expects one string as argument")
 
 
+(* lexp Imm list *)
+let olist2tlist_lexp lst ctx =
+    (* Get Constructor *)
+    let considx = senv_lookup "cons" ctx in
+    let nilidx  = senv_lookup  "nil" ctx in
+
+    let tcons = Var((dloc, "cons"), considx) in
+    let tnil  = Var((dloc,  "nil"),  nilidx) in
+
+    let rlst = List.rev lst in
+        List.fold_left (fun tail elem ->
+            Call(tcons, [(Aexplicit, (Imm(elem)));
+                         (Aexplicit, tail)])) tnil rlst
+
+(* typer list as seen during runtime *)
+let olist2tlist_rte lst =
+    let tnil  = Vcons((dloc, "nil"), []) in
+    let rlst = List.rev lst in
+        List.fold_left (fun tail elem ->
+            Vcons((dloc, "cons"), [Vsexp(elem); tail])) tnil rlst
+
+
+(* Typer list to Ocaml list *)
+let rec tlist2olist acc expr =
+    match expr with
+        | Vcons((_, "cons"), [hd; tl]) ->
+            tlist2olist (hd::acc) tl
+        | Vcons((_, "nil"), []) -> List.rev acc
+        | _ ->
+            value_print expr;
+            builtin_error dloc "List conversion failure'"
+
 let make_node loc args_val ctx    =
 
-    let tlist = match args_val with
-        | [lst] -> lst
-        | _ -> builtin_error loc "node_ expects one 'List Sexp'" in
+    let op, tlist = match args_val with
+        | [Vsexp(op); lst] -> op, lst
+        | _ -> builtin_error loc
+            "node_ expects one 'Sexp' and one 'List Sexp'" in
 
-    (* Typer list to Ocaml list *)
-    let rec tlist2olist acc expr =
-        match expr with
-            | Vcons((_, "cons"), [hd; tl]) ->
-                tlist2olist (hd::acc) tl
-            | Vcons((_, "nil"), []) -> List.rev acc
-            | _ -> builtin_error loc "node_ expects one 'List Sexp'" in
-
-
-    let args_val = tlist2olist [] tlist in
-
-    let op, args = match args_val with
-        | Vsexp(s)::tl -> s, tl
-        | _::tl -> builtin_error loc ("node_ expects sexp as operator")
-        | _ -> builtin_error loc ("node_ expects at least 2 arguments") in
+    let args = tlist2olist [] tlist in
 
     let s = List.map (fun g -> match g with
         | Vsexp(sxp)  -> sxp
@@ -140,32 +159,26 @@ let make_node loc args_val ctx    =
 
         Vsexp(Node(op, s))
 
-(* Takes one sexp and 6 function returning a sexp                       *)
-(* Sexp -> (Sexp -> Sexp) -> (Sexp -> Sexp) -> (Sexp -> Sexp)
-        -> (Sexp -> Sexp) -> (Sexp -> Sexp) -> (Sexp -> Sexp)
-        -> (Sexp -> Sexp)                                               *)
-let sexp_dispatch loc args ctx =
+let make_string loc args_val ctx  =
+    let lxp = match args_val with
+        | [r] -> r
+        | _ -> builtin_error loc ("string_ expects 1 argument") in
 
-    let sxp, nd, sym, str, it, flt, blk = match args with
-        | [Vsexp(sxp); nd; sym; str; it; flt; blk] ->
-            sxp, nd, sym, str, it, flt, blk
-        | _ -> builtin_error loc "sexp_dispatch expects 5 arguments" in
+        match lxp with
+            | Vstring(str) -> Vsexp(String(loc, str))
+            | _ -> builtin_error loc ("string_ expects one string as argument")
 
-    match sxp with
-        | Node _    -> nd
-        | Symbol _  -> sym
-        | String _  -> str
-        | Integer _ -> it
-        | Float _   -> flt
-        | Block _   -> blk
-        | _ -> builtin_error loc "sexp_dispatch error"
+let make_integer loc args_val ctx =
+    let lxp = match args_val with
+        | [r] -> r
+        | _ -> builtin_error loc ("integer_ expects 1 argument") in
 
+        match lxp with
+            | Vint(str) -> Vsexp(Integer(loc, str))
+            | _ -> builtin_error loc ("integer_ expects one string as argument")
 
-
-let make_block loc args_val ctx   = Vdummy
-let make_string loc args_val ctx  = Vdummy
-let make_integer loc args_val ctx = Vdummy
 let make_float loc args_val ctx   = Vdummy
+let make_block loc args_val ctx   = Vdummy
 
 let ttrue = Vcons((dloc, "True"), [])
 let tfalse = Vcons((dloc, "False"), [])
@@ -202,34 +215,7 @@ let sexp_eq loc args_val ctx =
  *)
 
 
-(* Built-in list of types/functions *)
-let typer_builtins_impl = [
-    ("_+_"           , iadd_impl);
-    ("_*_"           , imult_impl);
-    ("block_"        , make_block);
-    ("symbol_"       , make_symbol);
-    ("string_"       , make_string);
-    ("integer_"      , make_integer);
-    ("float_"        , make_float);
-    ("node_"         , make_node);
-    ("sexp_dispatch_", sexp_dispatch);
-    ("string_eq"     , string_eq);
-    ("int_eq"        , int_eq);
-    ("sexp_eq"       , sexp_eq);
-]
 
-(* Make built-in lookup table *)
-let _builtin_lookup =
-    List.fold_left (fun lkup (name, f) ->
-        SMap.add name f lkup)
-        SMap.empty typer_builtins_impl
-
-let get_builtin_impl str loc =
-    try SMap.find str _builtin_lookup
-    with Not_found ->
-        builtin_error loc "Requested Built-in does not exist"
-
-let btl_folder = ref "./btl/"
 
 
 let is_lbuiltin idx ctx =

@@ -104,7 +104,7 @@ symbol_  = Built-in "symbol_";
 string_  : String      -> Sexp;
 string_  = Built-in "string_";
 
-node_    : (List Sexp) -> Sexp;
+node_    : Sexp -> (List Sexp) -> Sexp;
 node_    = Built-in "node_";
 
 integer_ : Int         -> Sexp;
@@ -117,9 +117,9 @@ Macro  : Type;
 Macro  = inductive_ (dMacro) (Macro_ ((List Sexp) -> Sexp));
 Macro_ = inductive-cons Macro Macro_ ;
 
-% Type is not accurate yet
-sexp_dispatch_ : Sexp -> (Sexp -> Sexp) -> (Sexp -> Sexp) -> (Sexp -> Sexp)
-    -> (Sexp -> Sexp) -> (Sexp -> Sexp) -> (Sexp -> Sexp) -> (Sexp -> Sexp);
+sexp_dispatch_ : Sexp -> (Sexp -> List Sexp -> Sexp) -> (String -> Sexp) ->
+    (String -> Sexp) -> (Int -> Sexp) -> (Float -> Sexp) -> (List Sexp -> Sexp)
+        ->  Sexp;
 sexp_dispatch_ = Built-in "sexp_dispatch_";
 
 

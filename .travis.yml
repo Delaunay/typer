@@ -3,7 +3,7 @@ language: ocaml
 addons:
   apt:
     packages:
-      - opam
+      - ocaml
 
 script: make tests
 
