@@ -51,6 +51,11 @@ Bool = inductive_ (Boolean) (True) (False);
 True = inductive-cons Bool True;
 False = inductive-cons Bool False;
 
+Option : Type -> Type;
+Option = inductive_ (Option (a : Type)) (None) (Some a);
+Some = inductive-cons Option Some;
+None = inductive-cons Option None;
+
 string_eq : String -> String -> Bool;
 string_eq = Built-in "string_eq";
 
@@ -121,8 +126,6 @@ sexp_dispatch_ : Sexp -> (Sexp -> List Sexp -> Sexp) -> (String -> Sexp) ->
     (String -> Sexp) -> (Int -> Sexp) -> (Float -> Sexp) -> (List Sexp -> Sexp)
         ->  Sexp;
 sexp_dispatch_ = Built-in "sexp_dispatch_";
-
-
 
 
 

@@ -43,6 +43,8 @@ open Grammar
 open Debruijn
 open Env
 
+module ET = Elexp
+
 (* eval error are always fatal *)
 let eval_error loc msg =
     msg_error "EVAL" loc msg;
@@ -216,7 +218,19 @@ and typer_builtins_impl = [
     ("string_eq"     , string_eq);
     ("int_eq"        , int_eq);
     ("sexp_eq"       , sexp_eq);
+    ("eval_"         , typer_eval);
 ]
+
+and typer_eval loc args ctx =
+    let arg = match args with
+        | [a] -> a
+        | _ -> eval_error loc "eval_ expects a single argument" in
+    (* I need to be able to lexp sexp but I don't have lexp ctx *)
+    match arg with
+        (* Nodes that can be evaluated *)
+        | Closure (body, ctx) -> _eval body ctx 1
+        (* Leaf *)
+        | _ -> arg
 
 and get_builtin_impl str loc =
     (* Make built-in lookup table *)

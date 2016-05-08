@@ -65,7 +65,8 @@ let rec value_print (vtp: value_type) =
         | Closure (lxp, _) ->
             print_string ("Closure(" ^ (_lexp_to_str (!debug_ppctx) lxp) ^ ")")
         | Vsexp sxp -> sexp_print sxp
-        | Vint(i) -> print_int i;
+        | Vint(i) -> print_int i
+        | Vfloat(f) -> print_float f
         | Vstring(s) -> print_string ("\"" ^ s ^ "\"")
         | Vcons ((_, n), []) -> print_string n
         | Vcons ((_, n), args) ->

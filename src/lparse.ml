@@ -339,11 +339,6 @@ and lexp_case (rtype: lexp option) (loc, target, patterns) ctx i =
 and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
     let loc = pexp_location fun_name in
 
-    (*  Process Arguments *)
-    let pargs = List.map pexp_parse sargs in
-    let largs = _lexp_parse_all pargs ctx i in
-    let new_args = List.map (fun g -> (Aexplicit, g)) largs in
-
     let from_lctx ctx = try (from_lctx ctx)
         with e ->
             lexp_fatal loc "Could not convert lexp context into rte context" in
@@ -367,6 +362,11 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
     (* let ret_type = get_return_type 0 ltp new_args in *)
 
     let handle_named_call (loc, name) =
+        (*  Process Arguments *)
+        let pargs = List.map pexp_parse sargs in
+        let largs = _lexp_parse_all pargs ctx i in
+        let new_args = List.map (fun g -> (Aexplicit, g)) largs in
+
         try (*  Check if the function was defined *)
             let idx = senv_lookup name ctx in
             let vf = (make_var name idx loc) in
@@ -415,21 +415,23 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
                 lexp_fatal loc (name ^ " was found but " ^ (string_of_int idx) ^
                     " is not a correct index.") in
 
+        let lxp = match lxp with
+            | Call(Var((_, "Macro_"), _), [(Aexplicit, fct)]) -> fct
+            | _ -> lexp_fatal loc "Macro ill formed" in
+
+        (* Build function to be called *)
+        let arg = olist2tlist_lexp sargs ctx in
+        let lxp = Call(lxp, [(Aexplicit, arg)]) in
+
         let rctx = (from_lctx ctx) in
         let sxp = match eval lxp rctx with
-            (* This give me a closure to be evaluated with sargs *)
-            | Vcons(_, [Closure(body, rctx)]) ->(
-                (* Build typer list from ocaml list *)
-                let arg = olist2tlist_rte sargs in
-
-                let rctx = add_rte_variable None arg rctx in
-                let r = eval body rctx in
-                    match r with
-                        | Vsexp(s) -> s
-                        | _ -> Epsilon)
-
+            | Vsexp(sxp) -> sxp
+            (* Those are sexp converted by the eval function *)
+            | Vint(i)    -> Integer(dloc, i)
+            | Vstring(s) -> String(dloc, s)
+            | Vfloat(f)  -> Float(dloc, f)
             | v -> value_print v; print_string "\n";
-                lexp_fatal loc "Macro_ expects sexp" in
+                lexp_fatal loc "Macro_ expects '(List Sexp) -> Sexp'" in
 
         let pxp = pexp_parse sxp in
             _lexp_p_infer pxp ctx (i + 1)  in
@@ -465,7 +467,12 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
     (* determine function type *)
     match fun_name, ltp with
         (* Anonymous *)
-        | ((Plambda _), _) -> Call(body, new_args), ltp
+        | ((Plambda _), _) ->
+            (*  Process Arguments *)
+            let pargs = List.map pexp_parse sargs in
+            let largs = _lexp_parse_all pargs ctx i in
+            let new_args = List.map (fun g -> (Aexplicit, g)) largs in
+                Call(body, new_args), ltp
 
         | (Pvar (l, n), Var((_, "Macro"), _)) ->
             (* FIXME: check db_idx points too a Macro type *)

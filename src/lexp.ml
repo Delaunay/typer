@@ -247,7 +247,7 @@ let rec lexp_location e =
   | SortLevel (SLn _) -> U.dummy_location
   | Imm s -> sexp_location s
   | Var ((l,_),_) -> l
-  | Builtin _ -> U.dummy_location
+  | Builtin ((l, _), _) -> l
   | Let (l,_,_) -> l
   | Arrow (_,_,_,l,_) -> l
   | Lambda (_,(l,_),_,_) -> l
