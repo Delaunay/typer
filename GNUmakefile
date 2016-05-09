@@ -54,6 +54,9 @@ tests-build:
 tests-run:
 	@./_build/tests/utests --verbose= 3
 
+# There is nothing here. I use this to test if opam integration works
+install: tests
+
 tests: tests-build tests-run
 
 # Make language doc

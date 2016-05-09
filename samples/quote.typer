@@ -1,9 +1,3 @@
-
-
-sqr = Macro_ (lambda (x : List Sexp) ->
-    let hd = head Sexp x in
-        (node_ (symbol_ "_*_") (cons hd (cons hd nil))));
-
 % those are name aliases
 symbol  = lambda (y : String)     -> (symbol_ y)  ;
 string  = lambda (y : String)     -> (string_ y)  ;
@@ -19,7 +13,7 @@ node = (lambda (op : Sexp) ->
             | nil => node_ op nil
             | _ => node_ op (quote' y));
 
-% seek and replace
+% tree traversal
 quote' : List Sexp -> List Sexp;
 quote' = lambda (x : List Sexp) ->
     let target = head Sexp x;
@@ -34,13 +28,14 @@ quote' = lambda (x : List Sexp) ->
 
         in (cons rhd rtl);
 
+
+% quote definition
 quote = Macro_ (lambda (x : List Sexp) -> head Sexp (quote' x));
 
-main = quote (lambda (x : Int) -> x * x);
+% Should it return
+% (node_ (symbol_ "_*_") (cons (symbol_ x) (cons (symbol_ x) nil)))
 
+% OR
+%        x * x  (Lexp, donc Call(_*_, [x x])
 
-%nd = node_ (symbol_ "_+_") (cons (symbol_ "x") (cons (symbol_ "x") nil));
-%tst = cons nd nil;
-%tst = (cons (symbol_ "x") (cons (symbol_ "x") nil));
-%main = qquote tst;
-%main = Macro_ lamda
+%main = quote (x * x);

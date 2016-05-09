@@ -1,5 +1,8 @@
 language: ocaml
 
+env:
+  - OCAML_VERSION=4.02
+
 addons:
   apt:
     packages:
