@@ -82,7 +82,6 @@ let rec pexp_pat_location e = match e with
   | Ppatany l -> l
   | Ppatvar (l,_) -> l
   | Ppatcons ((l, _), _) -> l
-;;
 
 (* In the following "pexp_p" the prefix for "parse a sexp, returning a pexp"
  * and "pexp_u" is the prefix for "unparse a pexp, returning a sexp".  *)
@@ -356,7 +355,6 @@ let pexp_print e = sexp_print (pexp_unparse e)
 (* Parse All Pexp as a list *)
 let pexp_parse_all (nodes: sexp list) =
     List.map pexp_parse nodes
-;;
 
 let pexp_decls_all (nodes: sexp list): ((pvar * pexp * bool) list) =
     let rec loop nodes acc =
@@ -367,7 +365,6 @@ let pexp_decls_all (nodes: sexp list): ((pvar * pexp * bool) list) =
                 let nacc = List.append acc r in
                     loop tl nacc in
     loop nodes []
-;;
 
 (*      String Parsing
  * --------------------------------------------------------- *)
@@ -377,22 +374,18 @@ let _pexp_expr_str (str: string) (tenv: bool array)
             (grm: grammar) (limit: string option) =
     let sxps = _sexp_parse_str str tenv grm limit in
         pexp_parse_all sxps
-;;
 
 (* specialized version *)
 let pexp_expr_str str =
     _pexp_expr_str str default_stt default_grammar (Some ";")
-;;
 
 let _pexp_decl_str (str: string) tenv grm limit =
     let sxps = _sexp_parse_str str tenv grm limit in
         pexp_decls_all sxps
-;;
 
 (* specialized version *)
 let pexp_decl_str str =
     _pexp_decl_str str default_stt default_grammar (Some ";")
-;;
 
 let pexp_to_string e =
   match e with
@@ -407,6 +400,5 @@ let pexp_to_string e =
   | Pinductive ((_,_), _, _) -> "Pinductive"
   | Pcons ((_,_),_) -> "Pcons"
   | Pcase (_, _, _) -> "Pcase"
-;;
 
 

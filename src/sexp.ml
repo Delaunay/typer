@@ -1,6 +1,6 @@
 (* sexp.ml --- The Lisp-style Sexp abstract syntax tree.
 
-Copyright (C) 2011-2015  Free Software Foundation, Inc.
+Copyright (C) 2011-2016  Free Software Foundation, Inc.
 
 Author: Stefan Monnier <monnier@iro.umontreal.ca>
 Keywords: languages, lisp, dependent types.
@@ -231,8 +231,3 @@ let sexp_parse_all_to_list grm tokens limit =
             | _ -> let (sxp, rest) = sexp_parse_all grm tokens limit in
                     sexp_parse_impl grm rest limit (sxp :: acc) in
     sexp_parse_impl grm tokens limit []
-;;
-
-
-
-

@@ -93,6 +93,7 @@ let rec erase_type (lxp: L.lexp): elexp =
         | L.Arrow _                   -> Arrow
         | L.SortLevel _               -> SortLevel
         | L.Sort _                    -> Sort
+        (* FIXME: This one is wrong: eliminate it with `unsusp`.  *)
         | L.Susp _                    -> Arrow
         (* Still useful to some extend *)
         | L.Inductive(l, label, _, _) -> Inductive(l, label)

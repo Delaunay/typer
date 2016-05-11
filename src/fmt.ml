@@ -33,13 +33,12 @@
 (*  Compute the number of character needed to print an integer*)
 let str_size_int value =
     (int_of_float (log10 (float value))) + 1
-;;
 
 (* print n char 'c' *)
-let rec make_line c n = String.make n c;;
+let rec make_line c n = String.make n c
 
 (*  Big numbers are replaced by #### *)
-let cut_int (v:int) (start:int) (len:int): int = 0;;
+let cut_int (v:int) (start:int) (len:int): int = 0
 
 (*  RALIGN
  * ----------------------- *)
@@ -50,13 +49,12 @@ let ralign_generic get_size print_str print_elem cut_elem elem col =
     else begin
         print_str (make_line ' ' (col - n));
         print_elem elem; end
-;;
 
 let ralign_print_string =
-    ralign_generic String.length print_string print_string String.sub;;
+    ralign_generic String.length print_string print_string String.sub
 
 let ralign_print_int =
-    ralign_generic str_size_int print_string print_int cut_int;;
+    ralign_generic str_size_int print_string print_int cut_int
 
 
 (*  LALIGN
@@ -68,13 +66,12 @@ let lalign_generic get_size print_str print_elem cut_elem elem col =
     else begin
         print_elem elem;
         print_str (make_line ' ' (col - n)); end
-;;
 
 let lalign_print_string =
-    lalign_generic String.length print_string print_string String.sub;;
+    lalign_generic String.length print_string print_string String.sub
 
 let lalign_print_int =
-    lalign_generic str_size_int print_string print_int cut_int;;
+    lalign_generic str_size_int print_string print_int cut_int
 
 (*  CALIGN
  * ----------------------- *)
@@ -89,13 +86,12 @@ let calign_generic get_size print_str print_elem cut_elem elem col =
         print_str (make_line ' ' sep_n);
         print_elem elem;
         print_str (make_line ' ' (sep_n + p)); end
-;;
 
 let calign_print_string =
-    calign_generic String.length print_string print_string String.sub;;
+    calign_generic String.length print_string print_string String.sub
 
 let calign_print_int =
-    calign_generic str_size_int print_string print_int cut_int;;
+    calign_generic str_size_int print_string print_int cut_int
 
 (* Table Printing helper *)
 let make_title title =
@@ -105,7 +101,6 @@ let make_title title =
     let lsep = (make_line '=' sep_n) in
     let rsep = (make_line '=' (sep_n + p)) in
         ("    " ^ lsep ^ title ^ rsep ^ "\n")
-;;
 
 let make_rheader (head: (((char* int) option  * string) list)) =
     print_string "    | ";
@@ -119,9 +114,8 @@ let make_rheader (head: (((char* int) option  * string) list)) =
         head;
 
     print_string "\n"
-;;
 
-let make_sep c = "    " ^ (make_line c 76) ^ "\n";;
+let make_sep c = "    " ^ (make_line c 76) ^ "\n"
 
 
 (* used to help visualize the call trace *)
@@ -132,7 +126,6 @@ let _print_ct_tree i =
             | _ when (j mod 2) = 0 -> print_char '|'; loop (j + 1)
             | _ -> print_char ':'; loop (j + 1) in
     loop 0
-;;
 
 (* iterate of first n of a list l and apply f *)
 let print_first n l f =
@@ -143,7 +136,6 @@ let print_first n l f =
                 if i < n then ((f i hd); loop (i + 1) tl;)
                 else () in
     loop 0 l
-;;
 
 (* Colors *)
 let red     = "\x1b[31m"

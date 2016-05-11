@@ -72,10 +72,8 @@ let _ = (add_test "ENV" "Set Variables" (fun () ->
     else
         success ()
 
-));;
-
+))
 
 
 (* run all tests *)
-run_all ()
-;;
+let _ = run_all ()

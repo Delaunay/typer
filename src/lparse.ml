@@ -783,7 +783,6 @@ let default_lctx () =
     let pxps = pexp_decls_all nods in
     let _, lctx = lexp_p_decls pxps lctx in
         lctx
-;;
 
 (* Make runtime context with built-in types *)
 let default_rctx () =

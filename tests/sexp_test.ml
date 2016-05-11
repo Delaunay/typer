@@ -13,7 +13,7 @@ let _ = (add_test "SEXP" "lambda x -> x + x" (fun () ->
                    Node(Symbol(_, "_+_"), [Symbol(_, "x"); Symbol(_, "x")])) -> success ()
                 | _ -> failure ())
           | _ -> failure ()
-));;
+))
 
 let _ = (add_test "SEXP" "x * x * x" (fun () ->
 
@@ -33,8 +33,7 @@ let _ = (add_test "SEXP" "x * x * x" (fun () ->
         | _ -> failure ())
       | _ -> failure ()
 
-));;
+))
 
 (* run all tests *)
-run_all ()
-;;
+let _ = run_all ()

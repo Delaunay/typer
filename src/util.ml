@@ -118,4 +118,4 @@ let str_split str sep =
         (if (Buffer.length buffer) > 0 then
             ret := (Buffer.contents buffer)::(!ret));
 
-        List.rev (!ret));;
+        List.rev (!ret))

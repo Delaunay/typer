@@ -62,11 +62,9 @@ let print_input_line i =
     print_string "  In[";
     ralign_print_int i 2;
     print_string "] >> "
-;;
 
 let ieval_error loc msg =
-    msg_error "IEVAL" loc msg;
-;;
+    msg_error "IEVAL" loc msg
 
 (*  Read stdin for input. Returns only when the last char is ';'
  *  We can use '%' to prevent parsing
@@ -96,7 +94,6 @@ let rec read_input i =
                 loop str (i + 1))) in
 
     loop "" i
-;;
 
 (* Interactive mode is not usual typer
  It makes things easier to test out code *)
@@ -119,21 +116,18 @@ let ipexp_parse (sxps: sexp list): (pdecl list * pexpr list) =
                 (* Expression *)
                 | _ -> _pxp_parse tl dacc ((pexp_parse sxp)::pacc) in
         _pxp_parse sxps [] []
-;;
 
 let ilexp_parse pexps lctx =
     let pdecls, pexprs = pexps in
     let ldecls, lctx = lexp_p_decls pdecls lctx in
     let lexprs = lexp_parse_all pexprs lctx in
         (ldecls, lexprs), lctx
-;;
 
 let ieval lexps rctx =
     let (ldecls, lexprs) = lexps in
     let rctx = eval_decls ldecls rctx in
     let vals = eval_all lexprs rctx false in
         vals, rctx
-;;
 
 let _ieval f str  lctx rctx =
     let pres = (f str) in
@@ -145,7 +139,6 @@ let _ieval f str  lctx rctx =
     let lxps, lctx = ilexp_parse pxps lctx in
     let v, rctx = ieval lxps rctx in
         v, lctx, rctx
-;;
 
 let ieval_string = _ieval prelex_string
 let ieval_file = _ieval prelex_file
@@ -156,7 +149,7 @@ let _welcome_msg =
 
       %quit         (%q) : leave REPL
       %help         (%h) : print help
-";;
+"
 
 let _help_msg =
 "      %quit         (%q) : leave REPL
@@ -165,7 +158,7 @@ let _help_msg =
       %calltrace    (%ct): print call trace of last call
       %readfile          : read a typer/ityper file
       %help         (%h) : print help
-";;
+"
 
 
 let readfiles files (i, lctx, rctx) prt =
@@ -183,7 +176,7 @@ let readfiles files (i, lctx, rctx) prt =
                  ieval_error dloc ("file \"" ^ file ^ "\" does not exist.");
                 (i, lctx, rctx))
         )
-        (i, lctx, rctx)  files;;
+        (i, lctx, rctx)  files
 
 
 (*  Specials commands %[command-name] [args] *)
@@ -217,7 +210,6 @@ let rec repl i clxp rctx =
                     repl clxp rctx
                 with e ->
                     repl clxp rctx)
-;;
 
 let arg_files = ref []
 
@@ -227,7 +219,7 @@ let arg_defs = [
     (*"-I",
         Arg.String (fun f -> searchpath := f::!searchpath),
         "Append a directory to the search path"*)
-];;
+]
 
 let parse_args () =
   Arg.parse arg_defs (fun s -> arg_files:= s::!arg_files) ""
@@ -249,8 +241,6 @@ let main () =
 
     (* Initiate REPL. This will allow us to inspect interpreted code *)
     repl i lctx rctx
-;;
 
 
-main ()
-;;
+let _ = main ()
