@@ -50,7 +50,7 @@ let _ = (add_test "LEXP" "Built-in type Inference" (fun () ->
                 success()
 
             | _ -> failure ()
-));;
+))
 
 let _ = (add_test "LEXP" "lexp_print" (fun () ->
 
@@ -82,12 +82,11 @@ let _ = (add_test "LEXP" "lexp_print" (fun () ->
     let str2 = to_str ret2 in
 
     if str1 = str2 then success () else failure ()
-));;
+))
 
 (*
 let set_to_list s =
     StringSet.fold (fun g a -> g::a) s []
-;;
 
 let _ = (add_test "LEXP" "Free Variable" (fun () ->
 
@@ -115,8 +114,7 @@ let _ = (add_test "LEXP" "Free Variable" (fun () ->
                 | _ -> failure ())
         | _ -> failure ()
 
-));; *)
+)) *)
 
 (* run all tests *)
-run_all ()
-;;
+let _ = run_all ()

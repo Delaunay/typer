@@ -45,7 +45,6 @@ let dloc = dummy_location
 let env_error loc msg =
     msg_error "ENV" loc msg;
     raise (internal_error msg)
-;;
 
 let str_idx idx = "[" ^ (string_of_int idx) ^ "]"
 
@@ -88,15 +87,14 @@ let value_location (vtp: value_type) =
 type env_cell = (string option * value_type) ref
 type runtime_env = (env_cell myers) * (int * int)
 
-let make_runtime_ctx = (nil, (0, 0));;
+let make_runtime_ctx = (nil, (0, 0))
 
-let get_rte_size (ctx: runtime_env): int = let (l, _) = ctx in length l;;
+let get_rte_size (ctx: runtime_env): int = let (l, _) = ctx in length l
 
 let is_free_var idx ctx =
     let (l, (osize, _)) = ctx in
     let tsize = (get_rte_size ctx) - osize in
         if idx > tsize then true else false
-;;
 
 let get_rte_variable (name: string option) (idx: int) (ctx: runtime_env): value_type =
     let (l, _) = ctx in
@@ -117,7 +115,6 @@ let get_rte_variable (name: string option) (idx: int) (ctx: runtime_env): value_
         let n = match name with Some n -> n | None -> "" in
         env_error dloc ("Variable lookup failure. Var: \"" ^
             n ^ "\" idx: " ^ (str_idx idx))
-;;
 
 let rte_shift vref ctx =
     let (_, (osize, _)) = ctx in    (* number of variable declared outside *)
@@ -132,7 +129,7 @@ let rte_shift vref ctx =
 let add_rte_variable name (x: value_type) (ctx: runtime_env): runtime_env =
     let (l, b) = ctx in
     let lst = (cons (ref (name, x)) l) in
-        (lst, b);;
+        (lst, b)
 
 let set_rte_variable idx name (lxp: value_type) ctx =
     let (l, _) = ctx in
@@ -156,7 +153,6 @@ let local_ctx ctx =
     let (l, (_, _)) = ctx in
     let osize = length l in
         (l, (osize, 0))
-;;
 
 let select_n (ctx: runtime_env) n: runtime_env =
     let (l, a) = ctx in
@@ -180,8 +176,7 @@ let temp_ctx (ctx: runtime_env): runtime_env =
             print_string "temp ctx was useful\n"; *)
             (select_n ctx osize))
         else
-            ctx
-;; *)
+            ctx *)
 
 (* Select the n first variable present in the env *)
 let nfirst_rte_var n ctx =
@@ -191,7 +186,6 @@ let nfirst_rte_var n ctx =
         else
             List.rev acc in
     loop 0 []
-;;
 
 let print_myers_list l print_fun =
     let n = (length l) - 1 in
@@ -207,8 +201,7 @@ let print_myers_list l print_fun =
         print_string " | ";
         print_fun (nth (n - i) l);
     done;
-    print_string (make_sep '=');
-;;
+    print_string (make_sep '=')
 
 let print_rte_ctx (ctx: runtime_env) =
     let (l, b) = ctx in
@@ -221,5 +214,4 @@ let print_rte_ctx (ctx: runtime_env) =
             | None -> print_string (make_line ' ' 12); print_string "  |  " in
 
         value_print g; print_string "\n")
-;;
 

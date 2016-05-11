@@ -59,7 +59,7 @@ let _ = (add_test "EVAL" "Variable Cascade" (fun () ->
         match ret with
             | [Vint(r)] -> expect_equal_int r 10
             | _ -> failure ())
-);;
+)
 
 
 (*      Let
@@ -82,7 +82,6 @@ let _ = (add_test "EVAL" "Let" (fun () ->
             | [Vint(r)] -> expect_equal_int r 30
             | _ -> failure ())
 )
-;;
 
 
 (*      Lambda
@@ -105,7 +104,6 @@ let _ = (add_test "EVAL" "Lambda" (fun () ->
             | [Vint(r)] -> expect_equal_int r (4 * 4)
             | _ -> failure ())
 )
-;;
 
 let _ = (add_test "EVAL" "Nested Lambda" (fun () ->
     reset_eval_trace ();
@@ -127,7 +125,6 @@ let _ = (add_test "EVAL" "Nested Lambda" (fun () ->
             | [Vint(r)] -> expect_equal_int r (4 * 4 * 4)
             | _ -> failure ())
 )
-;;
 
 (* This makes sure contexts are reinitialized between calls
  *  i.e the context should not grow                             *)
@@ -153,7 +150,7 @@ let _ = (add_test "EVAL" "Infinite Recursion failure" (fun () ->
                 success ()
             else
                 failure ())
-));;
+))
 
 (*      Cases + Inductive types
  * ------------------------ *)
@@ -199,7 +196,7 @@ let _ = (add_test "EVAL" "Inductive::Case" (fun () ->
                     else
                         failure ()
             | _ -> failure ()
-));;
+))
 
 (*  Those wil be used multiple times *)
 let nat_decl = "
@@ -212,13 +209,11 @@ let nat_decl = "
     to-num = lambda (x : Nat) -> case x
             | (succ y) => (1 + (to-num y))
             | zero => 0;"
-;;
 
 let bool_decl = "
     Bool = inductive (dBool) (true) (false);
     false = inductive-cons Bool false;
     true = inductive-cons Bool true;"
-;;
 
 let _ = (add_test "EVAL" "Inductive::Recursive Call" (fun () ->
     reset_eval_trace ();
@@ -246,7 +241,6 @@ let _ = (add_test "EVAL" "Inductive::Recursive Call" (fun () ->
                         failure ()
             | _ -> failure ())
 )
-;;
 
 let _ = (add_test "EVAL" "Inductive::Nat Plus" (fun () ->
     reset_eval_trace ();
@@ -282,7 +276,7 @@ let _ = (add_test "EVAL" "Inductive::Nat Plus" (fun () ->
                     else
                         failure ()
             | _ -> failure ()
-));;
+))
 
 let _ = (add_test "EVAL" "Mutually Recursive Definition" (fun () ->
     reset_eval_trace ();
@@ -320,7 +314,7 @@ let _ = (add_test "EVAL" "Mutually Recursive Definition" (fun () ->
                     else
                         failure ()
             | _ -> failure ()
-));;
+))
 
 
 let _ = (add_test "EVAL" "Partial Application" (fun () ->
@@ -350,7 +344,7 @@ let _ = (add_test "EVAL" "Partial Application" (fun () ->
                     else
                         failure ()
             | _ -> failure ()
-));;
+))
 
 
 let _ = (add_test "EVAL" "List" (fun () ->
@@ -379,10 +373,9 @@ let _ = (add_test "EVAL" "List" (fun () ->
                     else
                         failure ()
             | _ -> failure ()
-));;
+))
 
 
 (* run all tests *)
-run_all ()
-;;
+let _ = run_all ()
 

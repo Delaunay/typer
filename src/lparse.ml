@@ -794,7 +794,6 @@ let default_lctx () =
     let _, lctx = lexp_p_decls pxps lctx in
         _parsing_internals := false;
             lctx
-;;
 
 (* Make runtime context with built-in types *)
 let default_rctx () =

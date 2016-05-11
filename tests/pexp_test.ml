@@ -18,9 +18,6 @@ let _ = (add_test "PEXP" "Type Parsing" (fun () ->
                 | _ -> failure ())
             | _ -> failure ())
 )
-;;
 
 
-
-run_all ()
-;;
+let _ = run_all ()
