@@ -33,7 +33,6 @@ open Fmt
 
 let cut_name str =
     String.sub str 0 (String.length str - 12)
-;;
 
 let _global_verbose_lvl = ref 5
 let _global_sample_dir = ref "./"
@@ -56,7 +55,7 @@ let arg_defs = [
     ("--ftitle=",
         Arg.String (fun g -> _global_ftitle := String.uppercase g;
                              _global_filter := true), " Set test filter");
-];;
+]
 
 
 let verbose n = (n <= (!_global_verbose_lvl))
@@ -84,8 +83,7 @@ let print_file_name i n name pass =
     print_string name;
     print_string (make_line '.' line_size);
     if pass then print_string "..OK\n" else print_string "FAIL\n";
-    print_string reset;
-;;
+    print_string reset
 
 let must_run str =
     if (!_global_filter) then(
@@ -162,7 +160,6 @@ let main () =
     print_string   "    Test Ran    : "; print_int !tests_n;
     print_string "\n    Test Failed : "; print_int !failed_test;
     print_string "\n    Test Passed : "; print_int (!tests_n - !failed_test);
-    print_endline "\n";
-;;
+    print_endline "\n"
 
-main ();
+let _ = main ();

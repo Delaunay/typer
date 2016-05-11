@@ -62,9 +62,8 @@ let _ = (add_test "MACROS" "macros base" (fun () ->
         match ret with
             | [Vint(r)] -> expect_equal_int r (3 * 3)
             | _ -> failure ())
-);;
+)
 
 
 (* run all tests *)
-run_all ()
-;;
+let _ = run_all ()

@@ -792,8 +792,13 @@ let default_lctx () =
     let pxps = pexp_decls_all nods in
         _parsing_internals := true;
     let _, lctx = lexp_p_decls pxps lctx in
+<<<<<<< HEAD
         _parsing_internals := false;
             lctx
+;;
+=======
+        lctx
+>>>>>>> e905eb9e83a9077b4c2bf59656f6c1a961a043a8
 
 (* Make runtime context with built-in types *)
 let default_rctx () =

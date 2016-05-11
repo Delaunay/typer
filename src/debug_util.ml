@@ -56,26 +56,25 @@ open Env
 
 
 
-let dloc = dummy_location;;
-let dummy_decl = Imm(String(dloc, "Dummy"));;
+let dloc = dummy_location
+let dummy_decl = Imm(String(dloc, "Dummy"))
 
-let discard v = ();;
+let discard v = ()
 
 (*          Argument parsing        *)
-let arg_print_options = ref SMap.empty;;
+let arg_print_options = ref SMap.empty
 let arg_files = ref []
 let debug_arg = ref 0
 
 let add_p_option name () =
     debug_arg := (!debug_arg) + 1;
-    arg_print_options := SMap.add name true (!arg_print_options);;
+    arg_print_options := SMap.add name true (!arg_print_options)
 
 let get_p_option name =
     try let _ = SMap.find name (!arg_print_options) in
         true
     with
         Not_found -> false
-;;
 
 (*
     pretty ?        (print with new lines and indents)
@@ -173,7 +172,7 @@ let arg_defs = [
             add_p_option "lctx" ();
             add_p_option "rctx" ();),
         " Print all debug info");
-];;
+]
 
 let parse_args () =
   Arg.parse arg_defs (fun s -> arg_files:= s::!arg_files) ""
@@ -183,7 +182,6 @@ let make_default () =
     add_p_option "sexp" ();
     add_p_option "pexp" ();
     add_p_option "lexp" ()
-;;
 
 
 let format_source () =
@@ -212,7 +210,6 @@ let format_source () =
 
     ) else (List.iter (fun str ->
         print_string str; print_string "\n") result;)
-;;
 
 let main () =
     parse_args ();
@@ -322,7 +319,5 @@ let main () =
             Not_found -> ()
         )
     )
-;;
 
-main ()
-;;
+let _ = main ()

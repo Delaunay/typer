@@ -1,6 +1,6 @@
 (* lexer.ml --- Second half of lexical analysis of Typer.
 
-Copyright (C) 2011-2012  Free Software Foundation, Inc.
+Copyright (C) 2011-2012, 2016  Free Software Foundation, Inc.
 
 Author: Stefan Monnier <monnier@iro.umontreal.ca>
 Keywords: languages, lisp, dependent types.
@@ -118,19 +118,16 @@ let lex tenv (pts : pretoken list) : sexp list =
       | _ -> let (tok, pts, bpos, cpos) = nexttoken tenv pts bpos cpos
             in gettokens pts bpos cpos (tok :: acc) in
   gettokens pts 0 0 []
-;;
 
 let _lex_str (str: string) tenv =
     let pretoks = prelex_string str in
         lex tenv pretoks
-;;
 
 let lex_str str = _lex_str str default_stt
 
 let _sexp_parse_str (str: string) tenv grm limit =
     let toks = _lex_str str tenv in
         sexp_parse_all_to_list grm toks limit
-;;
 
 let sexp_parse_str str =
     _sexp_parse_str str default_stt default_grammar (Some ";")

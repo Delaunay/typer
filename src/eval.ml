@@ -49,7 +49,6 @@ module ET = Elexp
 let eval_error loc msg =
     msg_error "EVAL" loc msg;
     raise (internal_error msg)
-;;
 
 let eval_fatal = msg_fatal "EVAL"
 
@@ -291,7 +290,6 @@ and print_eval_result i lxp =
 
 and print_eval_trace () =
     print_trace " EVAL TRACE " 50 lexp_to_string lexp_print !_global_eval_trace
-;;
 
 let eval lxp ctx =
     _global_eval_trace := [];
@@ -305,12 +303,11 @@ let debug_eval lxp ctx =
         print_rte_ctx (!_global_eval_ctx);
         print_eval_trace ();
         raise e)
-;;
 
 (*  Eval a list of lexp *)
 let eval_all lxps rctx silent =
     let evalfun = if silent then eval else debug_eval in
-    List.map (fun g -> evalfun g rctx) lxps;;
+    List.map (fun g -> evalfun g rctx) lxps
 
 
 (* build a rctx from a lctx *)

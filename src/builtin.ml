@@ -43,7 +43,6 @@ open Env       (* get_rte_variable *)
 let builtin_error loc msg =
     msg_error "BUILT-IN" loc msg;
     raise (internal_error msg)
-;;
 
 (*                Builtin types               *)
 let dloc    = dummy_location
@@ -84,7 +83,6 @@ let _generic_binary_iop name f loc (args_val: value_type list)
             | _ ->
                 value_print l; print_string " "; value_print r;
                 builtin_error loc (name ^ " expects Integers as arguments")
-;;
 
 let iadd_impl  = _generic_binary_iop "Integer::add"  (fun a b -> a + b)
 let isub_impl  = _generic_binary_iop "Integer::sub"  (fun a b -> a - b)

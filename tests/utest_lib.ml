@@ -36,15 +36,14 @@ open Fmt
 
 module StringMap =
     Map.Make (struct type t = string let compare = String.compare end)
-;;
 
 
 type test_fun = (unit -> int)
 type tests = (test_fun) StringMap.t
 type sections = ((tests) StringMap.t) * string list
 
-let success () = 0;;
-let failure () = (-1);;
+let success () = 0
+let failure () = (-1)
 
 (*
  *  SECTION NAME - TEST NAME   - FUNCTION (() -> int)
@@ -89,7 +88,7 @@ let arg_defs = [
         Arg.String (fun g -> _global_fsection := String.uppercase g), " Set test filter");
     ("--ftitle=",
         Arg.String (fun g -> _global_ftitle := String.uppercase g), " Set test filter");
-];;
+]
 
 let must_run_section str =
     if (String.length !_global_fsection) != 0  then(
@@ -118,8 +117,7 @@ let ut_string2 = ut_string 2
 let unexpected_throw sk tk e =
     ut_string2 (red ^ "[   FAIL] " ^ sk ^ " - " ^ tk ^ "\n");
     ut_string2        "[       ]     UNEXPECTED THROW:\n";
-    ut_string2        "[       ]  "; ut_string2 ((Printexc.to_string e) ^ "\n" ^ reset);
-;;
+    ut_string2        "[       ]  "; ut_string2 ((Printexc.to_string e) ^ "\n" ^ reset)
 
 let _expect_equal_t to_string value expect =
     if value = expect then
@@ -128,7 +126,6 @@ let _expect_equal_t to_string value expect =
         ut_string2 (red ^ "[       ]     EXPECTED: " ^ (to_string expect)^ "\n");
         ut_string2 (      "[       ]          GOT: " ^ (to_string value) ^ "\n" ^ reset);
         failure ())
-;;
 
 let expect_equal_int   = _expect_equal_t string_of_int
 let expect_equal_float = _expect_equal_t string_of_float
@@ -142,7 +139,6 @@ let add_section sname =
         Not_found ->
             _insertion_order := sname::(!_insertion_order);
             (StringMap.empty, ref [])
-;;
 
 (* USAGE *)
 (*
@@ -172,7 +168,6 @@ let add_test sname tname tfun =
         _global_sections := StringMap.add sname (ntmap, lst) (!_global_sections);
 
     _number_test := (!_number_test + 1)
-;;
 
 (*  sk  : Section Key
  *  tmap: test_name -> tmap
@@ -191,7 +186,6 @@ let for_all_tests sk tmap tk =
     with e ->
         _ret_code := failure ();
         unexpected_throw sk tk e) else ()
-;;
 
 let for_all_sections sk =
     let tmap, tst = StringMap.find sk (!_global_sections) in
@@ -202,7 +196,6 @@ let for_all_sections sk =
         List.iter (for_all_tests sk tmap) (!tst))
 
     else ()
-;;
 
 (* Run all *)
 let run_all () =
@@ -215,4 +208,3 @@ let run_all () =
 
     (* return success or failure *)
     exit !_ret_code
-;;

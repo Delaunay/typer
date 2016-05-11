@@ -71,10 +71,9 @@ let _ = (add_test "DEBRUIJN" "Set Variables" (fun () ->
     else
         success ()
 
-));;
+))
 
 
 
 (* run all tests *)
-run_all ()
-;;
+let _ = run_all ()

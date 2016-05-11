@@ -95,7 +95,7 @@ let make_lexp_context = (_make_senv_type, _make_myers, (0, 0))
 
 let get_roffset ctx = let (_, _, (_, rof)) = ctx in rof
 
-let get_size ctx = let ((n, _), _, _) = ctx in n;;
+let get_size ctx = let ((n, _), _, _) = ctx in n
 
 (*  return its current DeBruijn index *)
 let rec senv_lookup (name: string) (ctx: lexp_context): int =
@@ -130,7 +130,6 @@ let _name_error loc estr str =
     if estr = str then () else
     debruijn_error loc ("DeBruijn index refers to wrong name. " ^
                       "Expected: \"" ^ estr ^ "\" got \"" ^ str ^ "\"")
-;;
 
 let env_set_var_info ctx (def: vref) (v: lexp option) (t: lexp) =
     let ((dv_size, _), info_env, _) = ctx in
@@ -145,7 +144,6 @@ let env_set_var_info ctx (def: vref) (v: lexp option) (t: lexp) =
         rf := (0, (loc, ename), v, t))
     with
         Not_found -> debruijn_error loc "DeBruijn index out of bounds!"
-;;
 
 (* generic lookup *)
 let _env_lookup ctx (v: vref): env_elem  =

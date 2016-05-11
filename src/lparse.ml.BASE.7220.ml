@@ -62,7 +62,6 @@ let lexp_fatal = msg_fatal "LPARSE"
 
 let _global_lexp_ctx = ref make_lexp_context
 let _global_lexp_trace = ref []
-let _parsing_internals = ref false
 let btl_folder = ref "./btl/"
 
 (*  The main job of lexp (currently) is to determine variable name (index)
@@ -381,14 +380,10 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
                             Call(vf, new_args), ret_type
 
                     | Some Builtin((_, "Built-in"), ltp) ->(
-                        match !_parsing_internals with
-                            | false -> lexp_error loc "Use of Built-in in user code";
-                                dlxp, dlxp
-                            | _ ->(
                         match largs with
                             | [Imm (String (_, str)) ] ->
                                 Builtin((loc, str), ltp), ltp
-                            | _ -> typer_unreachable "cannot be reached"))
+                            | _ -> typer_unreachable "cannot be reached")
 
                     (* a builtin functions *)
                     | Some Builtin((_, name), ltp) ->
@@ -427,10 +422,6 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
         (* Build function to be called *)
         let arg = olist2tlist_lexp sargs ctx in
         let lxp = Call(lxp, [(Aexplicit, arg)]) in
-
-        (*
-        print_string "\n\n";
-        lexp_print lxp; print_string "\n\n"; *)
 
         let rctx = (from_lctx ctx) in
         let sxp = match eval lxp rctx with
@@ -790,10 +781,9 @@ let default_lctx () =
     let nods = sexp_parse_all_to_list default_grammar sxps (Some ";") in
 
     let pxps = pexp_decls_all nods in
-        _parsing_internals := true;
     let _, lctx = lexp_p_decls pxps lctx in
-        _parsing_internals := false;
-            lctx
+        lctx
+;;
 
 (* Make runtime context with built-in types *)
 let default_rctx () =

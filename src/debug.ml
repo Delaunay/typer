@@ -63,13 +63,11 @@ let rec debug_pretokens_print pretoken =
 
         | Prestring(loc, str)
          -> print_info "Prestring: " loc;
-            print_string ("\"" ^ str ^ "\"");
-;;
+            print_string ("\"" ^ str ^ "\"")
 
 (* Print a List of Pretokens *)
 let rec debug_pretokens_print_all pretokens =
   List.iter (fun pt -> debug_pretokens_print pt; print_string "\n") pretokens
-;;
 
 (* Sexp Print *)
 let rec debug_sexp_print sexp =
@@ -103,7 +101,6 @@ let rec debug_sexp_print sexp =
                 List.iter (fun sexp -> sexp_print sexp; print_string " @ ")
                                  args;
             print_string " "
-;;
 
 (* Print a list of sexp *)
 let debug_sexp_print_all tokens =
@@ -112,7 +109,6 @@ let debug_sexp_print_all tokens =
          debug_sexp_print pt;
          print_string "\n";)
     tokens
-;;
 
 
 (* Print a Pexp with debug info *)
@@ -137,7 +133,6 @@ let debug_pexp_print ptop =
         | Pcons (_,_)            -> print_info "Pcons      " l ptop
         | Pcase (_, _, _)        -> print_info "Pcase      " l ptop
       (*| _                      -> print_info "Not Impl   " l ptop *)
-;;
 
 let debug_pexp_decls decls =
     List.iter (fun e ->
@@ -162,7 +157,6 @@ let debug_pexp_print_all pexps =
             debug_pexp_print px;
             print_string "\n")
         pexps
-;;
 
 let debug_lexp_decls decls =
     let sep = " : " in
