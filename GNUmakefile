@@ -7,7 +7,7 @@ TEST_FILES := $(wildcard ./tests/*_test.ml)
 OBFLAGS = -build-dir _build
 # COMPILE_MODE = native
 
-all: ityper typer debug tests-build
+all: typer debug tests-build
 
 ifeq ($(OS), Windows_NT)
 # Windows need '-r' and building to native can be problematic (linking error)
@@ -20,13 +20,6 @@ COMPILE_MODE = byte
 
 
 
-typer:
-	# ============================
-	#     Build typer
-	# ============================
-	ocamlbuild src/main.$(COMPILE_MODE) $(OBFLAGS)
-	@mv _build/src/main.$(COMPILE_MODE) _build/typer
-
 # debug file eval
 debug:
 	# ============================
@@ -36,12 +29,12 @@ debug:
 	@mv _build/src/debug_util.$(COMPILE_MODE)  _build/debug_util
 
 # interactive typer
-ityper:
+typer:
 	# ============================
-	#    Build ityper
+	#    Build typer
 	# ============================
 	ocamlbuild src/REPL.$(COMPILE_MODE)  -I src $(OBFLAGS)
-	@mv _build/src/REPL.$(COMPILE_MODE)  _build/ityper
+	@mv _build/src/REPL.$(COMPILE_MODE)  _build/typer
 
 tests-build:
 	# ============================
@@ -71,17 +64,17 @@ doc-ocaml:
 clean:
 	-rm -rf _build
 
-.PHONY: ityper typer debug tests
+.PHONY: typer debug tests
 
 
 run/debug_util:
 	@./_build/debug_util ./samples/test__.typer -fmt-type=off
 
-run/ityper:
-	@./_build/ityper
+run/typer:
+	@./_build/typer
 
 run/tests:
 	@./_build/tests/utests --verbose= 1
 
-run/ityper-file:
-	@./_build/ityper ./samples/test__.typer
+run/typer-file:
+	@./_build/typer ./samples/test__.typer
