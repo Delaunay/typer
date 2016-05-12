@@ -26,7 +26,7 @@ this program.  If not, see <http://www.gnu.org/licenses/>.  *)
  *
  *      Example:
  *
- *          $./_build/ityper [files]
+ *          $./_build/typer [files]
  *            In[ 1] >> sqr = lambda x -> x * x;
  *            In[ 2] >> (sqr 4);
  *              Out[ 2] >> 16
@@ -54,6 +54,7 @@ open Builtin
 
 open Env
 open Debruijn
+module TC = Typecheck
 
 (* how to handle arrow keys ? *)
 let _history = ref []
@@ -132,6 +133,8 @@ let ieval lexps rctx =
 let _ieval f str  lctx rctx =
     let pres = (f str) in
     let sxps = lex default_stt pres in
+    (* FIXME: This is too eager: it prevents one declaration from changing
+     * the grammar used in subsequent declarations.  *)
     let nods = sexp_parse_all_to_list default_grammar sxps (Some ";") in
 
     (*  Different from usual typer *)
@@ -156,7 +159,7 @@ let _help_msg =
       %who          (%w) : print runtime environment
       %info         (%i) : print elaboration environment
       %calltrace    (%ct): print call trace of last call
-      %readfile          : read a typer/ityper file
+      %readfile          : read a Typer file
       %help         (%h) : print help
 "
 
@@ -169,6 +172,8 @@ let readfiles files (i, lctx, rctx) prt =
         print_string "  In["; ralign_print_int i 2;  print_string "] >> ";
         print_string ("%readfile " ^ file); print_string "\n";));
 
+        (* FIXME: This should not use the "ieval" but the "eval" syntax,
+         * i.e. only accept a sequence of declarations at top-level.  *)
         try let (ret, lctx, rctx) = ieval_file file lctx rctx in
             (List.iter (print_eval_result i) ret; (i + 1, lctx, rctx))
         with
@@ -214,7 +219,7 @@ let rec repl i clxp rctx =
 let arg_files = ref []
 
 
-(* ./ityper [options] files *)
+(* ./typer [options] files *)
 let arg_defs = [
     (*"-I",
         Arg.String (fun f -> searchpath := f::!searchpath),
