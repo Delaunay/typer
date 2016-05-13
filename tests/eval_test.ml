@@ -38,8 +38,8 @@ open Builtin
 open Env
 
 (* default environment *)
-let lctx = default_lctx ()
-let rctx = default_rctx ()
+let lctx = default_lctx
+let rctx = default_rctx
 
 let _ = (add_test "EVAL" "Variable Cascade" (fun () ->
     reset_eval_trace ();
@@ -156,8 +156,6 @@ let _ = (add_test "EVAL" "Infinite Recursion failure" (fun () ->
  * ------------------------ *)
 
 let _ = (add_test "EVAL" "Inductive::Case" (fun () ->
-    let lctx = default_lctx () in
-    let rctx = default_rctx () in
     reset_eval_trace ();
 
     (* Inductive type declaration + Noisy declarations *)

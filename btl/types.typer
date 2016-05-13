@@ -51,7 +51,7 @@ Bool = inductive_ (Boolean) (True) (False);
 True = inductive-cons Bool True;
 False = inductive-cons Bool False;
 
-Option : Type -> Type;
+%Option : Type -> Type;
 Option = inductive_ (Option (a : Type)) (None) (Some a);
 Some = inductive-cons Option Some;
 None = inductive-cons Option None;
@@ -118,7 +118,7 @@ integer_ = Built-in "integer_";
 float_   : Float       -> Sexp;
 float_   = Built-in "float_";
 
-Macro  : Type;
+% Macro  : Type;
 Macro  = inductive_ (dMacro) (Macro_ ((List Sexp) -> Sexp));
 Macro_ = inductive-cons Macro Macro_ ;
 

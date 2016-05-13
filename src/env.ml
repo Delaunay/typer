@@ -34,8 +34,9 @@ open Util       (* msg_error    *)
 open Fmt        (*  make_title, table util *)
 
 open Sexp
-open Lexp       (*  lexp_print *)
+(* open Lexp       ( *  lexp_print *)
 
+open Elexp
 open Myers
 open Debruijn
 
@@ -54,7 +55,7 @@ type value_type =
     | Vcons of symbol * value_type list
     | Vbuiltin of string
     | Vfloat of float
-    | Closure of lexp * (((string option * value_type) ref myers) * (int * int))
+    | Closure of elexp * (((string option * value_type) ref myers) * (int * int))
     | Vsexp of sexp             (* Values passed to macros.  *)
     (* Unable to eval during macro expansion, only throw if the value is used *)
     | Vdummy
@@ -62,7 +63,7 @@ type value_type =
 let rec value_print (vtp: value_type) =
     match vtp with
         | Closure (lxp, _) ->
-            print_string ("Closure(" ^ (_lexp_to_str (!debug_ppctx) lxp) ^ ")")
+            print_string ("Closure(" ^ (elexp_str lxp) ^ ")")
         | Vsexp sxp -> sexp_print sxp
         | Vint(i) -> print_int i
         | Vfloat(f) -> print_float f
@@ -79,7 +80,7 @@ let rec value_print (vtp: value_type) =
 let value_location (vtp: value_type) =
     match vtp with
         | Vcons ((loc, _), _) -> loc
-        | Closure (lxp, _) -> lexp_location lxp
+        | Closure (lxp, _) -> elexp_location lxp
         (* location info was lost or never existed *)
         | _ -> dloc
 
@@ -96,7 +97,8 @@ let is_free_var idx ctx =
     let tsize = (get_rte_size ctx) - osize in
         if idx > tsize then true else false
 
-let get_rte_variable (name: string option) (idx: int) (ctx: runtime_env): value_type =
+let get_rte_variable (name: string option) (idx: int)
+                                (ctx: runtime_env): value_type =
     let (l, _) = ctx in
     try (
         let ref_cell = (nth idx l) in

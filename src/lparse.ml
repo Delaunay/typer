@@ -48,6 +48,9 @@ open Eval
 open Grammar
 open Builtin
 
+module TC = Typecheck
+module EL = Elexp
+
 (* Shortcut => Create a Var *)
 let make_var name index loc =
     Var(((loc, name), index))
@@ -100,11 +103,16 @@ let btl_folder = ref "./btl/"
  * - use lexp_p_check whenever you can.
  *)
 
-(*
- * Infer: Imm, bultin, var, let, arrow, call, inductive, cons, case
- *
- * check: lambda
- *)
+
+let build_var name ctx =
+    let type0_idx = senv_lookup name ctx in
+        Var((dloc, name), type0_idx)
+
+(* build type0 from ctx *)
+let get_type0 ctx = build_var "Type" ctx
+let get_int ctx = build_var "Int" ctx
+
+
 let rec lexp_p_infer (p : pexp) (ctx : lexp_context): lexp * ltype =
     _lexp_p_infer p ctx 1
 
@@ -120,7 +128,7 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
         (*  Block/String/Integer/Float *)
         | Pimm value -> (Imm(value),
             match value with
-                | Integer _ -> type_int
+                | Integer _ -> get_int ctx
                 | Float _   -> type_float
                 | String _  -> type_string;
                 | _ -> lexp_error tloc "Could not find type";
@@ -155,33 +163,29 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
 
             let lxp, _ = lexp_infer expr ctx in
             let v = Arrow(kind, ovar, ltp, tloc, lxp) in
-                v, type0
+                v, (get_type0 ctx)
 
         (* Pinductive *)
         | Pinductive (label, formal_args, ctors) ->
-            let ctx = ref ctx in
+            let type0 = get_type0 ctx in
+            let nctx = ref ctx in
             (* (arg_kind * pvar * pexp option) list *)
             let formal = List.map (fun (kind, var, opxp) ->
                 let ltp, _ = match opxp with
-                    | Some pxp -> _lexp_p_infer pxp !ctx (i + 1)
+                    | Some pxp -> _lexp_p_infer pxp !nctx (i + 1)
                     | None -> dltype, dltype in
 
-                ctx := env_extend !ctx var None dltype;
+                nctx := env_extend !nctx var None ltp;
                     (kind, var, ltp)
                 ) formal_args in
-            (* (arg_kind * vdef * ltype) list *)
 
-            (* -- Should I do that ?? --* )
-            let rec make_type args tp =
-                match args with
-                    | (kind, (loc, n), ltp)::tl ->
-                        make_type tl (Arrow(kind, Some (loc, n), ltp, loc, tp))
-                    | [] -> tp in *)
+            let nctx = !nctx in
+            let ltp = List.fold_left (fun tp (kind, _, _) ->
+                (Arrow(kind, None, type0, tloc, tp))) type0 formal in
 
-            let ctx = !ctx in
-            let map_ctor = lexp_parse_inductive ctors ctx i in
+            let map_ctor = lexp_parse_inductive ctors nctx i in
             let v = Inductive(tloc, label, formal, map_ctor) in
-                v, type0
+                v, ltp
 
         (* This case can be inferred *)
         | Plambda (kind, var, optype, body) ->
@@ -270,9 +274,18 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
             let lxp, _ = lexp_case (Some t) (loc, target, patterns) ctx i in
                 lxp
 
-        | _ -> let (e, inferred_t) = _lexp_p_infer p ctx (i + 1) in
-            (* FIXME: check that inferred_t = t!  *)
-            e
+        | _ -> let (e, inferred_t) = _lexp_p_infer p ctx (i + 1) in (
+            match e with
+                (* Built-in is a dummy function with no type. We cannot check
+                 * Built-in *)
+                | Builtin _ -> e
+                | _ ->
+            (if TC.conv_p inferred_t t then () else debug_msg (
+                print_string "1 exp "; lexp_print e; print_string "\n";
+                print_string "2 inf "; lexp_print inferred_t; print_string "\n";
+                print_string "3 Ann "; lexp_print t; print_string "\n";
+                lexp_warning tloc "Type Mismatch inferred != Annotation"));
+                e)
 
 (* Lexp.case cam be checked and inferred *)
 and lexp_case (rtype: lexp option) (loc, target, patterns) ctx i =
@@ -433,13 +446,13 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
         lexp_print lxp; print_string "\n\n"; *)
 
         let rctx = (from_lctx ctx) in
-        let sxp = match eval lxp rctx with
+        let sxp = match eval (EL.erase_type lxp) rctx with
             | Vsexp(sxp) -> sxp
             (* Those are sexp converted by the eval function *)
             | Vint(i)    -> Integer(dloc, i)
             | Vstring(s) -> String(dloc, s)
             | Vfloat(f)  -> Float(dloc, f)
-            | v -> value_print v; print_string "\n";
+            | v -> debug_msg (value_print v);
                 lexp_fatal loc "Macro_ expects '(List Sexp) -> Sexp'" in
 
         let pxp = pexp_parse sxp in
@@ -778,7 +791,7 @@ let add_def name ctx =
  * --------------------------------------------------------- *)
 
 (* Make lxp context with built-in types *)
-let default_lctx () =
+let default_lctx =
     (* Empty context *)
     let lctx = make_lexp_context in
     let lxp = Builtin((dloc, "Built-in"), type0) in
@@ -796,8 +809,8 @@ let default_lctx () =
             lctx
 
 (* Make runtime context with built-in types *)
-let default_rctx () =
-    try (from_lctx (default_lctx ()))
+let default_rctx =
+    try (from_lctx (default_lctx))
         with e ->
             lexp_fatal dloc "Could not convert lexp context into rte context"
 
@@ -831,10 +844,12 @@ let lexp_decl_str str lctx =
 
 let _eval_expr_str str lctx rctx silent =
     let lxps = lexp_expr_str str lctx in
-        (eval_all lxps rctx silent)
+    let elxps = List.map EL.erase_type lxps in
+        (eval_all elxps rctx silent)
 
 let eval_expr_str str lctx rctx = _eval_expr_str str lctx rctx false
 
 let eval_decl_str str lctx rctx =
     let lxps, lctx = lexp_decl_str str lctx in
-        (eval_decls lxps rctx), lctx
+    let elxps = (EL.clean_decls lxps) in
+        (eval_decls elxps rctx), lctx

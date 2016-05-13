@@ -34,23 +34,8 @@ open Lparse     (* add_def       *)
 open Builtin
 
 (* default environment *)
-let lctx = default_lctx ()
+let lctx = default_lctx
 
-
-let _ = (add_test "LEXP" "Built-in type Inference" (fun () ->
-
-    let dcode = "a = 10; b = 1.12;" in
-
-    let ret, _ = lexp_decl_str dcode lctx in
-
-        match ret with
-            (* (vdef * lexp * ltype) *)
-            | [(_, _, Builtin((_, "Int"), _));
-               (_, _, Builtin((_, "Float"), _))] ->
-                success()
-
-            | _ -> failure ()
-))
 
 let _ = (add_test "LEXP" "lexp_print" (fun () ->
 

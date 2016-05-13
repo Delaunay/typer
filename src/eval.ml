@@ -35,15 +35,15 @@ open Fmt
 
 open Sexp
 open Pexp       (* Arg_kind *)
-open Lexp
+(* open Lexp *)
 
+open Elexp
 open Builtin
 open Grammar
 
 open Debruijn
 open Env
 
-module ET = Elexp
 
 (* eval error are always fatal *)
 let eval_error loc msg =
@@ -64,7 +64,7 @@ let _builtin_lookup = ref SMap.empty
 (* This is an internal definition
  * 'i' is the recursion depth used to print the call trace *)
 let rec _eval lxp ctx i: (value_type) =
-    let tloc = lexp_location lxp in
+    let tloc = elexp_location lxp in
 
     (if i > (!_eval_max_recursion_depth) then
         eval_fatal tloc "Recursion Depth exceeded");
@@ -78,10 +78,10 @@ let rec _eval lxp ctx i: (value_type) =
         | Imm(Integer (_, i))       -> Vint(i)
         | Imm(String (_, s))        -> Vstring(s)
         | Imm(sxp)                  -> Vsexp(sxp)
-        | Inductive (_, _, _, _)    -> Vdummy
-        | Cons (_, label)           -> Vcons (label, [])
-        | Lambda (_, _, _, lxp)     -> Closure(lxp, ctx)
-        | Builtin ((_, str), _)     -> Vbuiltin(str)
+        | Inductive (_, _)          -> Vdummy
+        | Cons (label)              -> Vcons (label, [])
+        | Lambda (_, lxp)           -> Closure(lxp, ctx)
+        | Builtin ((_, str))        -> Vbuiltin(str)
 
         (*  Return a value stored in env        *)
         | Var((loc, name), idx) as e -> eval_var ctx e ((loc, name), idx)
@@ -96,11 +96,11 @@ let rec _eval lxp ctx i: (value_type) =
         | Call (lname, args) -> eval_call ctx i lname args
 
         (* Case *)
-        | Case (loc, target, _, _, pat, dflt)
+        | Case (loc, target, pat, dflt)
           -> (eval_case ctx i loc target pat dflt)
 
         | _ -> print_string "debug catch-all eval: ";
-            lexp_print lxp; Vstring("eval Not Implemented")
+            elexp_print lxp; print_string "\n"; Vstring("eval Not Implemented")
 
 and eval_var ctx lxp v =
     let ((loc, name), idx) = v in
@@ -109,8 +109,8 @@ and eval_var ctx lxp v =
         eval_error loc ("Variable: " ^ name ^ (str_idx idx) ^ " was not found ")
 
 and eval_call ctx i lname args =
-    let loc = lexp_location lname in
-    let args = List.map (fun (k, e) -> _eval e ctx (i + 1)) args in
+    let loc = elexp_location lname in
+    let args = List.map (fun e -> _eval e ctx (i + 1)) args in
     let f = _eval lname ctx (i + 1) in
 
     let rec eval_call f args ctx =
@@ -130,7 +130,7 @@ and eval_call ctx i lname args =
             (* return result of eval *)
             | _, [] -> f
 
-            | _ -> value_print f;
+            | _ -> debug_msg (value_print f);
                 eval_error loc "Cannot eval function" in
 
         eval_call f args ctx
@@ -144,8 +144,9 @@ and eval_case ctx i loc target pat dflt =
         | Vcons((_, cname), args)  -> cname, args
         | _ ->
             (* -- Debug print -- *)
-            lexp_print target; print_string "\n";
-            value_print v;     print_string "\n";
+            debug_msg (
+            elexp_print target; print_string "\n";
+             value_print v;     print_string "\n");
             (* -- Crash -- *)
             eval_error loc "Target is not a Constructor" in
 
@@ -155,10 +156,10 @@ and eval_case ctx i loc target pat dflt =
         (* This is more robust                                     *)
         let rec fold2 nctx pats args =
             match pats, args with
-                | (_, Some (_, name))::pats, arg::args ->
+                | (Some (_, name))::pats, arg::args ->
                     let nctx = add_rte_variable (Some name) arg nctx in
                         fold2 nctx pats args
-                | (_, None)::pats, arg::args ->  fold2 nctx pats args
+                | (None)::pats, arg::args ->  fold2 nctx pats args
                 (* Errors: those should not happen but they might  *)
                 (* List.fold2 would complain. we print more info   *)
                 | _::_, [] -> eval_warning loc "a) Eval::Case Pattern Error"; nctx
@@ -182,18 +183,18 @@ and build_arg_list args ctx i =
     List.fold_left (fun c v -> add_rte_variable None v c) ctx arg_val
 
 and eval_decls decls ctx = _eval_decls decls ctx 0
-and _eval_decls (decls: ((vdef * lexp * ltype) list))
-               (ctx: runtime_env) i: runtime_env =
+and _eval_decls (decls: ((vdef * elexp) list))
+                        (ctx: runtime_env) i: runtime_env =
 
     (* Read declarations once and push them *)
-    let ctx = List.fold_left (fun ctx ((_, name), lxp, ltp) ->
+    let ctx = List.fold_left (fun ctx ((_, name), lxp) ->
         add_rte_variable (Some name) Vdummy ctx)
         ctx decls in
 
     let n = (List.length decls) - 1 in
 
     (* Read declarations once and push them *)
-    let _, ctx = List.fold_left (fun (idx, ctx) ((_, name), lxp, ltp) ->
+    let _, ctx = List.fold_left (fun (idx, ctx) ((_, name), lxp) ->
         _global_eval_trace := [];
         let lxp = _eval lxp ctx (i + 1) in
         let ctx = set_rte_variable idx (Some name) lxp ctx in
@@ -257,7 +258,7 @@ and sexp_dispatch loc args ctx =
 
     let sxp = match sxp with
         | Vsexp(sxp)   -> sxp
-        | _ -> value_print sxp;
+        | _ -> debug_msg (value_print sxp);
             eval_error loc "sexp_dispatch expects a Sexp as 1st arg" in
 
     match sxp with
@@ -289,7 +290,7 @@ and print_eval_result i lxp =
 
 
 and print_eval_trace () =
-    print_trace " EVAL TRACE " 50 lexp_to_string lexp_print !_global_eval_trace
+    print_trace " EVAL TRACE " 50 elexp_to_string elexp_print !_global_eval_trace
 
 let eval lxp ctx =
     _global_eval_trace := [];
@@ -315,8 +316,7 @@ let from_lctx (ctx: lexp_context): runtime_env =
     let ((_, _), env, _) = ctx in
     let rctx = ref make_runtime_ctx in
 
-    (* Skip builtins: They are already in default_rctx()  *)
-    let bsize = 1 in
+    let bsize = 1 in        (*skip the first Built-in function (useless) *)
     let csize = get_size ctx in
 
     (* add all variables *)
@@ -333,8 +333,10 @@ let from_lctx (ctx: lexp_context): runtime_env =
         let (_, (_, name), exp, _) = !(Myers.nth j env) in
 
         let vxp = match exp with
-            | Some lxp -> (try (eval lxp !rctx)
-                with e -> lexp_print lxp; raise e)
+            | Some lxp ->
+                let lxp = (erase_type lxp) in
+                    (try (eval lxp !rctx)
+                        with e -> elexp_print lxp; raise e)
 
             | None -> Vdummy in
 

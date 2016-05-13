@@ -39,8 +39,8 @@ open Env
 
 
 (* default environment *)
-let lctx = default_lctx ()
-let rctx = default_rctx ()
+let lctx = default_lctx
+let rctx = default_rctx
 
 
 let _ = (add_test "MACROS" "macros base" (fun () ->

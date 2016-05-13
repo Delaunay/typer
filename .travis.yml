@@ -8,5 +8,9 @@ addons:
     packages:
       - ocaml
 
+before_script:
+  - opam config setup -a
+  - opam config env
+
 script: make tests
 
