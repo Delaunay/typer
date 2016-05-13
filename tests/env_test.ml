@@ -36,7 +36,7 @@ open Builtin
 open Env
 
 
-let rctx = default_rctx ()
+let rctx = default_rctx
 
 let make_val value = Vstring(value)
 

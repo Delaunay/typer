@@ -66,12 +66,17 @@ let msg_message lvl kind section (loc: location) msg =
     print_string msg;
     print_newline ()) else ()
 
-let msg_error   = msg_message 1 "[!] Error    "
-let msg_info    = msg_message 3 "[?] Info     "
-let msg_warning = msg_message 2 "/!\\ Warning  "
+
 let msg_fatal s l m  =
     msg_message 0 "[X] Fatal    " s l m;
     internal_error m
+let msg_error   = msg_message 1 "[!] Error    "
+let msg_warning = msg_message 2 "/!\\ Warning  "
+let msg_info    = msg_message 3 "[?] Info     "
+
+(* Compiler Internal Debug print *)
+let debug_msg expr =
+    if 4 <= !_typer_verbose then expr else ()
 
 let not_implemented_error () = internal_error "not implemented"
 

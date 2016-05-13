@@ -65,7 +65,8 @@ type ltype = lexp
    | Arrow of arg_kind * vdef option * ltype * U.location * lexp
    | Lambda of arg_kind * vdef * ltype * lexp
    | Call of lexp * (arg_kind * lexp) list (* Curried call.  *)
-   | Inductive of U.location * label * ((arg_kind * vdef * ltype) list)
+   | Inductive of U.location * label
+                  * ((arg_kind * vdef * ltype) list) (* formal Args *)
                   * ((arg_kind * vdef option * ltype) list) SMap.t
    | Cons of vref * symbol (* = Type info * ctor_name  *)
    | Case of U.location * lexp

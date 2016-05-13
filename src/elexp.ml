@@ -74,7 +74,7 @@ let rec erase_type (lxp: L.lexp): elexp =
         | L.Cons(_, s)      -> Cons(s)
 
         | L.Lambda(kind, vdef, _, body) ->
-            if kind == Aexplicit then
+            if kind != Aerasable then
                 Lambda(vdef, erase_type body)
             else
                 erase_type body
@@ -98,12 +98,11 @@ let rec erase_type (lxp: L.lexp): elexp =
         (* Still useful to some extend *)
         | L.Inductive(l, label, _, _) -> Inductive(l, label)
 
-
 and filter_arg_list lst =
     let rec filter_arg_list lst acc =
         match lst with
             | (kind, lxp)::tl ->
-                let acc = if kind == Aexplicit then
+                let acc = if kind != Aerasable then
                     (erase_type lxp)::acc else acc in
                         filter_arg_list tl acc
             | [] -> List.rev acc in
@@ -122,7 +121,7 @@ and clean_map cases =
         let rec clean_arg_list lst acc =
             match lst with
                 | (kind, var)::tl ->
-                    let acc = if kind == Aexplicit then
+                    let acc = if kind != Aerasable then
                         var::acc else acc in
                             clean_arg_list tl acc
                 | [] -> List.rev acc in
@@ -130,7 +129,6 @@ and clean_map cases =
 
     SMap.mapi (fun key (l, args, expr) ->
         (l, (clean_arg_list args), (erase_type expr))) cases
-
 
 let rec elexp_location e =
     match e with
@@ -148,8 +146,8 @@ let rec elexp_location e =
         | Sort      _ -> U.dummy_location
         | SortLevel _ -> U.dummy_location
 
-
 let rec elexp_print lxp = print_string (elexp_str lxp)
+and elexp_to_string lxp = elexp_str lxp
 and elexp_str lxp =
     let maybe_str lxp =
         match lxp with

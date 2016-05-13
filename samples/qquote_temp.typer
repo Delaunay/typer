@@ -4,39 +4,7 @@ sqr = Macro_ (lambda (x : List Sexp) ->
     let hd = head Sexp x in
         (node_ (symbol_ "_*_") (cons hd (cons hd nil))));
 
-% those are name aliases
-symbol  = lambda (y : String)     -> (symbol_ y)  ;
-string  = lambda (y : String)     -> (string_ y)  ;
-integer = lambda (y : Int)        -> (integer_ y) ;
-float   = lambda (y : Float)      -> (float_ y)   ;
-block   = lambda (y : List Sexp)  -> (block_ y)   ;
 
-% traverse nodes
-node : Sexp -> List Sexp -> Sexp;
-node = (lambda (op : Sexp) ->
-    lambda (y : List Sexp)  ->
-        case y
-            | nil => node_ op nil
-            | _ => node_ op (quote' y));
-
-% seek and replace
-quote' : List Sexp -> List Sexp;
-quote' = lambda (x : List Sexp) ->
-    let target = head Sexp x;
-        tl = tail Sexp x;
-
-        rhd = sexp_dispatch_ target
-            node symbol string integer float block;
-
-        rtl = case tl
-            | nil => nil
-            | _ => quote' tl;
-
-        in (cons rhd rtl);
-
-quote = Macro_ (lambda (x : List Sexp) -> head Sexp (quote' x));
-
-main = quote (lambda (x : Int) -> x * x);
 
 
 %nd = node_ (symbol_ "_+_") (cons (symbol_ "x") (cons (symbol_ "x") nil));

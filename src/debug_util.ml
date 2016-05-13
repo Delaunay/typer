@@ -45,6 +45,7 @@ open Prelexer
 open Lexer
 open Lparse
 open Eval
+module EL = Elexp
 
 (* definitions *)
 open Grammar
@@ -53,8 +54,6 @@ open Builtin
 (* environments *)
 open Debruijn
 open Env
-
-
 
 let dloc = dummy_location
 let dummy_decl = Imm(String(dloc, "Dummy"))
@@ -192,7 +191,7 @@ let format_source () =
     let toks = lex default_stt pretoks in
     let nodes = sexp_parse_all_to_list default_grammar toks (Some ";") in
     let pexps = pexp_decls_all nodes in
-    let ctx = default_lctx () in
+    let ctx = default_lctx in
     let lexps, _ = lexp_p_decls pexps ctx in
 
     print_string (make_sep '-'); print_string "\n";
@@ -268,7 +267,7 @@ let main () =
             debug_pexp_decls pexps; print_string "\n"));
 
         (* get lexp *)
-        let ctx = default_lctx () in
+        let ctx = default_lctx in
 
         print_string yellow;
         let lexps, nctx =
@@ -288,10 +287,12 @@ let main () =
         (if (get_p_option "lctx") then(
             print_lexp_ctx nctx; print_string "\n"));
 
+        let clean_lxp = EL.clean_decls lexps in
+
         (* Eval declaration *)
-        let rctx = default_rctx () in
+        let rctx = default_rctx in
         print_string yellow;
-        let rctx = (try eval_decls lexps rctx;
+        let rctx = (try eval_decls clean_lxp rctx;
             with e ->
                 print_string reset;
                 print_rte_ctx (!_global_eval_ctx);

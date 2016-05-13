@@ -36,7 +36,7 @@ open Builtin
 open Debruijn
 
 
-let lctx = default_lctx ()
+let lctx = default_lctx
 
 let make_val value = Imm(String(dloc, value))
 
