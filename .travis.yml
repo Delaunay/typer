@@ -6,7 +6,7 @@ env:
 addons:
   apt:
     packages:
-      - ocaml
+      - opam
 
 before_script:
   - opam config setup -a

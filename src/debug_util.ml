@@ -46,6 +46,7 @@ open Lexer
 open Lparse
 open Eval
 module EL = Elexp
+module TC = Typecheck
 
 (* definitions *)
 open Grammar
@@ -89,6 +90,7 @@ let _format_mode = ref false
 let _ppctx  = ref (true , 0, true, false, true,  2, true)
 let _format_dest = ref ""
 let _write_file = ref false
+let _typecheck = ref false
 
 
 let _set_print_pretty ctx v =
@@ -113,7 +115,7 @@ let set_print_index v () = mod_ctx _set_print_index v
 let set_print_indent_size v =  mod_ctx _set_print_indent_size v
 let set_highlight v () =  mod_ctx _set_highlight v
 let set_print_pretty v () = mod_ctx _set_print_pretty v
-
+let set_typecheck v ()    = _typecheck := v
 
 let output_to_file str =
     _write_file := true;
@@ -145,6 +147,9 @@ let arg_defs = [
         Arg.Unit (set_highlight false), " Disable Highlighting for typer code");
     ("-fmt-file",
         Arg.String output_to_file, " Output formatted code to a file");
+
+    ("-typecheck",
+        Arg.Unit (add_p_option "typecheck"), " Enable type checking");
 
     (*  Debug *)
     ("-pretok",
@@ -279,6 +284,28 @@ let main () =
                 raise e
             ) in
         print_string reset;
+
+        (* convert a lctx context into a typecheck context *)
+        (* they will be the same in the future *)
+        let lctx_to_cctx (lctx: lexp_context): TC.tc_ctx =
+            let (_, env, _) = lctx in
+            let n = Myers.length env in
+
+            let rec loop i env cctx =
+                if i = (-1) then cctx else (
+                    let i, v, olxp, ltp = !(Myers.nth i env) in
+                    let vlxp = match olxp with
+                        | Some lxp -> TC.LetDef lxp
+                        | None -> TC.ForwardRef in
+                    let cctx = Myers.cons (i, Some v, vlxp, ltp) cctx in
+                        loop (i - 1) env cctx) in
+                loop n env Myers.nil in
+
+        (if (get_p_option "typecheck") then(
+            let cctx = lctx_to_cctx ctx in
+            (* run type check *)
+            List.iter (fun (_, lxp, _) ->
+                let _ = TC.check cctx lxp in ()) lexps));
 
         (if (get_p_option "lexp") then(
             print_string (make_title " Lexp ");

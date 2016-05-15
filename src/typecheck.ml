@@ -106,6 +106,10 @@ type varbind =
   | ForwardRef
   | LetDef of lexp
 
+(* easier to debug with type annotations *)
+type tc_elem = int * vdef option * varbind * lexp
+type tc_ctx = tc_elem Myers.myers
+
 let lookup_type ctx vref =
   let (_, i) = vref in
   let (_, _, _, t) = Myers.nth i ctx in

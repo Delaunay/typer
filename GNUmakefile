@@ -66,9 +66,11 @@ clean:
 
 .PHONY: typer debug tests
 
+run/typecheck:
+	@./_build/debug_util ./samples/test__.typer -typecheck
 
 run/debug_util:
-	@./_build/debug_util ./samples/test__.typer -fmt-type=off
+	@./_build/debug_util ./samples/test__.typer -fmt-type=on -fmt-index=off -fmt-pretty=on
 
 run/typer:
 	@./_build/typer

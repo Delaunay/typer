@@ -11,7 +11,10 @@ node = (lambda (op : Sexp) ->
     lambda (y : List Sexp)  ->
         case y
             | nil => node_ op nil
-            | _ => node_ op (quote' y));
+            | _ => node_ (quote' (cons op nil)) (quote' y));
+            | _ => node_ (symbol_ "node_") (cons (quote' op)
+                                (cons (reconstruire la liste en sexp) nil))
+            | uquote => y
 
 % tree traversal
 quote' : List Sexp -> List Sexp;
@@ -32,6 +35,9 @@ quote' = lambda (x : List Sexp) ->
 % quote definition
 quote = Macro_ (lambda (x : List Sexp) -> head Sexp (quote' x));
 
+fun n =
+    let x = 2 in
+
 % Should it return
 % (node_ (symbol_ "_*_") (cons (symbol_ x) (cons (symbol_ x) nil)))
 
@@ -39,3 +45,16 @@ quote = Macro_ (lambda (x : List Sexp) -> head Sexp (quote' x));
 %        x * x  (Lexp, donc Call(_*_, [x x])
 
 %main = quote (x * x);
+
+
+Quelque chose comme:
+
+    Nat = inductive Nat
+        | zero
+        | succ Nat;
+
+est parsé comme:
+
+        Call(op=_|_, args=[(inductive Nat), zero, (succ Nat)])
+
+for it to work, we could define _|_ as a Macro

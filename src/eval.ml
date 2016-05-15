@@ -258,7 +258,8 @@ and sexp_dispatch loc args ctx =
 
     let sxp = match sxp with
         | Vsexp(sxp)   -> sxp
-        | _ -> debug_msg (value_print sxp);
+        | _ -> debug_msg ( print_string "\n";
+                    value_print sxp; print_string "\n");
             eval_error loc "sexp_dispatch expects a Sexp as 1st arg" in
 
     match sxp with

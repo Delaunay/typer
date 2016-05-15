@@ -55,6 +55,7 @@ open Builtin
 open Env
 open Debruijn
 module TC = Typecheck
+module EL = Elexp
 
 (* how to handle arrow keys ? *)
 let _history = ref []
@@ -118,7 +119,12 @@ let ipexp_parse (sxps: sexp list): (pdecl list * pexpr list) =
                 | _ -> _pxp_parse tl dacc ((pexp_parse sxp)::pacc) in
         _pxp_parse sxps [] []
 
-let ilexp_parse pexps lctx =
+
+let ierase_type (lexps: (ldecl list * lexpr list)) =
+    let (ldecls, lexprs) = lexps in
+        (EL.clean_decls ldecls), (List.map EL.erase_type  lexprs)
+
+let ilexp_parse pexps lctx: ((ldecl list * lexpr list) * lexp_context) =
     let pdecls, pexprs = pexps in
     let ldecls, lctx = lexp_p_decls pdecls lctx in
     let lexprs = lexp_parse_all pexprs lctx in
@@ -140,11 +146,26 @@ let _ieval f str  lctx rctx =
     (*  Different from usual typer *)
     let pxps = ipexp_parse nods in
     let lxps, lctx = ilexp_parse pxps lctx in
-    let v, rctx = ieval lxps rctx in
+    let elxps = ierase_type lxps in
+    let v, rctx = ieval elxps rctx in
         v, lctx, rctx
+
+let _raw_eval f str lctx rctx =
+    let pres = (f str) in
+    let sxps = lex default_stt pres in
+    let nods = sexp_parse_all_to_list default_grammar sxps (Some ";") in
+    let pxps = pexp_decls_all nods in
+    let lxps, lctx = lexp_p_decls pxps lctx in
+    let elxps = EL.clean_decls lxps in
+    let rctx = eval_decls elxps rctx in
+        (* This is for consistency with ieval *)
+        [], lctx, rctx
 
 let ieval_string = _ieval prelex_string
 let ieval_file = _ieval prelex_file
+
+let eval_string = _raw_eval prelex_string
+let eval_file = _raw_eval prelex_file
 
 
 let _welcome_msg =
@@ -172,9 +193,7 @@ let readfiles files (i, lctx, rctx) prt =
         print_string "  In["; ralign_print_int i 2;  print_string "] >> ";
         print_string ("%readfile " ^ file); print_string "\n";));
 
-        (* FIXME: This should not use the "ieval" but the "eval" syntax,
-         * i.e. only accept a sequence of declarations at top-level.  *)
-        try let (ret, lctx, rctx) = ieval_file file lctx rctx in
+        try let (ret, lctx, rctx) = eval_file file lctx rctx in
             (List.iter (print_eval_result i) ret; (i + 1, lctx, rctx))
         with
             Sys_error _ -> (
@@ -232,8 +251,8 @@ let parse_args () =
 let main () =
     parse_args ();
 
-    let lctx = default_lctx () in
-    let rctx = default_rctx () in
+    let lctx = default_lctx in
+    let rctx = default_rctx in
 
     print_string (make_title " TYPER REPL ");
     print_string _welcome_msg;

@@ -68,6 +68,13 @@ let _global_lexp_trace = ref []
 let _parsing_internals = ref false
 let btl_folder = ref "./btl/"
 
+(* This is used to make Type annotation and inferred type having the same index *)
+(* since inferred type might need to parse a lambda var to infer the type *)
+let _type_shift tp i =
+    match tp with
+        | Var(v, idx) -> Var(v, idx)
+        | expr -> expr
+
 (*  The main job of lexp (currently) is to determine variable name (index)
  *  and to regroup type specification with their variable
  *
@@ -157,11 +164,13 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
         (* ------------------------------------------------------------------ *)
         | Parrow (kind, ovar, tp, loc, expr) ->
             let ltp, _ = lexp_infer tp ctx in
-            let ctx = match ovar with
-                | None -> ctx
-                | Some var ->  env_extend ctx var None ltp in
+            let nctx, sh = match ovar with
+                | None -> ctx, 0
+                | Some var -> (env_extend ctx var None ltp), 1 in
 
-            let lxp, _ = lexp_infer expr ctx in
+            let lxp, _ = lexp_infer expr nctx in
+            let lxp = _type_shift lxp sh in
+
             let v = Arrow(kind, ovar, ltp, tloc, lxp) in
                 v, (get_type0 ctx)
 
@@ -197,6 +206,8 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
 
             let nctx = env_extend ctx var None ltp in
             let lbody, lbtp = lexp_infer body nctx in
+            (* We added one variable in the ctx * )
+            let lbtp = _type_shift lbtp 1 in *)
 
             let lambda_type = Arrow(kind, None, ltp, tloc, lbtp) in
                 Lambda(kind, var, ltp, lbody), lambda_type
@@ -218,19 +229,23 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
                 let inductive_type = Var((loc, type_name), idx) in
 
                 (* Get constructor args *)
-                let args = match idt with
-                    | Some Inductive(_, _, _, ctor_def) -> (
-                        try (SMap.find cname ctor_def)
+                let formal, args = match idt with
+                    | Some Inductive(_, _, formal, ctor_def) -> (
+                        try formal, (SMap.find cname ctor_def)
                         with Not_found ->
                             lexp_error loc
                                 ("Constructor \"" ^ cname ^ "\" does not exist");
-                                [])
+                                [], [])
 
-                    | _ -> lexp_error loc "Not an Inductive Type"; [] in
+                    | _ -> lexp_error loc "Not an Inductive Type"; [], [] in
 
                 (* build Arrow type *)
                 let cons_type = List.fold_left (fun ltp (kind, v, tp) ->
                     Arrow(kind, v, tp, loc, ltp)) inductive_type (List.rev args) in
+
+                (* Add Aerasable argument *)
+                let cons_type = List.fold_left (fun ltp (kind, v, tp) ->
+                    Arrow(Aerasable, Some v, tp, loc, ltp)) cons_type (List.rev formal) in
 
                 Cons((vr, idx), sym), cons_type
 
@@ -274,7 +289,8 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
             let lxp, _ = lexp_case (Some t) (loc, target, patterns) ctx i in
                 lxp
 
-        | _ -> let (e, inferred_t) = _lexp_p_infer p ctx (i + 1) in (
+        | _ -> let (e, inferred_t) = _lexp_p_infer p ctx (i + 1) in
+            e (*
             match e with
                 (* Built-in is a dummy function with no type. We cannot check
                  * Built-in *)
@@ -285,7 +301,7 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
                 print_string "2 inf "; lexp_print inferred_t; print_string "\n";
                 print_string "3 Ann "; lexp_print t; print_string "\n";
                 lexp_warning tloc "Type Mismatch inferred != Annotation"));
-                e)
+                e*)
 
 (* Lexp.case cam be checked and inferred *)
 and lexp_case (rtype: lexp option) (loc, target, patterns) ctx i =
@@ -315,15 +331,18 @@ and lexp_case (rtype: lexp option) (loc, target, patterns) ctx i =
 
     (* make a list of all branches return type *)
     let texp = ref [] in
+    let ctx_len = get_size ctx in
 
     (*  Read patterns one by one *)
     let fold_fun (merged, dflt) (pat, exp) =
         (*  Create pattern context *)
         let (name, iloc, arg), nctx = lexp_read_pattern pat exp tlxp ctx in
+        let nctx_len = get_size nctx in
 
         (*  parse using pattern context *)
         let exp, ltp = lexp_infer exp nctx in
-            texp := ltp::!texp;
+            (* we added len(arg) variable int the context *)
+            texp := (_type_shift ltp (nctx_len - ctx_len))::!texp;
 
         (* Check ltp type. Must be similar to rtype *)
         (if type_check ltp then ()
@@ -385,34 +404,27 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
             let idx = senv_lookup name ctx in
             let vf = (make_var name idx loc) in
 
-            (* Replace a built-in name by builtin so they can be recognized
-             * during eval         *)
-            if (is_lbuiltin idx ctx) then (
                 match env_lookup_expr ctx ((loc, name), idx) with
-                    | None -> lexp_error loc "Unknown builtin";
-                        let ret_type = get_return_type name 0 ltp new_args in
-                            Call(vf, new_args), ret_type
-
-                    | Some Builtin((_, "Built-in"), ltp) ->(
-                        match !_parsing_internals with
-                            | false -> lexp_error loc "Use of Built-in in user code";
-                                dlxp, dlxp
-                            | _ ->(
-                        match largs with
-                            | [Imm (String (_, str)) ] ->
+                    | Some Builtin((_, "Built-in"), _) ->(
+                        (* ------ SPECIAL ------ *)
+                        match !_parsing_internals, largs with
+                            | true, [Imm(String (_, str))] ->
                                 Builtin((loc, str), ltp), ltp
-                            | _ -> typer_unreachable "cannot be reached"))
 
-                    (* a builtin functions *)
-                    | Some Builtin((_, name), ltp) ->
-                        (* We keep loc info *)
-                        Call(Builtin((loc, name), ltp), new_args), ltp
+                            | true, [Imm(String (_, str)); ltp] ->
+                                Builtin((loc, str), ltp), ltp
 
-                    | _ -> typer_unreachable "ill formed Builtin"
-            )
-            else
-            let ret_type = get_return_type name 0 ltp new_args in
-                Call(vf, new_args), ret_type
+                            | true, _ ->
+                                lexp_error loc "Wrong Usage of \"Built-in\"";
+                                    dlxp, dltype
+
+                            | false, _ ->
+                                lexp_error loc "Use of \"Built-in\" in user code";
+                                    dlxp, dltype)
+
+                    | _ ->
+                         let ret_type = get_return_type name 0 ltp new_args in
+                            Call(vf, new_args), ret_type
 
         with Not_found ->
             lexp_error loc ("The function \"" ^ name ^ "\" was not defined");
@@ -801,12 +813,20 @@ let default_lctx =
     let pres = prelex_file (!btl_folder ^ "types.typer") in
     let sxps = lex default_stt pres in
     let nods = sexp_parse_all_to_list default_grammar sxps (Some ";") in
-
     let pxps = pexp_decls_all nods in
-        _parsing_internals := true;
-    let _, lctx = lexp_p_decls pxps lctx in
-        _parsing_internals := false;
-            lctx
+
+    _parsing_internals := true;
+        let _, lctx = lexp_p_decls pxps lctx in
+    _parsing_internals := false;
+
+    (* Once default builtin are set we can populate the predef table *)
+        List.iter (fun name ->
+            let idx = senv_lookup name lctx in
+            let v = Var((dloc, name), idx) in (*
+            let value = (env_lookup_expr lctx v) in *)
+            set_predef name (Some v)) predef_name;
+    (* -- DONE -- *)
+        lctx
 
 (* Make runtime context with built-in types *)
 let default_rctx =
@@ -853,3 +873,4 @@ let eval_decl_str str lctx rctx =
     let lxps, lctx = lexp_decl_str str lctx in
     let elxps = (EL.clean_decls lxps) in
         (eval_decls elxps rctx), lctx
+

@@ -41,11 +41,8 @@ String = Built-in "String";
 Sexp   = Built-in "Sexp";
 
 % Basic operators
-_+_ : Int -> Int -> Int;
-_+_ = Built-in "_+_";
-
-_*_ : Int -> Int -> Int;
-_*_  = Built-in "_*_";
+_+_ = Built-in "_+_" (Int -> Int -> Int);
+_*_ = Built-in "_*_" (Int -> Int -> Int);
 
 Bool = inductive_ (Boolean) (True) (False);
 True = inductive-cons Bool True;
@@ -56,14 +53,9 @@ Option = inductive_ (Option (a : Type)) (None) (Some a);
 Some = inductive-cons Option Some;
 None = inductive-cons Option None;
 
-string_eq : String -> String -> Bool;
-string_eq = Built-in "string_eq";
-
-int_eq : Int -> Int -> Bool;
-int_eq = Built-in "int_eq";
-
-sexp_eq : Sexp -> Sexp -> Bool;
-sexp_eq = Built-in "sexp_eq";
+string_eq = Built-in "string_eq" (String -> String -> Bool);
+int_eq    = Built-in    "int_eq" (Int -> Int -> Bool);
+sexp_eq   = Built-in   "sexp_eq" (Sexp -> Sexp -> Bool);
 
 % -----------------------------------------------------
 %       List
@@ -100,32 +92,25 @@ tail = lambda a =>
 %       Macro
 % -----------------------------------------------------
 
-block_   : (List Sexp) -> Sexp;
-block_   = Built-in "block_";
-
-symbol_  : String      -> Sexp;
-symbol_  = Built-in "symbol_";
-
-string_  : String      -> Sexp;
-string_  = Built-in "string_";
-
-node_    : Sexp -> (List Sexp) -> Sexp;
-node_    = Built-in "node_";
-
-integer_ : Int         -> Sexp;
-integer_ = Built-in "integer_";
-
-float_   : Float       -> Sexp;
-float_   = Built-in "float_";
+block_   = Built-in "block_"   ((List Sexp) -> Sexp);
+symbol_  = Built-in "symbol_"  (String      -> Sexp);
+string_  = Built-in "string_"  (String      -> Sexp);
+node_    = Built-in "node_"    (Sexp -> (List Sexp) -> Sexp);
+integer_ = Built-in "integer_" (Int         -> Sexp);
+float_   = Built-in "float_"   (Float       -> Sexp);
 
 % Macro  : Type;
 Macro  = inductive_ (dMacro) (Macro_ ((List Sexp) -> Sexp));
 Macro_ = inductive-cons Macro Macro_ ;
 
-sexp_dispatch_ : Sexp -> (Sexp -> List Sexp -> Sexp) -> (String -> Sexp) ->
-    (String -> Sexp) -> (Int -> Sexp) -> (Float -> Sexp) -> (List Sexp -> Sexp)
-        ->  Sexp;
-sexp_dispatch_ = Built-in "sexp_dispatch_";
+sexp_dispatch_ = Built-in "sexp_dispatch_" (Sexp
+    -> (Sexp -> List Sexp -> Sexp)
+    -> (String -> Sexp)
+    -> (String -> Sexp)
+    -> (Int -> Sexp)
+    -> (Float -> Sexp)
+    -> (List Sexp -> Sexp)
+        ->  Sexp);
 
 
 

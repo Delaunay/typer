@@ -44,6 +44,26 @@ let builtin_error loc msg =
     msg_error "BUILT-IN" loc msg;
     raise (internal_error msg)
 
+type predef_table = (lexp option ref) SMap.t
+
+let predef_name = [
+    "cons";
+    "nil"
+]
+
+let predef_map : predef_table =
+    (* add predef name, expr will be populated when parsing *)
+    List.fold_left (fun m name ->
+        SMap.add name (ref None) m) SMap.empty predef_name
+
+let get_predef name =
+    match !(SMap.find name predef_map) with
+        | Some exp -> exp
+        | None -> builtin_error dloc "Try to access an empty predefined"
+
+let set_predef name lexp =
+    SMap.find name predef_map := lexp
+
 (*                Builtin types               *)
 let dloc    = dummy_location
 let slevel0 = SortLevel (SLn 0)

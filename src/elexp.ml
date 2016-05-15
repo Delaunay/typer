@@ -57,11 +57,8 @@ type elexp =
     | Cons of symbol
     | Case of U.location * elexp *
         (U.location * (vdef option) list * elexp) SMap.t * elexp option
-
-    (* Type definition *)
-    | Arrow
-    | SortLevel
-    | Sort
+    (* Type place-holder just in case *)
+    | Type
     (* Inductive takes a slot in the env that is why it need to be here *)
     | Inductive of U.location * label
 
@@ -89,12 +86,12 @@ let rec erase_type (lxp: L.lexp): elexp =
             Case(l, (erase_type target), (clean_map cases),
                                          (clean_maybe default))
 
+        | L.Susp(l, s)                -> erase_type (L.unsusp l s)
+
         (* To be thrown out *)
-        | L.Arrow _                   -> Arrow
-        | L.SortLevel _               -> SortLevel
-        | L.Sort _                    -> Sort
-        (* FIXME: This one is wrong: eliminate it with `unsusp`.  *)
-        | L.Susp _                    -> Arrow
+        | L.Arrow _                   -> Type
+        | L.SortLevel _               -> Type
+        | L.Sort _                    -> Type
         (* Still useful to some extend *)
         | L.Inductive(l, label, _, _) -> Inductive(l, label)
 
@@ -140,11 +137,8 @@ let rec elexp_location e =
         | Call (f,_) -> elexp_location f
         | Cons ((l,_)) -> l
         | Case (l,_,_,_) -> l
-
-        | Arrow     _ -> U.dummy_location
-        | Inductive _ -> U.dummy_location
-        | Sort      _ -> U.dummy_location
-        | SortLevel _ -> U.dummy_location
+        | Inductive(l, _) -> l
+        | Type -> U.dummy_location
 
 let rec elexp_print lxp = print_string (elexp_str lxp)
 and elexp_to_string lxp = elexp_str lxp
