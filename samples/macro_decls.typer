@@ -1,0 +1,6 @@
+type_ = Macro_ (lambda (x : List Sexp) -> head Sexp x);
+
+
+type Nat
+    | zero
+    | succ Nat;

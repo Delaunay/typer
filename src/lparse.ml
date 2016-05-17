@@ -265,6 +265,9 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
         | _ -> pexp_print p; print_string "\n";
             lexp_fatal tloc "Unhandled Pexp"
 
+and lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context): lexp =
+  _lexp_p_check p t ctx 1
+
 and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
     let tloc = pexp_location p in
 
@@ -447,7 +450,7 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
 
         let lxp = match lxp with
             | Call(Var((_, "Macro_"), _), [(Aexplicit, fct)]) -> fct
-            | _ -> lexp_fatal loc "Macro ill formed" in
+            | _ -> lexp_fatal loc "Macro is ill formed" in
 
         (* Build function to be called *)
         let arg = olist2tlist_lexp sargs ctx in
@@ -604,91 +607,108 @@ and lexp_parse_inductive ctors ctx i =
         SMap.add name (make_args args ctx) lctors)
       SMap.empty ctors
 
+(* Macro declaration handling, return a list of declarations
+ * to be processed *)
+and lexp_decls_macro (loc, mname) sargs ctx: pdecl list =
+  (* lookup for mname_  *)
+  let _ = try senv_lookup mname ctx
+    with Not_found ->
+      lexp_warning loc ("Macro \"" ^ mname ^ "\" was not found!"); 0 in
+    (* FIXME *)
+    (* (eval macro) -> Sexp *)
+    (* pexp_decls -> [pdecl] *)
+
+    lexp_warning loc "Macro decls are not implemented yet!";
+    []
+
 (*  Parse let declaration *)
 and lexp_p_decls decls ctx = _lexp_decls decls ctx 0
 and _lexp_decls decls ctx i: (((vdef * lexp * ltype) list) * lexp_context) =
-    (* (pvar * pexp * bool) list *)
+  let tctx = ctx in
+  let forw = SMap.empty in
+  let merged = ref SMap.empty in
+  let acc = ref [] in
+  let idx = ref 0 in
 
-    let ctx = ref ctx in
-    let idx = ref 0 in
+  let rec process_decl tctx decl1 decl2 =
+    match decl1, decl2 with
+      (* identifier : type;
+       * identifier : expr;   *)
+      | Ptype((l, s1), ptp), Some Pexpr((_, s2), pxp) when s1 = s2 ->
+        let ltp, _ = lexp_p_infer ptp tctx in
+        let octx = env_extend tctx (l, s1) None ltp in
+        let lxp = lexp_p_check pxp ltp octx in
+          acc := (ref (s1, l, Some pxp, Some ptp))::!acc;
+        let tctx = env_extend tctx (l, s1) (Some lxp) ltp in
+          tctx, 2
 
-    (* Merge Type info and declaration together
-     * merge using a map to guarantee uniqueness. *)
-    let rec merge_decls (decls: (pvar * pexp * bool) list) merged acc:
-                ((location * pexp option * pexp option * int) SMap.t * string list)  =
+      (* Foward declaration *)
+      | Ptype((l, s), ptp), _ ->
+        let ltp, _ = lexp_p_infer ptp tctx in
+          acc := (ref (s, l, None, Some ptp))::!acc;
+          merged := SMap.add s (List.hd !acc) !merged;
+        let tctx = env_extend tctx (l, s) None ltp in
+          tctx, 1
 
-        (*  we cant evaluate here because variables are not in the environment *)
-        match decls with
-            | [] -> merged, (List.rev acc)
-            | ((loc, name), pxp, bl)::tl ->
-                let (l, opxp, optp, i), acc = try (SMap.find name merged), acc
-                    with Not_found ->
-                        idx := !idx + 1;
-                        ctx := env_extend (!ctx) (loc, name) None dltype;
-                        (loc, None, None, !idx - 1), (name::acc) in
+      (* infer *)
+      | Pexpr((l, s), pxp), _ ->(
+        try let value = SMap.find s !merged in
+            let _ = (match !value with
+              | (s, l, None, Some ptp) ->
+                let ltp, _ = lexp_p_infer ptp tctx in
+                let lxp = lexp_p_check pxp ltp tctx in
+                  value := (s, l, Some pxp, Some ptp);
+              | (s, l, Some _, _) ->
+                lexp_warning l "Declaration override are not allowed"
+              | _ -> typer_unreachable "Empty declaration") in
+          tctx, 1
+        with Not_found ->
+          let lxp, ltp = lexp_p_infer pxp tctx in
+            acc := (ref (s, l, Some pxp, None))::!acc;
+          let tctx = env_extend tctx (l, s) (Some lxp) ltp in
+            tctx, 1)
 
-                let new_decl = match bl with
-                    | true  -> (l, opxp, Some pxp, i)
-                    | false -> (l, Some pxp, optp, i) in
+      | Pmcall(s, sargs), _ ->
+        let decls = lexp_decls_macro s sargs tctx in
+        let tctx = foldvar tctx decls in
+          tctx, 1
 
-                let nmerged = SMap.add name new_decl merged in
-                    (merge_decls tl nmerged acc) in
+  and foldvar tctx decls =
+    match decls, decls with
+      | p1::p2::tl2, _::tl1 ->
+        let tctx, v = process_decl tctx p1 (Some p2) in
+          idx := !idx + 1;
+          if v = 2 then foldvar tctx tl2 else foldvar tctx tl1
 
-    let mdecls, ord = merge_decls decls SMap.empty [] in
+      | p1::[], _ ->
+        let tctx, v = process_decl tctx p1 None in
+          idx := !idx + 2;
+          tctx
+      | [], _ -> tctx in
 
-    (* cast map to list to preserve declaration order *)
-    let ndecls = List.map (fun name ->
-            let (l, inst, tp, _) = SMap.find name mdecls in
-                ((l, name), inst, tp) ) ord in
+  let tctx = foldvar tctx decls in
+  let merged_decls = List.rev !acc in
+  let acc, ctx =
+    List.fold_left (fun (acc, ctx) rf ->
+      let (s, l, opxp, optp) = ! rf in
+      match opxp, optp with
+        | Some pxp, Some ptp ->
+          let ltp, _ = lexp_p_infer ptp tctx in
+          let lxp    = lexp_p_check pxp ltp tctx in
+          let acc = ((l, s), lxp, ltp)::acc in
+            acc, (env_extend ctx (l, s) (Some lxp) ltp)
 
-    (* This is required for later *)
-    let ctx = !ctx in
-    let lst = ref [] in
+        | Some pxp, _ ->
+          let lxp, ltp = lexp_p_infer pxp tctx in
+            ((l, s), lxp, ltp)::acc, (env_extend ctx (l, s) (Some lxp) ltp)
 
-    (* Doing types and expressions separately allow us to use        *)
-    (* all typing information when lexp_parsing recursive definition *)
-    (* The price of this is iterating twice over declarations        *)
-    (* + now we need to lookup type info                             *)
+        | None, Some ptp ->
+          lexp_warning l "Unused variable";
+          let ltp, _ = lexp_p_infer ptp tctx in
+            ((l, s), dlxp, ltp)::acc, (env_extend ctx (l, s) None ltp)
 
-    (* Process types once *)
-    let n = ref ((List.length ndecls) - 1) in
-        (* for each declaration lexp their types *)
-        List.iter (fun ((loc, name), opxp, otpxp) ->
-            let vdef = (loc, name) in
-            let vref = (vdef, !n) in
-                n := !n - 1;
-
-            match opxp, otpxp with
-                | _, Some tpxp -> let ltp, _ = _lexp_p_infer tpxp ctx (i + 1) in
-                    (env_set_var_info ctx vref None ltp);
-                | _ -> ())
-        ndecls;
-
-    (* Process declaration in itself*)
-    let n = ref ((List.length ndecls) - 1) in
-        List.iter (fun ((loc, name), opxp, otpxp) ->
-            _global_lexp_trace := [];
-            let vdef = (loc, name) in
-            let vref = (vdef, !n) in
-                n := !n - 1;
-
-            match opxp, otpxp with
-                | Some pxp, Some ptp ->
-                    let ltp = env_lookup_type ctx vref in
-                    let lxp = _lexp_p_check pxp ltp ctx (i + 1) in
-                        (env_set_var_info ctx vref (Some lxp) ltp);
-                        lst := (vdef, lxp, ltp)::!lst
-
-                | Some pxp, None ->
-                    let lxp, ltp = _lexp_p_infer pxp ctx (i + 1) in
-                        (env_set_var_info ctx vref (Some lxp) ltp);
-                        lst := (vdef, lxp, ltp)::!lst
-
-                | None, _ -> lexp_warning loc "Unused Variable"
-            )
-        ndecls;
-
-        List.rev (!lst), ctx
+        | _ -> typer_unreachable "No type no expression") ([], ctx) merged_decls in
+      List.rev acc, ctx
 
 
 and _lexp_parse_all (p: pexp list) (ctx: lexp_context) i : lexp list =

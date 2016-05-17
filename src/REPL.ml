@@ -99,15 +99,12 @@ let rec read_input i =
 
 (* Interactive mode is not usual typer
  It makes things easier to test out code *)
-type pdecl = pvar * pexp * bool
-type pexpr = pexp
-
 type ldecl = vdef * lexp * ltype
 type lexpr = lexp
 
 (* Grouping declaration together will enable us to support mutually recursive
  * declarations while bringing us closer to normal typer *)
-let ipexp_parse (sxps: sexp list): (pdecl list * pexpr list) =
+let ipexp_parse (sxps: sexp list): (pdecl list * pexp list) =
     let rec _pxp_parse sxps dacc pacc =
         match sxps with
             | [] -> (List.rev dacc), (List.rev pacc)
@@ -115,6 +112,11 @@ let ipexp_parse (sxps: sexp list): (pdecl list * pexpr list) =
                 (* Declaration *)
                 | Node (Symbol (_, ("_=_" | "_:_")), [Symbol s; t]) ->
                     _pxp_parse tl (List.append (pexp_p_decls sxp) dacc) pacc
+
+                (* f arg1 arg2 = function body;  *)
+                | Node (Symbol (_, "_=_"), [Node (Symbol s, args); t]) ->
+                    _pxp_parse tl (List.append (pexp_p_decls sxp) dacc) pacc
+
                 (* Expression *)
                 | _ -> _pxp_parse tl dacc ((pexp_parse sxp)::pacc) in
         _pxp_parse sxps [] []

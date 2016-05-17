@@ -55,6 +55,16 @@ let internal_error s = raise (Internal_error s)
 exception Unreachable_error of string
 let typer_unreachable s = raise (Unreachable_error s)
 
+(*  Multi line error message ?
+ *
+ *   |    [X] Fatal     SECTION [ln  12, cl  12: FILE.typer]
+ *   |        >>    typer_dump = something;
+ *   |        >>
+ *   |        >> My Error message is on multiple line
+ *   |        >> multiple line
+ *   |     ------------------------------------------------
+ *)
+
 (*  File is not printed because currently we parse only one file... *)
 (*  Section is the name of the compilation step [for debugging]     *)
 (*  'prerr' output is ugly                                          *)
@@ -62,14 +72,15 @@ let msg_message lvl kind section (loc: location) msg =
   if lvl <= !_typer_verbose then(
     print_string ("    " ^ kind);
     print_string " ["; print_loc loc; print_string "] ";
-    print_string (section ^ "    ");
-    print_string msg;
+    Fmt.lalign_print_string section 8;
+    print_string (" " ^ msg);
     print_newline ()) else ()
 
 
 let msg_fatal s l m  =
     msg_message 0 "[X] Fatal    " s l m;
     internal_error m
+
 let msg_error   = msg_message 1 "[!] Error    "
 let msg_warning = msg_message 2 "/!\\ Warning  "
 let msg_info    = msg_message 3 "[?] Info     "

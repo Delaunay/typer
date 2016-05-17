@@ -12,9 +12,8 @@ let _ = (add_test "PEXP" "Type Parsing" (fun () ->
             | [expr] ->(
             match expr with
                 | Plet(_, arg, _) -> (match arg with
-                    | [] -> failure ()
-                    | (_, tp, bl)::_ ->(
-                        if bl = true then success ()  else failure ()))
+                    | Ptype(_, tp)::_ ->success ()
+                    | _ -> failure ())
                 | _ -> failure ())
             | _ -> failure ())
 )

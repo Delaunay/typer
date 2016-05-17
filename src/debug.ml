@@ -97,10 +97,10 @@ let rec debug_sexp_print sexp =
 
     | Node(f, args)
         -> print_info "Node:    " (sexp_location f);
-            sexp_print f; print_string " \t ";
-                List.iter (fun sexp -> sexp_print sexp; print_string " @ ")
+            sexp_print f; print_string " [";
+                List.iter (fun sexp -> print_string " "; sexp_print sexp)
                                  args;
-            print_string " "
+            print_string "]"
 
 (* Print a list of sexp *)
 let debug_sexp_print_all tokens =
@@ -135,19 +135,27 @@ let debug_pexp_print ptop =
       (*| _                      -> print_info "Not Impl   " l ptop *)
 
 let debug_pexp_decls decls =
+  let print_loc l = print_string "["; print_loc l; print_string "]  " in
+
     List.iter (fun e ->
-        let ((loc, name), pxp, tp) = e in
+      print_string " ";
 
-        print_string " ";
-        lalign_print_string (pexp_to_string pxp) 15;
-        print_string "["; print_loc loc; print_string "]  ";
+      let _ = match e with
+        | Pexpr ((l, name), pxp) ->
+          lalign_print_string (pexp_to_string pxp) 15;
+          print_loc l; print_string " = "; pexp_print pxp
 
-        print_string name;
-            if tp then print_string " : " else print_string " = ";
-        pexp_print pxp; print_string "\n"
+        | Ptype ((l, name), ptp) ->
+          lalign_print_string (pexp_to_string ptp) 15;
+          print_loc l; print_string " : "; pexp_print ptp
 
-        )
-        decls
+        | Pmcall((l, op), args)  ->
+          lalign_print_string "Macro Decls" 15;
+          print_loc l; sexp_print (Node(Symbol(l, op), args)) in
+
+      print_string "\n")
+
+          decls
 
 
 (* Print a list of pexp *)

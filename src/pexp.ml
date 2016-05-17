@@ -51,7 +51,7 @@ type pexp =
   | Pvar of pvar
   | Phastype of location * pexp * pexp
   | Pmetavar of pvar
-  | Plet of location * (pvar * pexp * bool) list * pexp
+  | Plet of location * pdecl list * pexp
   | Parrow of arg_kind * pvar option * pexp * location * pexp
   | Plambda of arg_kind * pvar * pexp option * pexp
   | Pcall of pexp * sexp list           (* Curried call.  *)
@@ -61,6 +61,11 @@ type pexp =
                   * (symbol * (arg_kind * pvar option * pexp) list) list
   | Pcons of pvar * symbol
   | Pcase of location * pexp * (ppat * pexp) list
+
+and pdecl =
+  | Ptype of symbol * pexp        (* identifier : expr  *)
+  | Pexpr of symbol * pexp        (* identifier = expr  *)
+  | Pmcall of symbol * sexp list  (* identifier [sexp]  *)
 
 
 let rec pexp_location e =
@@ -271,13 +276,13 @@ and pexp_u_pat (p : ppat) : sexp = match p with
   | Ppatvar s -> Symbol s
   | Ppatcons (c, args) -> Node (Symbol c, List.map pexp_u_pat_arg args)
 
-and pexp_p_decls e =
+and pexp_p_decls e: pdecl list =
   match e with
   | Epsilon -> []
   | Node (Symbol (_, ("_;_" | "_;" | ";_")), decls)
     -> List.concat (List.map pexp_p_decls decls)
-  | Node (Symbol (_, "_:_"), [Symbol s; t]) -> [(s, pexp_parse t, true)]
-  | Node (Symbol (_, "_=_"), [Symbol s; t]) -> [(s, pexp_parse t, false)]
+  | Node (Symbol (_, "_:_"), [Symbol s; t]) -> [Ptype(s, pexp_parse t)]
+  | Node (Symbol (_, "_=_"), [Symbol s; t]) -> [Pexpr(s, pexp_parse t)]
   | Node (Symbol (_, "_=_"), [Node (Symbol s, args); t]) ->
       let rec mkfun args =
         match args with
@@ -286,8 +291,13 @@ and pexp_p_decls e =
         | (arg :: args) -> pexp_error (sexp_location arg)
                                     "Unknown argument format";
                           mkfun args
-      in [(s, mkfun args, false)]
-  | _ -> pexp_error (sexp_location e) ("Unknown declaration"); []
+      in [Pexpr(s, mkfun args)]
+  (* everything else is considered a macro
+   * An error will be produced during lexp_parsing if the macro does not exist
+   * once expanded the Pmcall macro will produce a list of pdecl        *)
+  | Node (Symbol (l, op), args) -> [Pmcall((l, op), args)]
+  | _ ->
+    pexp_error (sexp_location e) ("Unknown declaration"); []
 
 and pexp_unparse (e : pexp) : sexp =
   match e with
@@ -339,10 +349,19 @@ and pexp_unparse (e : pexp) : sexp =
                        [pexp_u_pat pat;
                         pexp_unparse branch]))
                branches)
-and pexp_u_decl (s, v, declp) =
-  Node (Symbol (dummy_location, if declp then "_:_" else "_=_"),
-        [Symbol s; pexp_unparse v])
-and pexp_u_decls ds =
+
+and pexp_u_decl decl =
+  match decl with
+    | Pexpr (s, v) ->
+      Node (Symbol (dummy_location, "_=_"), [Symbol s; pexp_unparse v])
+
+    | Ptype (s, v) ->
+      Node (Symbol (dummy_location, "_:_"), [Symbol s; pexp_unparse v])
+
+    | Pmcall(s, args) ->
+      Node (Symbol s, args)
+
+and pexp_u_decls (ds: pdecl list) =
   match ds with
   | [] -> Epsilon
   | [d] -> pexp_u_decl d
@@ -356,7 +375,7 @@ let pexp_print e = sexp_print (pexp_unparse e)
 let pexp_parse_all (nodes: sexp list) =
     List.map pexp_parse nodes
 
-let pexp_decls_all (nodes: sexp list): ((pvar * pexp * bool) list) =
+let pexp_decls_all (nodes: sexp list): pdecl list =
     let rec loop nodes acc =
         match nodes with
             | [] -> acc

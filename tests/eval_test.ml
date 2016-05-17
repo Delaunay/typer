@@ -161,6 +161,7 @@ let _ = (add_test "EVAL" "Inductive::Case" (fun () ->
     (* Inductive type declaration + Noisy declarations *)
     let code = "
         i = 90;
+        idt : Type;
         idt = inductive_ (idtd) (ctr0) (ctr1 idt) (ctr2 idt) (ctr3 idt);
                                           d = 10;
         ctr0 = inductive-cons idt ctr0;   e = 20;
@@ -198,6 +199,7 @@ let _ = (add_test "EVAL" "Inductive::Case" (fun () ->
 
 (*  Those wil be used multiple times *)
 let nat_decl = "
+    Nat : Type;
     Nat = inductive_ (dNat) (zero) (succ Nat);
 
     zero = inductive-cons Nat zero;
