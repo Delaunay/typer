@@ -139,6 +139,7 @@ let rec elexp_location e =
         | Case (l,_,_,_) -> l
         | Inductive(l, _) -> l
         | Type -> U.dummy_location
+
 let rec elexp_print lxp = print_string (elexp_str lxp)
 and elexp_to_string lxp = elexp_str lxp
 and elexp_str lxp =

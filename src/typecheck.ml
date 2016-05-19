@@ -101,14 +101,6 @@ and conv_p e1 e2 = conv_p' S.identity S.identity e1 e2
 
 (********* Testing if a lexp is properly typed  *********)
 
-type varbind =
-  | Variable
-  | ForwardRef
-  | LetDef of lexp
-
-(* easier to debug with type annotations *)
-type tc_elem = int * vdef option * varbind * lexp
-type tc_ctx = tc_elem Myers.myers
 
 let lookup_type ctx vref =
   let (_, i) = vref in

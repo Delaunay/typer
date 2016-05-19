@@ -166,7 +166,7 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
             let ltp, _ = lexp_infer tp ctx in
             let nctx, sh = match ovar with
                 | None -> ctx, 0
-                | Some var -> (env_extend ctx var None ltp), 1 in
+                | Some var -> (env_extend ctx var Variable ltp), 1 in
 
             let lxp, _ = lexp_infer expr nctx in
             let lxp = _type_shift lxp sh in
@@ -184,7 +184,7 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
                     | Some pxp -> _lexp_p_infer pxp !nctx (i + 1)
                     | None -> dltype, dltype in
 
-                nctx := env_extend !nctx var None ltp;
+                nctx := env_extend !nctx var Variable ltp;
                     (kind, var, ltp)
                 ) formal_args in
 
@@ -204,7 +204,7 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
                 | None -> lexp_error tloc "Lambda require type annotation";
                     dltype, dltype in
 
-            let nctx = env_extend ctx var None ltp in
+            let nctx = env_extend ctx var Variable ltp in
             let lbody, lbtp = lexp_infer body nctx in
             (* We added one variable in the ctx * )
             let lbtp = _type_shift lbtp 1 in *)
@@ -230,7 +230,7 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
 
                 (* Get constructor args *)
                 let formal, args = match idt with
-                    | Some Inductive(_, _, formal, ctor_def) -> (
+                    | LetDef Inductive(_, _, formal, ctor_def) -> (
                         try formal, (SMap.find cname ctor_def)
                         with Not_found ->
                             lexp_error loc
@@ -282,7 +282,7 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
                 | Arrow(kind, _, ltp, _, lbtp) -> ltp, lbtp
                 | _ -> lexp_error tloc "Type does not match"; dltype, dltype in
 
-            let nctx = env_extend ctx var None ltp in
+            let nctx = env_extend ctx var Variable ltp in
             let lbody = _lexp_p_check body lbtp nctx (i + 1) in
 
                 Lambda(kind, var, ltp, lbody))
@@ -408,7 +408,7 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
             let vf = (make_var name idx loc) in
 
                 match env_lookup_expr ctx ((loc, name), idx) with
-                    | Some Builtin((_, "Built-in"), _) ->(
+                    | LetDef Builtin((_, "Built-in"), _) ->(
                         (* ------ SPECIAL ------ *)
                         match !_parsing_internals, largs with
                             | true, [Imm(String (_, str))] ->
@@ -442,11 +442,11 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
 
         (* Get the macro *)
         let lxp = try match env_lookup_expr ctx ((loc, name), idx) with
-            | None -> lexp_fatal loc "The macro cannot be expanded";
-            | Some e -> e
-            with Not_found ->
-                lexp_fatal loc (name ^ " was found but " ^ (string_of_int idx) ^
-                    " is not a correct index.") in
+            | LetDef e -> e
+            | _ -> lexp_fatal loc "The macro cannot be expanded";
+          with Not_found ->
+            lexp_fatal loc (name ^ " was found but " ^ (string_of_int idx) ^
+                  " is not a correct index.") in
 
         let lxp = match lxp with
             | Call(Var((_, "Macro_"), _), [(Aexplicit, fct)]) -> fct
@@ -537,19 +537,19 @@ and lexp_read_pattern pattern exp target ctx:
                 let idx = senv_lookup name ctx in
                 match (env_lookup_expr ctx ((loc, name), idx)) with
                     (* We are matching a constructor *)
-                    | Some Cons _ ->
+                    | LetDef Cons _ ->
                         (name, loc, []), ctx
 
                     (* name is defined but is not a constructor  *)
                     (* it technically could be ... (expr option) *)
                     (* What about Var -> Cons ?                  *)
-                    | _ -> let nctx = env_extend ctx var (Some target) dltype in
+                    | _ -> let nctx = env_extend ctx var (LetDef target) dltype in
                         (name, loc, []), nctx)
 
             (* would it not make a default match too? *)
             with Not_found ->
                 (* Create a variable containing target *)
-                let nctx = env_extend ctx var (Some target) dltype in
+                let nctx = env_extend ctx var (LetDef target) dltype in
                     (name, loc, []), nctx)
 
         | Ppatcons (ctor_name, args) ->
@@ -573,7 +573,7 @@ and lexp_read_pattern_args args ctx:
                     | Ppatany (loc) -> loop tl ((Aexplicit, None)::acc) ctx
                     | Ppatvar ((loc, name) as var) ->
                         (*  Add var *)
-                        let nctx = env_extend ctx var None dltype in
+                        let nctx = env_extend ctx var Variable dltype in
                         let nacc = (Aexplicit, Some var)::acc in
                             loop tl nacc nctx
                     | _ -> lexp_error dloc "Constructor inside a Constructor";
@@ -597,7 +597,7 @@ and lexp_parse_inductive ctors ctx i =
                        match var with
                          | None -> loop tl ((kind, None, lxp)::acc) ctx
                          | Some (var) ->
-                            let nctx = env_extend ctx var None dltype in
+                            let nctx = env_extend ctx var Variable dltype in
                             loop tl ((kind, Some var, lxp)::acc) nctx
                   end in
         loop args [] ctx in
@@ -636,10 +636,10 @@ and _lexp_decls decls ctx i: (((vdef * lexp * ltype) list) * lexp_context) =
        * identifier : expr;   *)
       | Ptype((l, s1), ptp), Some Pexpr((_, s2), pxp) when s1 = s2 ->
         let ltp, _ = lexp_p_infer ptp tctx in
-        let octx = env_extend tctx (l, s1) None ltp in
+        let octx = env_extend tctx (l, s1) ForwardRef ltp in
         let lxp = lexp_p_check pxp ltp octx in
           acc := (ref (s1, l, Some pxp, Some ptp))::!acc;
-        let tctx = env_extend tctx (l, s1) (Some lxp) ltp in
+        let tctx = env_extend tctx (l, s1) (LetDef lxp) ltp in
           tctx, 2
 
       (* Foward declaration *)
@@ -647,7 +647,7 @@ and _lexp_decls decls ctx i: (((vdef * lexp * ltype) list) * lexp_context) =
         let ltp, _ = lexp_p_infer ptp tctx in
           acc := (ref (s, l, None, Some ptp))::!acc;
           merged := SMap.add s (List.hd !acc) !merged;
-        let tctx = env_extend tctx (l, s) None ltp in
+        let tctx = env_extend tctx (l, s) ForwardRef ltp in
           tctx, 1
 
       (* infer *)
@@ -665,7 +665,7 @@ and _lexp_decls decls ctx i: (((vdef * lexp * ltype) list) * lexp_context) =
         with Not_found ->
           let lxp, ltp = lexp_p_infer pxp tctx in
             acc := (ref (s, l, Some pxp, None))::!acc;
-          let tctx = env_extend tctx (l, s) (Some lxp) ltp in
+          let tctx = env_extend tctx (l, s) (LetDef lxp) ltp in
             tctx, 1)
 
       | Pmcall(s, sargs), _ ->
@@ -696,16 +696,16 @@ and _lexp_decls decls ctx i: (((vdef * lexp * ltype) list) * lexp_context) =
           let ltp, _ = lexp_p_infer ptp tctx in
           let lxp    = lexp_p_check pxp ltp tctx in
           let acc = ((l, s), lxp, ltp)::acc in
-            acc, (env_extend ctx (l, s) (Some lxp) ltp)
+            acc, (env_extend ctx (l, s) (LetDef lxp) ltp)
 
         | Some pxp, _ ->
           let lxp, ltp = lexp_p_infer pxp tctx in
-            ((l, s), lxp, ltp)::acc, (env_extend ctx (l, s) (Some lxp) ltp)
+            ((l, s), lxp, ltp)::acc, (env_extend ctx (l, s) (LetDef lxp) ltp)
 
         | None, Some ptp ->
           lexp_warning l "Unused variable";
           let ltp, _ = lexp_p_infer ptp tctx in
-            ((l, s), dlxp, ltp)::acc, (env_extend ctx (l, s) None ltp)
+            ((l, s), dlxp, ltp)::acc, (env_extend ctx (l, s) ForwardRef ltp)
 
         | _ -> typer_unreachable "No type no expression") ([], ctx) merged_decls in
       List.rev acc, ctx
@@ -722,7 +722,7 @@ and _lexp_parse_all (p: pexp list) (ctx: lexp_context) i : lexp list =
     (loop p ctx [])
 
 (*  Print context  *)
-and print_lexp_ctx ctx =
+and print_lexp_ctx (ctx : lexp_context) =
     let ((n, map), env, f) = ctx in
 
     print_string (make_title " LEXP CONTEXT ");
@@ -737,11 +737,13 @@ and print_lexp_ctx ctx =
 
     (* it is annoying to print according to StringMap order *)
     (* let's use myers list order *)
-    let rec extract_names lst acc =
+    let rec extract_names (lst: env_type) acc =
         match lst with
             | Mnil-> acc
             | Mcons (hd, tl, _, _) ->
-                let (_, (_, name), _, _) = !hd in
+                let name = match hd with
+                  | (_, Some (_, name), _, _) -> name
+                  | _ -> "" in
                     extract_names tl (name::acc) in
 
     let ord = extract_names env [] in
@@ -760,7 +762,10 @@ and print_lexp_ctx ctx =
 
         let ptr_str = "" in (*"    |            |         |            | " in *)
 
-        try let (_, (_, name), exp, tp) = env_lookup_by_index (n - idx - 1) ctx in
+        try let name, exp, tp =
+              match env_lookup_by_index (n - idx - 1) ctx with
+                | (_, Some (_, name), LetDef exp, tp) -> name, Some exp, tp
+                | _ -> "", None, dltype in
 
             (*  Print env Info *)
             lalign_print_string name 10; (*   name must match *)
@@ -813,12 +818,6 @@ and lexp_print_var_info ctx =
 let lexp_parse_all p ctx = _lexp_parse_all p ctx 1
 
 
-(* add dummy definition helper *)
-let add_def name ctx =
-    let var = (dloc, name) in
-    let ctx = senv_add_var var ctx in
-    env_add_var_info (0, var, None, dlxp) ctx
-
 (*      Default context with builtin types
  * --------------------------------------------------------- *)
 
@@ -827,7 +826,7 @@ let default_lctx =
     (* Empty context *)
     let lctx = make_lexp_context in
     let lxp = Builtin((dloc, "Built-in"), type0) in
-    let lctx = env_extend lctx (dloc, "Built-in") (Some lxp) type0 in
+    let lctx = env_extend lctx (dloc, "Built-in") (LetDef lxp) type0 in
 
     (* Read BTL files *)
     let pres = prelex_file (!btl_folder ^ "types.typer") in
@@ -851,8 +850,9 @@ let default_lctx =
 (* Make runtime context with built-in types *)
 let default_rctx =
     try (from_lctx (default_lctx))
-        with e ->
-            lexp_fatal dloc "Could not convert lexp context into rte context"
+        with e ->(
+            lexp_error dloc "Could not convert lexp context into rte context";
+            raise e)
 
 
 (*      String Parsing

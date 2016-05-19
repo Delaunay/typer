@@ -35,7 +35,7 @@ open Fmt
 
 open Sexp
 open Pexp       (* Arg_kind *)
-(* open Lexp *)
+open Lexp       (* Varbind *)
 
 open Elexp
 open Builtin
@@ -314,24 +314,30 @@ let eval_all lxps rctx silent =
 
 (* build a rctx from a lctx *)
 let from_lctx (ctx: lexp_context): runtime_env =
-    let ((_, _), env, _) = ctx in
+    let ((n, _), env, _) = ctx in
     let rctx = ref make_runtime_ctx in
 
-    let bsize = 1 in        (*skip the first Built-in function (useless) *)
-    let csize = get_size ctx in
+    let bsize = 0 in        (*skip the first Built-in function (useless) *)
+    let csize = n - 1 in
 
     (* add all variables *)
     for i = bsize to csize do
-        let (_, (_, name), _, _) = !(Myers.nth (csize - i) env) in
-        rctx := add_rte_variable (Some name) Vdummy (!rctx)
+        let name = match (Myers.nth (csize - i) env) with
+          | (_, Some (_, name), _, _) -> Some name
+          | _ -> None in
+
+        rctx := add_rte_variable name Vdummy (!rctx)
     done;
 
     let diff = csize - bsize in
 
     (* process all of them *)
     for i = 0 to diff do
+      try
         let j = diff - i (* - 1 *) in
-        let (_, (_, name), exp, _) = !(Myers.nth j env) in
+        let name, exp = match Myers.nth (csize - i) env with
+          | (_, Some (_, name), LetDef exp, _) -> name, Some exp
+          | _ -> "", None in
 
         let vxp = match exp with
             | Some lxp ->
@@ -340,7 +346,11 @@ let from_lctx (ctx: lexp_context): runtime_env =
                         with e -> elexp_print lxp; raise e)
 
             | None -> Vdummy in
-
                 rctx := set_rte_variable j (Some name) vxp (!rctx)
+
+      with Not_found ->
+        print_int n; print_string " ";
+        print_int (csize - i); print_string "\n ";
+        raise Not_found
     done;
         !rctx

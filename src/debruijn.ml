@@ -36,6 +36,8 @@ open Util
 open Lexp
 open Myers
 open Fmt
+(*open Typecheck  env_elem and env_type *)
+
 module S = Subst
 
 let debruijn_error l m = msg_error "DEBRUIJN" l m; internal_error m
@@ -44,9 +46,10 @@ let debruijn_warning = msg_warning "DEBRUIJN"
 (*  Type definitions
  * ---------------------------------- *)
 
-(*  Index -> Variable Info *)
-type env_elem = (int * (location * string) * lexp option * ltype)
-type env_type = (env_elem ref) myers
+(* easier to debug with type annotations *)
+type env_elem = (int * vdef option * varbind * ltype)
+type env_type = env_elem myers
+
 
 (* This exist because I don't want that file to depend on anything *)
 module StringMap
@@ -119,11 +122,11 @@ let senv_add_var (loc, name) ctx =
 
 let env_add_var_info var (ctx: lexp_context) =
     let (a, env, f) = ctx in
-        (a, cons (ref var) env, f)
+        (a, cons (var) env, f)
 
-let env_extend (ctx: lexp_context) (def: vdef) (v: lexp option) (t: lexp) =
+let env_extend (ctx: lexp_context) (def: vdef) (v: varbind) (t: lexp) =
   let ((n, map), e, f) = ctx in
-  env_add_var_info (n, def, v, t) (senv_add_var def ctx)
+  env_add_var_info (n, Some def, v, t) (senv_add_var def ctx)
 
 
 let _name_error loc estr str =
@@ -131,6 +134,7 @@ let _name_error loc estr str =
     debruijn_error loc ("DeBruijn index refers to wrong name. " ^
                       "Expected: \"" ^ estr ^ "\" got \"" ^ str ^ "\"")
 
+(*
 let env_set_var_info ctx (def: vref) (v: lexp option) (t: lexp) =
     let ((dv_size, _), info_env, _) = ctx in
     let ((loc, ename), dbi) = def in
@@ -143,18 +147,19 @@ let env_set_var_info ctx (def: vref) (v: lexp option) (t: lexp) =
 
         rf := (0, (loc, ename), v, t))
     with
-        Not_found -> debruijn_error loc "DeBruijn index out of bounds!"
+        Not_found -> debruijn_error loc "DeBruijn index out of bounds!" *)
 
 (* generic lookup *)
 let _env_lookup ctx (v: vref): env_elem  =
     let ((dv_size, _), info_env, _) = ctx in
     let ((loc, ename), dbi) = v in
 
-    try(let ret = !(Myers.nth dbi info_env) in
-        let (_, (_, name), _, _) = ret in
-
-        (* Check if names match *)
-        _name_error loc ename name;
+    try(let ret = (Myers.nth dbi info_env) in
+        let _ = match ret with
+          | (_, Some (_, name), _, _) ->
+              (* Check if names match *)
+              _name_error loc ename name;
+          | _ -> () in
 
         ret)
     with
@@ -164,14 +169,14 @@ let _env_lookup ctx (v: vref): env_elem  =
 let env_lookup_type ctx (v : vref) =
   (* FIXME: We need to S.shift here, since `t` is valid in the context in
    * which `vref` appeared, rather than in `ctx`.  *)
-  let (_, (_, _), _, t) =  _env_lookup ctx v in t
+  let (_, _, _, t) =  _env_lookup ctx v in t
 
 let env_lookup_expr ctx (v : vref) =
   (* FIXME: We need S.shift here, since `lxp` is valid in the context in
    * which `vref` appeared (plus recursion offset), rather than in `ctx`.  *)
-  let (_, (_, _), lxp, _) =  _env_lookup ctx v in lxp
+  let (_, _, lxp, _) =  _env_lookup ctx v in lxp
 
 let env_lookup_by_index index (ctx: lexp_context): env_elem =
-    !(Myers.nth index (_get_env ctx))
+    (Myers.nth index (_get_env ctx))
 
 

@@ -287,7 +287,9 @@ let main () =
 
         (* convert a lctx context into a typecheck context *)
         (* they will be the same in the future *)
-        let lctx_to_cctx (lctx: lexp_context): TC.tc_ctx =
+        let lctx_to_cctx (lctx: lexp_context) =
+          let (_, env, _) = ctx in env in
+          (*
             let (_, env, _) = lctx in
             let n = Myers.length env in
 
@@ -299,7 +301,7 @@ let main () =
                         | None -> TC.ForwardRef in
                     let cctx = Myers.cons (i, Some v, vlxp, ltp) cctx in
                         loop (i - 1) env cctx) in
-                loop n env Myers.nil in
+                loop n env Myers.nil in *)
 
         (if (get_p_option "typecheck") then(
             let cctx = lctx_to_cctx ctx in

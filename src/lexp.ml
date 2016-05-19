@@ -97,6 +97,11 @@ type ltype = lexp
   | SLsucc of lexp
 
 
+type varbind =
+  | Variable
+  | ForwardRef
+  | LetDef of lexp
+
 (********* Helper functions to use the Subst operations  *********)
 (* This basically "ties the knot" between Subst and Lexp.
  * Maybe it would be cleaner to just move subst.ml into lexp.ml
