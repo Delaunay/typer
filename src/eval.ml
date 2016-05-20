@@ -317,7 +317,7 @@ let from_lctx (ctx: lexp_context): runtime_env =
     let ((n, _), env, _) = ctx in
     let rctx = ref make_runtime_ctx in
 
-    let bsize = 0 in        (*skip the first Built-in function (useless) *)
+    let bsize = 0 in
     let csize = n - 1 in
 
     (* add all variables *)
@@ -336,17 +336,18 @@ let from_lctx (ctx: lexp_context): runtime_env =
       try
         let j = diff - i (* - 1 *) in
         let name, exp = match Myers.nth (csize - i) env with
-          | (_, Some (_, name), LetDef exp, _) -> name, Some exp
-          | _ -> "", None in
+          | (_, Some (_, name), LetDef exp, _) -> Some name, Some exp
+          | _ -> None, None in
 
         let vxp = match exp with
             | Some lxp ->
                 let lxp = (erase_type lxp) in
                     (try (eval lxp !rctx)
-                        with e -> elexp_print lxp; raise e)
+                        with e -> elexp_print lxp;
+                          print_string "\n"; raise e)
 
             | None -> Vdummy in
-                rctx := set_rte_variable j (Some name) vxp (!rctx)
+                rctx := set_rte_variable j name vxp (!rctx)
 
       with Not_found ->
         print_int n; print_string " ";

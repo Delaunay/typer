@@ -66,10 +66,12 @@ let lexp_fatal = msg_fatal "LPARSE"
 let _global_lexp_ctx = ref make_lexp_context
 let _global_lexp_trace = ref []
 let _parsing_internals = ref false
+let _shift_glob = ref 0
 let btl_folder = ref "./btl/"
 
 (* This is used to make Type annotation and inferred type having the same index *)
 (* since inferred type might need to parse a lambda var to infer the type *)
+
 let _type_shift tp i =
     match tp with
         | Var(v, idx) -> Var(v, idx)
@@ -119,6 +121,9 @@ let build_var name ctx =
 let get_type0 ctx = build_var "Type" ctx
 let get_int ctx = build_var "Int" ctx
 
+(* shift all variables by an offset *)
+let senv_lookup name ctx =
+  senv_lookup name ctx + !_shift_glob
 
 let rec lexp_p_infer (p : pexp) (ctx : lexp_context): lexp * ltype =
     _lexp_p_infer p ctx 1
@@ -143,7 +148,7 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
 
         (*  Symbol i.e identifier *)
         | Pvar (loc, name) ->(
-            try let idx = senv_lookup name ctx in
+            try let idx = (senv_lookup name ctx) in
                 let lxp = (make_var name idx loc) in
 
                 (* search type *)
@@ -376,8 +381,10 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
     let loc = pexp_location fun_name in
 
     let from_lctx ctx = try (from_lctx ctx)
-        with e ->
-            lexp_fatal loc "Could not convert lexp context into rte context" in
+        with e ->(
+            lexp_error loc "Could not convert lexp context into rte context";
+            print_eval_trace ();
+            raise e) in
 
     (* consume Arrows and args together *)
     let rec get_return_type name i ltp args =
@@ -624,92 +631,46 @@ and lexp_decls_macro (loc, mname) sargs ctx: pdecl list =
 (*  Parse let declaration *)
 and lexp_p_decls decls ctx = _lexp_decls decls ctx 0
 and _lexp_decls decls ctx i: (((vdef * lexp * ltype) list) * lexp_context) =
-  let tctx = ctx in
-  let forw = SMap.empty in
+  let names = ref [] in
+  let offset = ref 0 in
   let merged = ref SMap.empty in
-  let acc = ref [] in
-  let idx = ref 0 in
 
-  let rec process_decl tctx decl1 decl2 =
-    match decl1, decl2 with
-      (* identifier : type;
-       * identifier : expr;   *)
-      | Ptype((l, s1), ptp), Some Pexpr((_, s2), pxp) when s1 = s2 ->
-        let ltp, _ = lexp_p_infer ptp tctx in
-        let octx = env_extend tctx (l, s1) ForwardRef ltp in
-        let lxp = lexp_p_check pxp ltp octx in
-          acc := (ref (s1, l, Some pxp, Some ptp))::!acc;
-        let tctx = env_extend tctx (l, s1) (LetDef lxp) ltp in
-          tctx, 2
+  let ctx = List.fold_left (fun vctx expr ->
+    match expr with
+      | Pexpr ((l, s), pxp) ->(
+        try let idx = senv_lookup s vctx in
+          let ltp = env_lookup_type vctx ((l, s), idx) in
+          let lxp = lexp_p_check pxp ltp vctx in
+          let (_, _, _, ltp) = SMap.find s !merged in
+          merged := SMap.add s (l, s, Some lxp, ltp) !merged;
+          let r = !offset in
+            offset := 0;
+            replace_by vctx s (r, Some (l, s), (LetDef lxp), ltp);
 
-      (* Foward declaration *)
-      | Ptype((l, s), ptp), _ ->
-        let ltp, _ = lexp_p_infer ptp tctx in
-          acc := (ref (s, l, None, Some ptp))::!acc;
-          merged := SMap.add s (List.hd !acc) !merged;
-        let tctx = env_extend tctx (l, s) ForwardRef ltp in
-          tctx, 1
-
-      (* infer *)
-      | Pexpr((l, s), pxp), _ ->(
-        try let value = SMap.find s !merged in
-            let _ = (match !value with
-              | (s, l, None, Some ptp) ->
-                let ltp, _ = lexp_p_infer ptp tctx in
-                let lxp = lexp_p_check pxp ltp tctx in
-                  value := (s, l, Some pxp, Some ptp);
-              | (s, l, Some _, _) ->
-                lexp_warning l "Declaration override are not allowed"
-              | _ -> typer_unreachable "Empty declaration") in
-          tctx, 1
         with Not_found ->
-          let lxp, ltp = lexp_p_infer pxp tctx in
-            acc := (ref (s, l, Some pxp, None))::!acc;
-          let tctx = env_extend tctx (l, s) (LetDef lxp) ltp in
-            tctx, 1)
+          let lxp, ltp = lexp_p_infer pxp vctx in
+            names := s::!names;
+            merged := SMap.add s (l, s, Some lxp, ltp) !merged;
+            env_extend vctx (l, s) (LetDef lxp) ltp)
 
-      | Pmcall(s, sargs), _ ->
-        let decls = lexp_decls_macro s sargs tctx in
-        let tctx = foldvar tctx decls in
-          tctx, 1
+      | Ptype ((l, s), ptp) ->
+        offset := !offset + 1;
+        let ltp, _ = lexp_p_infer ptp vctx in
+          names := s::!names;
+          merged := SMap.add s (l, s, None, ltp) !merged;
+          env_extend vctx (l, s) ForwardRef ltp
 
-  and foldvar tctx decls =
-    match decls, decls with
-      | p1::p2::tl2, _::tl1 ->
-        let tctx, v = process_decl tctx p1 (Some p2) in
-          idx := !idx + 1;
-          if v = 2 then foldvar tctx tl2 else foldvar tctx tl1
+      | _ -> vctx) ctx decls in
 
-      | p1::[], _ ->
-        let tctx, v = process_decl tctx p1 None in
-          idx := !idx + 2;
-          tctx
-      | [], _ -> tctx in
+    (* merge type and expr *)
+    let decls = List.fold_left (fun acc key ->
+      let (l, s, expr, ltp) = SMap.find key !merged in
+      let expr = match expr with
+        | Some expr -> expr
+        | None -> dltype in
+          ((l, s), expr, ltp)::acc) [] !names in
 
-  let tctx = foldvar tctx decls in
-  let merged_decls = List.rev !acc in
-  let acc, ctx =
-    List.fold_left (fun (acc, ctx) rf ->
-      let (s, l, opxp, optp) = ! rf in
-      match opxp, optp with
-        | Some pxp, Some ptp ->
-          let ltp, _ = lexp_p_infer ptp tctx in
-          let lxp    = lexp_p_check pxp ltp tctx in
-          let acc = ((l, s), lxp, ltp)::acc in
-            acc, (env_extend ctx (l, s) (LetDef lxp) ltp)
-
-        | Some pxp, _ ->
-          let lxp, ltp = lexp_p_infer pxp tctx in
-            ((l, s), lxp, ltp)::acc, (env_extend ctx (l, s) (LetDef lxp) ltp)
-
-        | None, Some ptp ->
-          lexp_warning l "Unused variable";
-          let ltp, _ = lexp_p_infer ptp tctx in
-            ((l, s), dlxp, ltp)::acc, (env_extend ctx (l, s) ForwardRef ltp)
-
-        | _ -> typer_unreachable "No type no expression") ([], ctx) merged_decls in
-      List.rev acc, ctx
-
+    decls, ctx
 
 and _lexp_parse_all (p: pexp list) (ctx: lexp_context) i : lexp list =
 
@@ -731,7 +692,8 @@ and print_lexp_ctx (ctx : lexp_context) =
         (Some ('l', 10), "NAME");
         (Some ('l',  7), "INDEX");
         (Some ('l', 10), "NAME");
-        (Some ('l', 36), "VALUE:TYPE")];
+        (Some ('l',  4), "OFF");
+        (Some ('l', 32), "VALUE:TYPE")];
 
     print_string (make_sep '-');
 
@@ -762,13 +724,15 @@ and print_lexp_ctx (ctx : lexp_context) =
 
         let ptr_str = "" in (*"    |            |         |            | " in *)
 
-        try let name, exp, tp =
+        try let r, name, exp, tp =
               match env_lookup_by_index (n - idx - 1) ctx with
-                | (_, Some (_, name), LetDef exp, tp) -> name, Some exp, tp
-                | _ -> "", None, dltype in
+                | (r, Some (_, name), LetDef exp, tp) -> r, name, Some exp, tp
+                | _ -> 0, "", None, dltype in
 
             (*  Print env Info *)
             lalign_print_string name 10; (*   name must match *)
+            print_string " | ";
+             lalign_print_int r 4;
             print_string " | ";
 
             let _ = (match exp with
@@ -851,6 +815,7 @@ let default_lctx =
 let default_rctx =
     try (from_lctx (default_lctx))
         with e ->(
+            print_eval_trace ();
             lexp_error dloc "Could not convert lexp context into rte context";
             raise e)
 

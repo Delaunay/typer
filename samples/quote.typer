@@ -5,19 +5,41 @@ integer = lambda (y : Int)        -> (integer_ y) ;
 float   = lambda (y : Float)      -> (float_ y)   ;
 block   = lambda (y : List Sexp)  -> (block_ y)   ;
 
+quote' : List Sexp -> List Sexp;
+
+
+%
+%   f = (qquote (uquote x) * x) (node _*_ [(node_ unquote "x") "x"])
+%
+%   f = node_ "*" cons (x, cons (symbol_ "x") nil))
+%
+%
+%     =>       x
+
+% the expression needs to be handled
+has-uquote : List Sexp -> Sexp;
+has-uquote = lambda y ->
+  head Sexp y; %node_ (symbol_ "node_") (quote' y);
+
+% keep quoting the expression
+hasnot-uquote : Sexp -> List Sexp -> List Sexp;
+hasnot-uquote = lambda op ->
+  lambda y ->
+    case y
+      | nil => node_ op nil
+      | _ => node_ (quote' (cons op nil)) (quote' y);
+
+
 % traverse nodes
 node : Sexp -> List Sexp -> Sexp;
-node = (lambda (op : Sexp) ->
-    lambda (y : List Sexp)  ->
-        case y
-            | nil => node_ op nil
-            | _ => node_ (quote' (cons op nil)) (quote' y));
+node = lambda (op : Sexp) ->
+    lambda (y : List Sexp) ->
+      case (sexp_eq op (symbol_ "uquote"))
+        | True  => has-uquote y
+        | False => hasnot-uquote op y;
 
-            | uquote => node_ (symbol_ "node_") (cons (quote' op)
-                        (cons (reconstruire la liste en sexp) nil))
 
 % tree traversal
-quote' : List Sexp -> List Sexp;
 quote' = lambda (x : List Sexp) ->
     let target = head Sexp x;
         tl = tail Sexp x;
@@ -36,13 +58,6 @@ quote' = lambda (x : List Sexp) ->
 quote = Macro_ (lambda (x : List Sexp) -> head Sexp (quote' x));
 
 
-
-% Should it return
-% (node_ (symbol_ "_*_") (cons (symbol_ x) (cons (symbol_ x) nil)))
-
-% OR
-%        x * x  (Lexp, donc Call(_*_, [x x])
-
-%main = quote (x * x);
+mn = quote (x * x);
 
 

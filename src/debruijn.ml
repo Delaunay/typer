@@ -126,7 +126,7 @@ let env_add_var_info var (ctx: lexp_context) =
 
 let env_extend (ctx: lexp_context) (def: vdef) (v: varbind) (t: lexp) =
   let ((n, map), e, f) = ctx in
-  env_add_var_info (n, Some def, v, t) (senv_add_var def ctx)
+    env_add_var_info (0, Some def, v, t) (senv_add_var def ctx)
 
 
 let _name_error loc estr str =
@@ -167,8 +167,11 @@ let _env_lookup ctx (v: vref): env_elem  =
 
 
 let env_lookup_type ctx (v : vref) =
+  (* let ((csize, _), _, _) = ctx in *)
   (* FIXME: We need to S.shift here, since `t` is valid in the context in
    * which `vref` appeared, rather than in `ctx`.  *)
+
+
   let (_, _, _, t) =  _env_lookup ctx v in t
 
 let env_lookup_expr ctx (v : vref) =
@@ -178,5 +181,75 @@ let env_lookup_expr ctx (v : vref) =
 
 let env_lookup_by_index index (ctx: lexp_context): env_elem =
     (Myers.nth index (_get_env ctx))
+
+(* replace an expression by another *)
+(* Most of the time it should be O(1) but it can be O(n)  *)
+let replace_by ctx name by =
+  let (a, env, b) = ctx in
+  let idx = senv_lookup name ctx in
+  (* lookup and replace *)
+  let rec replace_by' ctx by acc =
+    match ctx with
+      | Mnil -> debruijn_error dummy_location
+            ("Replace error. This expression does not exist: " ^  name)
+      | Mcons((_, Some (b, n), _, _) as elem, tl1, i, tl2) ->
+        if n = name then
+          (cons by tl1), acc
+        else
+          (* Skip some elements if possible *)
+          if idx < i then replace_by' tl1 by (elem::acc)
+          else replace_by' tl2 by (elem::acc)
+            (* replace_by' tl1 by (elem::acc) *) in
+
+  let nenv, decls = replace_by' env by [] in
+  (* add old declarations *)
+  let nenv = List.fold_left (fun ctx elem -> cons elem ctx) nenv decls in
+    (a, nenv, b)
+
+(* shift an entire expression by n  *)
+let rec db_shift expr n =
+  let db_shift lxp = db_shift lxp n in
+    match expr with
+    (* Nothing to shift *)
+     | Imm _       -> expr
+     | SortLevel _ -> expr
+     | Sort _      -> expr
+     | Builtin _   -> expr
+
+     | Var (s, idx)       -> Var(s, idx + n)
+     | Susp(lxp, s)       -> Susp(db_shift lxp, s)
+     | Cons((s, idx), t)  -> Cons((s, idx + n), t)
+
+     | Let(l, decls, lxp) ->
+      let decls = List.map (fun (var, lxp, ltp) ->
+        var, db_shift lxp, db_shift ltp) decls in
+          Let(l, decls, db_shift lxp)
+
+     | Arrow(kind, var, ltp, l, lxp) ->
+      Arrow(kind, var, db_shift ltp, l, db_shift lxp)
+
+     | Lambda(kind, var, ltp, lxp) ->
+      Lambda(kind, var, db_shift ltp, db_shift lxp)
+
+     | Call(lxp, args) ->
+      let args = List.map (fun (kind, lxp) -> (kind, db_shift lxp)) args in
+        Call(db_shift lxp, args)
+
+     | Inductive(l, nm, fargs, ctors) ->
+      let fargs = List.map (fun (kind, var, ltp) -> (kind, var, db_shift ltp))
+        fargs in
+      let ctors = SMap.map (fun args ->
+        List.map (fun (kind, var, ltp) -> (kind, var, db_shift ltp)) args)
+        ctors in
+          Inductive(l, nm, fargs, ctors)
+
+     | Case(l, tlxp, tltp, retltp, branch, dflt) ->
+      let dflt = match dflt with
+        | Some lxp -> Some (db_shift lxp)
+        | None -> None in
+
+      let branch = SMap.map (fun (l, args, lxp) ->
+        (l, args, db_shift lxp)) branch in
+          Case(l, db_shift tlxp, db_shift tltp, db_shift retltp, branch, dflt)
 
 
