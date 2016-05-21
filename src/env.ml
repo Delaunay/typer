@@ -84,6 +84,18 @@ let value_location (vtp: value_type) =
         (* location info was lost or never existed *)
         | _ -> dloc
 
+
+let value_name v =
+  match v with
+    | Vint _ -> "Vint"
+    | Vstring _ -> "Vstring"
+    | Vcons _ -> "Vcons"
+    | Vbuiltin _ -> "Sbuiltin"
+    | Vfloat _ -> "Vfloat"
+    | Closure _ -> "Closure"
+    | Vsexp _ -> "Vsexp"
+    | Vdummy -> "Vdummy"
+
 (*  Runtime Environ *)
 type env_cell = (string option * value_type) ref
 type runtime_env = (env_cell myers) * (int * int)

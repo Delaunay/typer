@@ -47,6 +47,10 @@ tests-build:
 tests-run:
 	@./_build/tests/utests --verbose= 3
 
+test-file:
+	ocamlbuild src/test.$(COMPILE_MODE)  -I src $(OBFLAGS)
+	@mv _build/src/test.$(COMPILE_MODE)  _build/test
+
 # There is nothing here. I use this to test if opam integration works
 install: tests
 
@@ -80,3 +84,6 @@ run/tests:
 
 run/typer-file:
 	@./_build/typer ./samples/test__.typer
+
+run/test-file:
+	@./_build/test

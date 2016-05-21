@@ -166,18 +166,19 @@ let _env_lookup ctx (v: vref): env_elem  =
         Not_found -> debruijn_error loc "DeBruijn index out of bounds!"
 
 
-let env_lookup_type ctx (v : vref) =
-  (* let ((csize, _), _, _) = ctx in *)
-  (* FIXME: We need to S.shift here, since `t` is valid in the context in
-   * which `vref` appeared, rather than in `ctx`.  *)
+let env_lookup_type ctx (v : vref): lexp =
+  let (_, idx) = v in
+  let (_, _, _, ltp) = _env_lookup ctx v in
+    (* unsusp_all *) (Susp (ltp, (S.shift (idx + 1))))
 
+let env_lookup_expr ctx (v : vref): lexp =
+  let (_, idx) = v in
+  let (r, _, lxp, _) =  _env_lookup ctx v in
 
-  let (_, _, _, t) =  _env_lookup ctx v in t
+  let lxp = match lxp with
+    | LetDef lxp -> lxp in
 
-let env_lookup_expr ctx (v : vref) =
-  (* FIXME: We need S.shift here, since `lxp` is valid in the context in
-   * which `vref` appeared (plus recursion offset), rather than in `ctx`.  *)
-  let (_, _, lxp, _) =  _env_lookup ctx v in lxp
+    (* unsusp_all *) (Susp (lxp, (S.shift (idx - r + 1))))
 
 let env_lookup_by_index index (ctx: lexp_context): env_elem =
     (Myers.nth index (_get_env ctx))

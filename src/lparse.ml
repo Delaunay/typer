@@ -235,7 +235,7 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
 
                 (* Get constructor args *)
                 let formal, args = match idt with
-                    | LetDef Inductive(_, _, formal, ctor_def) -> (
+                    | Inductive(_, _, formal, ctor_def) -> (
                         try formal, (SMap.find cname ctor_def)
                         with Not_found ->
                             lexp_error loc
@@ -388,7 +388,7 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
 
     (* consume Arrows and args together *)
     let rec get_return_type name i ltp args =
-        match ltp, args with
+        match (unsusp_all ltp), args with
             | _, [] -> ltp
             | Arrow(_, _, _, _, ltp), hd::tl -> (get_return_type name (i + 1) ltp tl)
             | _, _ -> lexp_warning loc
@@ -402,7 +402,7 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
 
     (* retrieve function's body *)
     let body, ltp = _lexp_p_infer fun_name ctx (i + 1) in
-    (* let ret_type = get_return_type 0 ltp new_args in *)
+    let ltp = unsusp_all ltp in
 
     let handle_named_call (loc, name) =
         (*  Process Arguments *)
@@ -414,8 +414,8 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
             let idx = senv_lookup name ctx in
             let vf = (make_var name idx loc) in
 
-                match env_lookup_expr ctx ((loc, name), idx) with
-                    | LetDef Builtin((_, "Built-in"), _) ->(
+                match unsusp_all (env_lookup_expr ctx ((loc, name), idx)) with
+                    | Builtin((_, "Built-in"), _) ->(
                         (* ------ SPECIAL ------ *)
                         match !_parsing_internals, largs with
                             | true, [Imm(String (_, str))] ->
@@ -432,7 +432,7 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
                                 lexp_error loc "Use of \"Built-in\" in user code";
                                     dlxp, dltype)
 
-                    | _ ->
+                    | e ->
                          let ret_type = get_return_type name 0 ltp new_args in
                             Call(vf, new_args), ret_type
 
@@ -448,9 +448,9 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
                 lexp_fatal loc ("Could not find Variable: " ^ name) in
 
         (* Get the macro *)
-        let lxp = try match env_lookup_expr ctx ((loc, name), idx) with
-            | LetDef e -> e
-            | _ -> lexp_fatal loc "The macro cannot be expanded";
+        let lxp = try env_lookup_expr ctx ((loc, name), idx) (* with
+            | e -> e
+            | _ -> lexp_fatal loc "The macro cannot be expanded"; *)
           with Not_found ->
             lexp_fatal loc (name ^ " was found but " ^ (string_of_int idx) ^
                   " is not a correct index.") in
@@ -544,8 +544,7 @@ and lexp_read_pattern pattern exp target ctx:
                 let idx = senv_lookup name ctx in
                 match (env_lookup_expr ctx ((loc, name), idx)) with
                     (* We are matching a constructor *)
-                    | LetDef Cons _ ->
-                        (name, loc, []), ctx
+                    | Cons _ -> (name, loc, []), ctx
 
                     (* name is defined but is not a constructor  *)
                     (* it technically could be ... (expr option) *)
@@ -664,11 +663,13 @@ and _lexp_decls decls ctx i: (((vdef * lexp * ltype) list) * lexp_context) =
 
     (* merge type and expr *)
     let decls = List.fold_left (fun acc key ->
-      let (l, s, expr, ltp) = SMap.find key !merged in
-      let expr = match expr with
-        | Some expr -> expr
+      let (l, s, lxp, ltp) = SMap.find key !merged in
+      let lxp = match lxp with
+        | Some lxp -> lxp
         | None -> dltype in
-          ((l, s), expr, ltp)::acc) [] !names in
+      let ltp = unsusp_all ltp in
+      let lxp = unsusp_all lxp in
+          ((l, s), lxp, ltp)::acc) [] !names in
 
     decls, ctx
 
@@ -786,30 +787,40 @@ let lexp_parse_all p ctx = _lexp_parse_all p ctx 1
  * --------------------------------------------------------- *)
 
 (* Make lxp context with built-in types *)
-let default_lctx =
-    (* Empty context *)
+let empty_lctx =
     let lctx = make_lexp_context in
     let lxp = Builtin((dloc, "Built-in"), type0) in
-    let lctx = env_extend lctx (dloc, "Built-in") (LetDef lxp) type0 in
+      env_extend lctx (dloc, "Built-in") (LetDef lxp) type0
 
-    (* Read BTL files *)
-    let pres = prelex_file (!btl_folder ^ "types.typer") in
-    let sxps = lex default_stt pres in
-    let nods = sexp_parse_all_to_list default_grammar sxps (Some ";") in
-    let pxps = pexp_decls_all nods in
+let default_lctx =
 
-    _parsing_internals := true;
-        let _, lctx = lexp_p_decls pxps lctx in
-    _parsing_internals := false;
+      (* Empty context *)
+      let lctx = make_lexp_context in
+      let lxp = Builtin((dloc, "Built-in"), type0) in
+      let lctx = env_extend lctx (dloc, "Built-in") (LetDef lxp) type0 in
 
-    (* Once default builtin are set we can populate the predef table *)
-        List.iter (fun name ->
-            let idx = senv_lookup name lctx in
-            let v = Var((dloc, name), idx) in (*
-            let value = (env_lookup_expr lctx v) in *)
-            set_predef name (Some v)) predef_name;
-    (* -- DONE -- *)
+      (* Read BTL files *)
+      let pres = prelex_file (!btl_folder ^ "types.typer") in
+      let sxps = lex default_stt pres in
+      let nods = sexp_parse_all_to_list default_grammar sxps (Some ";") in
+      let pxps = pexp_decls_all nods in
+
+      _parsing_internals := true;
+          let _, lctx = lexp_p_decls pxps lctx in
+      _parsing_internals := false;
+
+      (* Once default builtin are set we can populate the predef table *)
+      try
+          List.iter (fun name ->
+              let idx = senv_lookup name lctx in
+              let v = Var((dloc, name), idx) in (*
+              let value = (env_lookup_expr lctx v) in *)
+              set_predef name (Some v)) predef_name;
+      (* -- DONE -- *)
+          lctx
+      with e ->
         lctx
+
 
 (* Make runtime context with built-in types *)
 let default_rctx =

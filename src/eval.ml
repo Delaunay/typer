@@ -291,10 +291,9 @@ and print_eval_result i lxp =
 
 
 and print_eval_trace () =
-    print_trace " EVAL TRACE " 50 elexp_to_string elexp_print !_global_eval_trace
+    print_trace " EVAL TRACE " 50 elexp_name elexp_print !_global_eval_trace
 
 let eval lxp ctx =
-    _global_eval_trace := [];
     _eval lxp ctx 1
 
 let debug_eval lxp ctx =

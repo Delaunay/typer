@@ -15,7 +15,7 @@ manual.??
 *_build/
 *~
 \#*\#
-test__.ml
+test.ml
 _temp_hack
 test__.typer
 *.orig

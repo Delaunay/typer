@@ -140,6 +140,20 @@ let rec elexp_location e =
         | Inductive(l, _) -> l
         | Type -> U.dummy_location
 
+
+let elexp_name e =
+  match e with
+    | Imm _ -> "Imm"
+    | Builtin _ -> "Builtin"
+    | Var _ -> "Var"
+    | Let _ -> "Let"
+    | Lambda _ -> "Lambda"
+    | Call _ -> "Call"
+    | Cons _ -> "Cons"
+    | Case _ -> "Case"
+    | Type  -> "Type"
+    | Inductive _ -> "Inductive"
+
 let rec elexp_print lxp = print_string (elexp_str lxp)
 and elexp_to_string lxp = elexp_str lxp
 and elexp_str lxp =

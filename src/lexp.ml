@@ -322,7 +322,10 @@ let rec unsusp e s =            (* Push a suspension one level down.  *)
             | None -> default
             | Some e -> Some (mkSusp e s))
 
-
+let unsusp_all e =
+  match e with
+    | Susp(e, s) -> unsusp e s
+    | _ -> e
 
 let lexp_to_string e =
   match e with
@@ -665,6 +668,8 @@ and _lexp_to_str ctx exp =
             | Float  (_, s) -> tval (string_of_float s)
             | e -> sexp_to_str e)
 
+        | Susp _ -> _lexp_to_str ctx (unsusp_all exp)
+
         | Var ((loc, name), idx) -> name ^ (index idx) ;
 
         | Let (_, decls, body)   ->
@@ -711,7 +716,7 @@ and _lexp_to_str ctx exp =
                 | _                      -> "__", -1,  true,  true  in
 
             let binop_str op (_, lhs) (_, rhs) =
-                (lexp_to_str lhs) ^ op ^ (lexp_to_str rhs) in
+                (lexp_to_str lhs) ^ op ^ (index idx) ^ " " ^ (lexp_to_str rhs) in
 
             let add_parens bl str =
                 if bl then "(" ^ str ^ ")" else str in
@@ -722,11 +727,11 @@ and _lexp_to_str ctx exp =
                  * Either use the boring (_+_ e1 e2) notation, or check the
                  * grammar to decide when we can use the infix notation and
                  * when to add parenthese.  *)
-                | ("_=_", [lhs; rhs]) -> binop_str " = " lhs rhs
-                | ("_+_", [lhs; rhs]) -> binop_str " + " lhs rhs
-                | ("_-_", [lhs; rhs]) -> binop_str " - " lhs rhs
-                | ("_/_", [lhs; rhs]) -> binop_str " / " lhs rhs
-                | ("_*_", [lhs; rhs]) -> binop_str " * " lhs rhs
+                | ("_=_", [lhs; rhs]) -> binop_str " =" lhs rhs
+                | ("_+_", [lhs; rhs]) -> binop_str " +" lhs rhs
+                | ("_-_", [lhs; rhs]) -> binop_str " -" lhs rhs
+                | ("_/_", [lhs; rhs]) -> binop_str " /" lhs rhs
+                | ("_*_", [lhs; rhs]) -> binop_str " *" lhs rhs
                 (* not an operator *)
                 | _ ->
                     let args = List.fold_left
