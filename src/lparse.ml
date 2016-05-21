@@ -283,7 +283,7 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
         (* This case cannot be inferred *)
         | Plambda (kind, var, None, body) ->(
             (* Read var type from the provided type *)
-            let ltp, lbtp = match t with
+            let ltp, lbtp = match unsusp_all t with
                 | Arrow(kind, _, ltp, _, lbtp) -> ltp, lbtp
                 | _ -> lexp_error tloc "Type does not match"; dltype, dltype in
 
@@ -643,11 +643,14 @@ and _lexp_decls decls ctx i: (((vdef * lexp * ltype) list) * lexp_context) =
           let (_, _, _, ltp) = SMap.find s !merged in
           merged := SMap.add s (l, s, Some lxp, ltp) !merged;
           let r = !offset in
+          let r = if r = 0 then 1 else r in
             offset := 0;
             replace_by vctx s (r, Some (l, s), (LetDef lxp), ltp);
 
         with Not_found ->
-          let lxp, ltp = lexp_p_infer pxp vctx in
+          (* Add dummy first *)
+          let tctx = env_extend vctx (l, s) ForwardRef dltype in
+          let lxp, ltp = lexp_p_infer pxp tctx in
             names := s::!names;
             merged := SMap.add s (l, s, Some lxp, ltp) !merged;
             env_extend vctx (l, s) (LetDef lxp) ltp)
@@ -694,7 +697,7 @@ and print_lexp_ctx (ctx : lexp_context) =
         (Some ('l',  7), "INDEX");
         (Some ('l', 10), "NAME");
         (Some ('l',  4), "OFF");
-        (Some ('l', 32), "VALUE:TYPE")];
+        (Some ('l', 29), "VALUE:TYPE")];
 
     print_string (make_sep '-');
 

@@ -126,7 +126,7 @@ let env_add_var_info var (ctx: lexp_context) =
 
 let env_extend (ctx: lexp_context) (def: vdef) (v: varbind) (t: lexp) =
   let ((n, map), e, f) = ctx in
-    env_add_var_info (0, Some def, v, t) (senv_add_var def ctx)
+    env_add_var_info (1, Some def, v, t) (senv_add_var def ctx)
 
 
 let _name_error loc estr str =
@@ -169,7 +169,7 @@ let _env_lookup ctx (v: vref): env_elem  =
 let env_lookup_type ctx (v : vref): lexp =
   let (_, idx) = v in
   let (_, _, _, ltp) = _env_lookup ctx v in
-    (* unsusp_all *) (Susp (ltp, (S.shift (idx + 1))))
+    (Susp (ltp, (S.shift (idx + 1))))
 
 let env_lookup_expr ctx (v : vref): lexp =
   let (_, idx) = v in
@@ -178,7 +178,17 @@ let env_lookup_expr ctx (v : vref): lexp =
   let lxp = match lxp with
     | LetDef lxp -> lxp in
 
-    (* unsusp_all *) (Susp (lxp, (S.shift (idx - r + 1))))
+    (if (r != 1) then (
+    let s1 = (Susp (lxp, (S.shift (idx - r + 1)))) in
+    let s2 = (Susp (lxp, (S.shift (idx + 1)))) in
+
+      lexp_print (unsusp_all s1); print_string "\n";
+      lexp_print (unsusp_all s2); print_string "\n";
+
+    ));
+    (*let idx = if r > 0 then idx - r else idx + 1 in *)
+
+  (Susp (lxp, (S.shift (idx - r + 1))))
 
 let env_lookup_by_index index (ctx: lexp_context): env_elem =
     (Myers.nth index (_get_env ctx))

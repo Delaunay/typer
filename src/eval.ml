@@ -186,14 +186,19 @@ and eval_decls decls ctx = _eval_decls decls ctx 0
 and _eval_decls (decls: ((vdef * elexp) list))
                         (ctx: runtime_env) i: runtime_env =
 
-    (* Read declarations once and push them *)
-    let ctx = List.fold_left (fun ctx ((_, name), lxp) ->
-        add_rte_variable (Some name) Vdummy ctx)
-        ctx decls in
-
     let n = (List.length decls) - 1 in
 
     (* Read declarations once and push them *)
+    List.fold_left (fun ctx ((_, name), lxp) ->
+        let ctx = add_rte_variable (Some name) Vdummy ctx in
+        let lxp = _eval lxp ctx (i + 1) in
+          set_rte_variable 0 (Some name) lxp ctx)
+
+        ctx decls
+
+
+
+    (* Read declarations once and push them * )
     let _, ctx = List.fold_left (fun (idx, ctx) ((_, name), lxp) ->
         _global_eval_trace := [];
         let lxp = _eval lxp ctx (i + 1) in
@@ -201,7 +206,8 @@ and _eval_decls (decls: ((vdef * elexp) list))
         (idx - 1, ctx))
         (n, ctx) decls in
 
-        ctx
+        ctx *)
+
 (* -------------------------------------------------------------------------- *)
 (*              Builtin Implementation  (Some require eval)                   *)
 
