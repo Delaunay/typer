@@ -234,7 +234,7 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
                 let inductive_type = Var((loc, type_name), idx) in
 
                 (* Get constructor args *)
-                let formal, args = match idt with
+                let formal, args = match unsusp_all idt with
                     | Inductive(_, _, formal, ctor_def) -> (
                         try formal, (SMap.find cname ctor_def)
                         with Not_found ->
@@ -542,7 +542,7 @@ and lexp_read_pattern pattern exp target ctx:
         | Ppatvar ((loc, name) as var) ->(
             try(
                 let idx = senv_lookup name ctx in
-                match (env_lookup_expr ctx ((loc, name), idx)) with
+                match unsusp_all (env_lookup_expr ctx ((loc, name), idx)) with
                     (* We are matching a constructor *)
                     | Cons _ -> (name, loc, []), ctx
 

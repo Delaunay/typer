@@ -21,10 +21,22 @@ plus = lambda (x : Nat) ->
             | succ z => succ (plus z y);
 
 
-n1 = (to-num zero);
-n2 = (to-num one);
-n3 = (to-num two);
+odd : Nat -> Int;
+even : Nat -> Int;
+odd = lambda (n : Nat) -> case n
+    | zero => 0
+    | succ y => (even y);
 
-m1 = (to-num (plus zero two));   % 2
-m2 = (to-num (plus two zero));   % 2
-m3 = (to-num (plus two one));    % 3
+even = lambda (n : Nat) -> case n
+    | zero => 1
+    | succ y => (odd y);
+
+%n1 = (to-num zero);
+%n2 = (to-num one);
+%n3 = (to-num two);
+
+%m1 = (to-num (plus zero two));   % 2
+%m2 = (to-num (plus two zero));   % 2
+%m3 = (to-num (plus two one));    % 3
+
+o1 = (even two);

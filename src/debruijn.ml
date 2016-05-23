@@ -176,7 +176,8 @@ let env_lookup_expr ctx (v : vref): lexp =
   let (r, _, lxp, _) =  _env_lookup ctx v in
 
   let lxp = match lxp with
-    | LetDef lxp -> lxp in
+    | LetDef lxp -> lxp
+    | _ -> Sort (dummy_location, Stype (SortLevel (SLn 0))) in
 
     (if (r != 1) then (
     let s1 = (Susp (lxp, (S.shift (idx - r + 1)))) in
