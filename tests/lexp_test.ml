@@ -54,7 +54,7 @@ let _ = (add_test "LEXP" "lexp_print" (fun () ->
     let ret1, _ = lexp_decl_str dcode lctx in
 
     let to_str decls =
-        let str = _lexp_str_decls (!compact_ppctx) ret1 in
+        let str = _lexp_str_decls (!compact_ppctx) (List.flatten ret1) in
             List.fold_left (fun str lxp -> str ^ lxp) "" str in
 
     (* Cast to string *)

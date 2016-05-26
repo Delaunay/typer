@@ -201,7 +201,7 @@ let format_source () =
 
     print_string (make_sep '-'); print_string "\n";
 
-    let result = _lexp_str_decls (!_ppctx) lexps in
+    let result = _lexp_str_decls (!_ppctx) (List.flatten lexps) in
 
     if (!_write_file) then (
         print_string ("    " ^ " Writing output file: " ^ (!_format_dest) ^ "\n");
@@ -284,6 +284,7 @@ let main () =
                 raise e
             ) in
         print_string reset;
+        let flexps = List.flatten lexps in
 
         (* convert a lctx context into a typecheck context *)
         (* they will be the same in the future *)
@@ -307,21 +308,21 @@ let main () =
             let cctx = lctx_to_cctx ctx in
             (* run type check *)
             List.iter (fun (_, lxp, _) ->
-                let _ = TC.check cctx lxp in ()) lexps));
+                let _ = TC.check cctx lxp in ()) flexps));
 
         (if (get_p_option "lexp") then(
             print_string (make_title " Lexp ");
-            debug_lexp_decls lexps; print_string "\n"));
+            debug_lexp_decls flexps; print_string "\n"));
 
         (if (get_p_option "lctx") then(
             print_lexp_ctx nctx; print_string "\n"));
 
-        let clean_lxp = EL.clean_decls lexps in
+        let clean_lxp = EL.clean_toplevel lexps in
 
         (* Eval declaration *)
         let rctx = default_rctx in
         print_string yellow;
-        let rctx = (try eval_decls clean_lxp rctx;
+        let rctx = (try eval_decls_toplevel clean_lxp rctx;
             with e ->
                 print_string reset;
                 print_rte_ctx (!_global_eval_ctx);

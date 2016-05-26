@@ -108,6 +108,10 @@ and filter_arg_list lst =
 and clean_decls decls =
    List.map (fun (v, lxp, _) -> (v, (erase_type lxp))) decls
 
+(* toplevel is a list of value *)
+and clean_toplevel decls =
+  List.map (fun v -> clean_decls v) decls
+
 and clean_maybe lxp =
     match lxp with
         | Some lxp -> Some (erase_type lxp)

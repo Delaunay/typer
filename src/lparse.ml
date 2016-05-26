@@ -162,9 +162,9 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
 
         (*  Let, Variable declaration + local scope *)
         | Plet(loc, decls, body) ->
-            let decl, nctx = _lexp_decls decls ctx i in
+            let decls, nctx = _lexp_decls decls ctx i in
             let bdy, ltp = lexp_infer body nctx in
-                Let(tloc, decl, bdy), ltp
+                (lexp_let_decls decls bdy nctx i), ltp
 
         (* ------------------------------------------------------------------ *)
         | Parrow (kind, ovar, tp, loc, expr) ->
@@ -629,10 +629,94 @@ and lexp_decls_macro (loc, mname) sargs ctx: pdecl list =
 
 (*  Parse let declaration *)
 and lexp_p_decls decls ctx = _lexp_decls decls ctx 0
-and _lexp_decls decls ctx i: (((vdef * lexp * ltype) list) * lexp_context) =
-  let names = ref [] in
+
+and lexp_let_decls decls (body: lexp) ctx i =
+  (* build the weird looking let *)
+  let decls = List.rev decls in
+    List.fold_left (fun lxp decls ->
+      Let(dloc, decls, lxp)) body decls
+
+and _lexp_decls decls ctx i: (((vdef * lexp * ltype) list list) * lexp_context) =
+
+  let names = ref [] in (* decls name in correct order *)
+  let glob = ref SMap.empty in
+  let mut = ref [] in
+  let offset = ref 1 in
+
+  let ctx = List.fold_left (fun vctx expr ->
+    match expr with
+      | Pexpr((l, s), pxp) ->(
+        try let idx = senv_lookup s vctx in
+            let ltp = env_lookup_type vctx ((l, s), idx) in
+            let lxp = lexp_p_check pxp ltp vctx in
+            let n = List.length !mut in
+            let idx = if n = 1 then (
+              (* Simple recursive case *)
+              names := !mut::!names;
+              mut := [];
+              offset := 1; 1) else n - !offset in
+
+          (* update declaration *)
+          glob := SMap.add s (l, s, Some lxp, ltp) !glob;
+          offset := !offset + 1;
+
+          (* update context *)
+          replace_by vctx s (idx, Some (l, s), (LetDef lxp), ltp);
+
+        with Not_found ->
+          (* push mutually recursive definition *)
+          (if (List.length !mut) != 0 then
+            names := !mut::!names;
+            mut := [];
+            offset := 1);
+
+          (* Add dummy first *)
+          let tctx = env_extend vctx (l, s) ForwardRef dltype in
+          let lxp, ltp = lexp_p_infer pxp tctx in
+
+            names := [s]::!names;
+            glob := SMap.add s (l, s, Some lxp, ltp) !glob;
+
+            env_extend vctx (l, s) (LetDef lxp) ltp)
+
+      | Ptype((l, s), ptp) ->
+        (* this is a mutually recursive definition *)
+          mut := s::!mut;
+        (* get type *)
+        let ltp, _ = lexp_p_infer ptp vctx in
+        (* push *)
+        glob := SMap.add s (l, s, None, ltp) !glob;
+          env_extend vctx (l, s) ForwardRef ltp
+
+      | _ -> vctx) ctx decls in
+
+
+  (if List.length !mut != 0 then names := !mut::!names);
+
+  (* return a list containing mutually recursive def *)
+  let merge_list names =
+    List.fold_left (fun acc key ->
+      let (l, s, lxp, ltp) = SMap.find key !glob in
+      let lxp = match lxp with
+        | Some lxp -> lxp
+        | None -> dltype in
+
+      let ltp = unsusp_all ltp in
+      let lxp = unsusp_all lxp in
+          ((l, s), lxp, ltp)::acc) [] names in
+
+  let decls = List.map (fun names ->
+    merge_list names) (List.rev !names) in
+
+        decls, ctx
+
+and lexp_decls_toplevel decls ctx =
+  _lexp_decls decls ctx 1
+
+  (* let names = ref [] in
   let offset = ref 0 in
   let merged = ref SMap.empty in
+  let acc = ref [] in
 
   let ctx = List.fold_left (fun vctx expr ->
     match expr with
@@ -674,7 +758,7 @@ and _lexp_decls decls ctx i: (((vdef * lexp * ltype) list) * lexp_context) =
       let lxp = unsusp_all lxp in
           ((l, s), lxp, ltp)::acc) [] !names in
 
-    decls, ctx
+    decls, ctx *)
 
 and _lexp_parse_all (p: pexp list) (ctx: lexp_context) i : lexp list =
 
@@ -870,6 +954,6 @@ let eval_expr_str str lctx rctx = _eval_expr_str str lctx rctx false
 
 let eval_decl_str str lctx rctx =
     let lxps, lctx = lexp_decl_str str lctx in
-    let elxps = (EL.clean_decls lxps) in
-        (eval_decls elxps rctx), lctx
+    let elxps = (EL.clean_toplevel lxps) in
+        (eval_decls_toplevel elxps rctx), lctx
 
