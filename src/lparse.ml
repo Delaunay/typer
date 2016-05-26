@@ -701,8 +701,9 @@ and _lexp_decls decls ctx i: (((vdef * lexp * ltype) list list) * lexp_context) 
         | Some lxp -> lxp
         | None -> dltype in
 
+      (*
       let ltp = unsusp_all ltp in
-      let lxp = unsusp_all lxp in
+      let lxp = unsusp_all lxp in *)
           ((l, s), lxp, ltp)::acc) [] names in
 
   let decls = List.map (fun names ->
@@ -893,8 +894,14 @@ let default_lctx =
       let pxps = pexp_decls_all nods in
 
       _parsing_internals := true;
-          let _, lctx = lexp_p_decls pxps lctx in
+          let d, lctx = lexp_p_decls pxps lctx in
       _parsing_internals := false;
+
+      (* dump grouped decls * )
+      List.iter (fun decls ->
+        print_string "[";
+        List.iter (fun ((_, s), _, _) ->
+          print_string (s ^ ", ")) decls; print_string "] \n") d; *)
 
       (* Once default builtin are set we can populate the predef table *)
       try
@@ -911,11 +918,29 @@ let default_lctx =
 
 (* Make runtime context with built-in types *)
 let default_rctx =
+     (* Empty context *)
+      let lctx = make_lexp_context in
+      let lxp = Builtin((dloc, "Built-in"), type0) in
+      let lctx = env_extend lctx (dloc, "Built-in") (LetDef lxp) type0 in
+
+      (* Read BTL files *)
+      let pres = prelex_file (!btl_folder ^ "types.typer") in
+      let sxps = lex default_stt pres in
+      let nods = sexp_parse_all_to_list default_grammar sxps (Some ";") in
+      let pxps = pexp_decls_all nods in
+
+      _parsing_internals := true;
+          let d, lctx = lexp_p_decls pxps lctx in
+      _parsing_internals := false;
+
+      let rctx = make_runtime_ctx in
+        eval_decls_toplevel (EL.clean_toplevel d) rctx
+    (*
     try (from_lctx (default_lctx))
         with e ->(
             print_eval_trace ();
             lexp_error dloc "Could not convert lexp context into rte context";
-            raise e)
+            raise e) *)
 
 
 (*      String Parsing

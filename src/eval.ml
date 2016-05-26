@@ -315,19 +315,43 @@ let eval_all lxps rctx silent =
 (* build a rctx from a lctx *)
 let from_lctx (ctx: lexp_context): runtime_env =
     let ((n, _), env, _) = ctx in
+    let n = n - 1 in
+    let rctx = ref make_runtime_ctx in
+
+    for i = 0 to n do
+        let name, exp = match (Myers.nth (n - i) env) with
+          | (_, Some (_, name), LetDef exp, _) -> Some name, Some exp
+          | _ -> None, None in
+
+        let vxp = match exp with
+          | Some lxp ->
+              let octx = add_rte_variable name Vdummy (!rctx) in
+              let lxp = (erase_type lxp) in
+                (try (eval lxp octx)
+                  with e -> elexp_print lxp;
+                    print_string "\n"; raise e)
+
+          | None -> Vdummy in
+
+        rctx := add_rte_variable name vxp (!rctx)
+    done;
+
+    !rctx
+
+    (* let ((n, _), env, _) = ctx in
     let rctx = ref make_runtime_ctx in
 
     let bsize = 0 in
     let csize = n - 1 in
 
-    (* add all variables *)
+    (* add all variables * )
     for i = bsize to csize do
         let name = match (Myers.nth (csize - i) env) with
           | (_, Some (_, name), _, _) -> Some name
           | _ -> None in
 
         rctx := add_rte_variable name Vdummy (!rctx)
-    done;
+    done; *)
 
     let diff = csize - bsize in
 
@@ -347,11 +371,11 @@ let from_lctx (ctx: lexp_context): runtime_env =
                           print_string "\n"; raise e)
 
             | None -> Vdummy in
-                rctx := set_rte_variable j name vxp (!rctx)
+                rctx := add_rte_variable name vxp (!rctx)
 
       with Not_found ->
         print_int n; print_string " ";
         print_int (csize - i); print_string "\n ";
         raise Not_found
     done;
-        !rctx
+        !rctx *)
