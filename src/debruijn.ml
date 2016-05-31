@@ -179,14 +179,15 @@ let env_lookup_expr ctx (v : vref): lexp =
     | LetDef lxp -> lxp
     | _ -> Sort (dummy_location, Stype (SortLevel (SLn 0))) in
 
+    (*
     (if (r != 1) then (
     let s1 = (Susp (lxp, (S.shift (idx - r + 1)))) in
     let s2 = (Susp (lxp, (S.shift (idx + 1)))) in
 
       lexp_print (unsusp_all s1); print_string "\n";
-      lexp_print (unsusp_all s2); print_string "\n";
+         lexp_print (unsusp_all s2); print_string "\n"; * )
 
-    ));
+    )); *)
     (*let idx = if r > 0 then idx - r else idx + 1 in *)
 
   (Susp (lxp, (S.shift (idx - r + 1))))
@@ -209,7 +210,7 @@ let replace_by ctx name by =
           (cons by tl1), acc
         else
           (* Skip some elements if possible *)
-          if idx < i then replace_by' tl1 by (elem::acc)
+          if idx <= i then replace_by' tl1 by (elem::acc)
           else replace_by' tl2 by (elem::acc)
             (* replace_by' tl1 by (elem::acc) *) in
 

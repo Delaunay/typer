@@ -55,8 +55,8 @@ quote' = lambda (x : List Sexp) ->
 
 
 % quote definition
-quote = Macro_ (lambda (x : List Sexp) -> head Sexp (quote' x));
-
+qq = lambda (x : List Sexp) -> head Sexp (quote' x);
+quote = Macro_ qq;
 
 mn = quote (x * x);
 

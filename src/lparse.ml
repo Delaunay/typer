@@ -467,7 +467,6 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
         (* Build function to be called *)
         let arg = olist2tlist_lexp sargs ctx in
 
-
         let lxp = Call(lxp, [(Aexplicit, arg)]) in
         let elexp = EL.erase_type lxp in
         let rctx = (from_lctx ctx 0) in
@@ -481,9 +480,8 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
 
         print_string "HERE2\n";
         value_print body; *)
-
         (*
-        EL.elexp_print elexp;
+
         print_string "\n\n";
         lexp_print lxp; print_string "\n\n"; *)
 
@@ -493,15 +491,23 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
          print_rte_ctx rctx; print_string "\n";
          print_lexp_ctx ctx; print_string "\n";*)
 
-        let sxp = match eval elexp rctx with
-            | Vsexp(sxp) -> sxp
-            (* Those are sexp converted by the eval function *)
-            | Vint(i)    -> Integer(dloc, i)
-            | Vstring(s) -> String(dloc, s)
-            | Vfloat(f)  -> Float(dloc, f)
-            (* I have vdum here WHY *)
-            | v -> debug_msg (value_print v);
-                lexp_fatal loc "Macro_ expects '(List Sexp) -> Sexp'" in
+        _global_eval_trace := [];
+
+        let vxp = try eval elexp rctx
+          with e ->
+            print_eval_trace ();
+            raise e in
+
+          let sxp = match vxp with
+              | Vsexp(sxp) -> sxp
+              (* Those are sexp converted by the eval function *)
+              | Vint(i)    -> Integer(dloc, i)
+              | Vstring(s) -> String(dloc, s)
+              | Vfloat(f)  -> Float(dloc, f)
+              (* I have vdum here WHY *)
+              | v -> debug_msg (value_print v);
+                  lexp_fatal loc "Macro_ expects '(List Sexp) -> Sexp'" in
+
 
         let pxp = pexp_parse sxp in
             _lexp_p_infer pxp ctx (i + 1)  in
@@ -668,57 +674,91 @@ and _lexp_decls decls ctx i: (((vdef * lexp * ltype) list list) * lexp_context) 
   let glob = ref SMap.empty in
   let mut = ref [] in
   let offset = ref 1 in
+  let last_decls = ref "" in
+  let recursive_mode = ref false in
 
   let ctx = List.fold_left (fun vctx expr ->
     _global_lexp_trace := [];
     match expr with
-      | Pexpr((l, s), pxp) ->(
+      | Pexpr((l, s), pxp) as e ->(
         try let idx = senv_lookup s vctx in
             let ltp = env_lookup_type vctx ((l, s), idx) in
             let lxp = lexp_p_check pxp ltp vctx in
-            let n = List.length !mut in
-            let idx = if n = 1 then (
-              (* Simple recursive case *)
-              names := !mut::!names;
-              mut := [];
-              offset := 1; 1) else n - !offset in
+              (* update declaration *)
+              glob := SMap.add s (l, s, Some lxp, ltp) !glob;
 
-          (* update declaration *)
-          glob := SMap.add s (l, s, Some lxp, ltp) !glob;
-          offset := !offset + 1;
+            (* check if recursive definition *)
+            (if !last_decls = s && !recursive_mode then
+              (
+                (* print_string "RECURSIVE END\n"; *)
+                (* push every variable with the correct offset *)
+                let d = List.rev !mut in
+                let length = (List.length d) + 1 in
+                let j = ref 0 in
 
-          (* update context *)
-          replace_by vctx s (idx, Some (l, s), (LetDef lxp), ltp);
+                let vctx =
+                List.fold_left (fun vctx n ->
+                  let (l, s, lxp, ltp) = SMap.find n !glob in
+                  let lxp = match lxp with
+                    | Some lxp -> LetDef lxp
+                    | None -> lexp_warning dloc "ForwardRef are not allowed";
+                      ForwardRef in
+
+                    j := !j + 1;
+                    replace_by vctx s (length - !j, Some (l, s), lxp, ltp)) vctx d
+
+                  in
+
+                (* Clean everything *)
+                mut := [];
+                last_decls := "";
+                recursive_mode := false;
+                vctx
+              )
+            else
+              (
+                (if !recursive_mode then offset := !offset + 1);
+                (* update context *)
+                replace_by vctx s (1, Some (l, s), (LetDef lxp), ltp);
+              ));
 
         with Not_found ->
-          (* push mutually recursive definition *)
-          (if (List.length !mut) != 0 then
-            names := !mut::!names;
-            mut := [];
-            offset := 1);
-
           (* Add dummy first *)
           let tctx = env_extend vctx (l, s) ForwardRef dltype in
           let lxp, ltp = lexp_p_infer pxp tctx in
 
             names := [s]::!names;
+
+            (if !recursive_mode then (
+              offset := !offset + 1;
+              mut := s::!mut));
+
             glob := SMap.add s (l, s, Some lxp, ltp) !glob;
 
             env_extend vctx (l, s) (LetDef lxp) ltp)
 
-      | Ptype((l, s), ptp) ->
-        (* this is a mutually recursive definition *)
+      | Ptype((l, s), ptp) as e ->
+          (if !recursive_mode then () else
+            last_decls := s;
+            offset := 1);
+
+          recursive_mode := true;
           mut := s::!mut;
-        (* get type *)
-        let ltp, _ = lexp_p_infer ptp vctx in
-        (* push *)
-        glob := SMap.add s (l, s, None, ltp) !glob;
-          env_extend vctx (l, s) ForwardRef ltp
+
+          (* get type *)
+          let ltp, _ = lexp_p_infer ptp vctx in
+          (* push *)
+          glob := SMap.add s (l, s, None, ltp) !glob;
+            env_extend vctx (l, s) ForwardRef ltp
+
+      | Pmcall((l, n), sargs) ->
+          let pdecls = lexp_decls_macro (l, n) sargs vctx in
+            vctx
 
       | _ -> vctx) ctx decls in
 
-
-  (if List.length !mut != 0 then names := !mut::!names);
+  (*
+  (if List.length !mut != 0 then names := !mut::!names); *)
 
   (* return a list containing mutually recursive def *)
   let merge_list names =
