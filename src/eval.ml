@@ -80,11 +80,12 @@ let rec _eval lxp ctx i: (value_type) =
         | Imm(sxp)                  -> Vsexp(sxp)
         | Inductive (_, _)          -> Vdummy
         | Cons (label)              -> Vcons (label, [])
-        | Lambda (_, lxp)           -> Closure(lxp, ctx)
+        | Lambda ((_, n), lxp)      -> Closure(n, lxp, ctx)
         | Builtin ((_, str))        -> Vbuiltin(str)
 
         (*  Return a value stored in env        *)
-        | Var((loc, name), idx) as e -> eval_var ctx e ((loc, name), idx)
+        | Var((loc, name), idx) as e ->
+          eval_var ctx e ((loc, name), idx)
 
         (*  Nodes           *)
         (* ---------------- *)
@@ -110,16 +111,20 @@ and eval_var ctx lxp v =
 
 and eval_call ctx i lname args =
     let loc = elexp_location lname in
-    let args = List.map (fun e -> _eval e ctx (i + 1)) args in
+    let args = List.map (fun e ->
+      (* elexp_print e; print_string "\n"; *)
+      _eval e ctx (i + 1)) args in
     let f = _eval lname ctx (i + 1) in
 
     let rec eval_call f args ctx =
         match f, args with
-            | Vcons (n, []), _ -> Vcons(n, args)
+            | Vcons (n, []), _ ->
+              let e = Vcons(n, args) in
+                (* value_print e; print_string "\n"; *) e
 
             (* we add an argument to the closure *)
-            | Closure (lxp, ctx), hd::tl ->
-                let nctx = add_rte_variable None hd ctx in
+            | Closure (n, lxp, ctx), hd::tl ->
+                let nctx = add_rte_variable (Some n) hd ctx in
                 let ret = _eval lxp nctx (i + 1) in
                     eval_call ret tl nctx
 
@@ -229,7 +234,7 @@ and typer_eval loc args ctx =
     (* I need to be able to lexp sexp but I don't have lexp ctx *)
     match arg with
         (* Nodes that can be evaluated *)
-        | Closure (body, ctx) -> _eval body ctx 1
+        | Closure (_, body, ctx) -> _eval body ctx 1
         (* Leaf *)
         | _ -> arg
 
@@ -251,9 +256,9 @@ and get_builtin_impl str loc =
 and sexp_dispatch loc args ctx =
     let eval a b = _eval a b 1 in
     let sxp, nd, sym, str, it, flt, blk, rctx = match args with
-        | [sxp; Closure(nd, rctx); Closure(sym, _);
-                Closure(str, _); Closure(it, _);
-                Closure(flt, _); Closure(blk, _)] ->
+        | [sxp; Closure(_, nd, rctx); Closure(_, sym, _);
+                Closure(_, str, _); Closure(_, it, _);
+                Closure(_, flt, _); Closure(_, blk, _)] ->
             sxp, nd, sym, str, it, flt, blk, rctx
         | _ ->  eval_error loc "sexp_dispatch expects 7 arguments" in
 
@@ -268,7 +273,7 @@ and sexp_dispatch loc args ctx =
             let rctx = add_rte_variable None (Vsexp(op)) rctx in
             let rctx = add_rte_variable None (olist2tlist_rte s) rctx in
                 match eval nd rctx with
-                    | Closure(nd, _) -> eval nd rctx
+                    | Closure(_, nd, _) -> eval nd rctx
                     | _ -> eval_error loc "Node has 2 arguments")
 
         | Symbol  (_ , s)    ->
@@ -312,15 +317,18 @@ let eval_all lxps rctx silent =
     List.map (fun g -> evalfun g rctx) lxps
 
 
-(* build a rctx from a lctx *)
-let from_lctx (ctx: lexp_context): runtime_env =
+let maybe s = match s with Some v -> v | _ -> ""
+
+(* build a rctx from a lctx, rm is used to ignore the last 'rm' elements *)
+let from_lctx (ctx: lexp_context) rm: runtime_env =
     let ((n, _), env, _) = ctx in
     let n = n - 1 in
     let rctx = ref make_runtime_ctx in
 
-    for i = 0 to n do
+    for i = 0 to (n - rm) do
         let name, exp = match (Myers.nth (n - i) env) with
           | (_, Some (_, name), LetDef exp, _) -> Some name, Some exp
+          | (_, Some (_, name), _, _) -> Some name, None
           | _ -> None, None in
 
         let vxp = match exp with
@@ -331,7 +339,8 @@ let from_lctx (ctx: lexp_context): runtime_env =
                   with e -> elexp_print lxp;
                     print_string "\n"; raise e)
 
-          | None -> Vdummy in
+          | None -> eval_warning dloc ("Unable to eval expr: " ^ (maybe name));
+                Vdummy in
 
         rctx := add_rte_variable name vxp (!rctx)
     done;

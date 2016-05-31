@@ -42,15 +42,16 @@ open Env
 let lctx = default_lctx
 let rctx = default_rctx
 
-
 let _ = (add_test "MACROS" "macros base" (fun () ->
     reset_eval_trace ();
 
     (* define 'lambda x -> x * x' using macros *)
     let dcode = "
-    sqr = Macro_ (lambda (x : List Sexp) ->
+    my_fun = lambda (x : List Sexp) ->
         let hd = head Sexp x in
-            (node_ (symbol_ \"_*_\") (cons hd (cons hd nil))));
+            (node_ (symbol_ \"_*_\") (cons hd (cons hd nil)));
+
+    sqr = Macro_ my_fun;
     " in
 
     let rctx, lctx = eval_decl_str dcode lctx rctx in

@@ -55,14 +55,14 @@ type value_type =
     | Vcons of symbol * value_type list
     | Vbuiltin of string
     | Vfloat of float
-    | Closure of elexp * (((string option * value_type) ref myers) * (int * int))
+    | Closure of string * elexp * (((string option * value_type) ref myers) * (int * int))
     | Vsexp of sexp             (* Values passed to macros.  *)
     (* Unable to eval during macro expansion, only throw if the value is used *)
     | Vdummy
 
 let rec value_print (vtp: value_type) =
     match vtp with
-        | Closure (lxp, _) ->
+        | Closure (_, lxp, _) ->
             print_string ("Closure(" ^ (elexp_str lxp) ^ ")")
         | Vsexp sxp -> sexp_print sxp
         | Vint(i) -> print_int i
@@ -80,7 +80,7 @@ let rec value_print (vtp: value_type) =
 let value_location (vtp: value_type) =
     match vtp with
         | Vcons ((loc, _), _) -> loc
-        | Closure (lxp, _) -> elexp_location lxp
+        | Closure (_, lxp, _) -> elexp_location lxp
         (* location info was lost or never existed *)
         | _ -> dloc
 

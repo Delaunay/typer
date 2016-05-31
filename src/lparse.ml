@@ -50,6 +50,7 @@ open Builtin
 
 module TC = Typecheck
 module EL = Elexp
+module SU = Subst
 
 (* Shortcut => Create a Var *)
 let make_var name index loc =
@@ -455,25 +456,50 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
             lexp_fatal loc (name ^ " was found but " ^ (string_of_int idx) ^
                   " is not a correct index.") in
 
-        let lxp = match lxp with
-            | Call(Var((_, "Macro_"), _), [(Aexplicit, fct)]) -> fct
-            | _ -> lexp_fatal loc "Macro is ill formed" in
+        let lxp = match unsusp_all lxp with
+            | Call(Var((_, "Macro_"), _), [(_, fct)]) -> fct
+            | _ ->
+              print_string "\n";
+              print_string (lexp_to_string lxp); print_string "\n";
+              lexp_print lxp; print_string "\n";
+              lexp_fatal loc "Macro is ill formed" in
 
         (* Build function to be called *)
         let arg = olist2tlist_lexp sargs ctx in
+
+
         let lxp = Call(lxp, [(Aexplicit, arg)]) in
+        let elexp = EL.erase_type lxp in
+        let rctx = (from_lctx ctx 0) in
 
         (*
+        let rargs = eval (EL.erase_type arg) rctx in
+        let  rctx = add_rte_variable None rargs rctx in
+
+        let lxp = Susp(lxp, (SU.shift 1)) in
+        let body = eval (EL.erase_type lxp) rctx in
+
+        print_string "HERE2\n";
+        value_print body; *)
+
+        (*
+        EL.elexp_print elexp;
         print_string "\n\n";
         lexp_print lxp; print_string "\n\n"; *)
 
-        let rctx = (from_lctx ctx) in
-        let sxp = match eval (EL.erase_type lxp) rctx with
+        (* print_string "DH: ";
+           value_print (eval (EL.erase_type arg) rctx);  print_string "\n"; *)
+        (*
+         print_rte_ctx rctx; print_string "\n";
+         print_lexp_ctx ctx; print_string "\n";*)
+
+        let sxp = match eval elexp rctx with
             | Vsexp(sxp) -> sxp
             (* Those are sexp converted by the eval function *)
             | Vint(i)    -> Integer(dloc, i)
             | Vstring(s) -> String(dloc, s)
             | Vfloat(f)  -> Float(dloc, f)
+            (* I have vdum here WHY *)
             | v -> debug_msg (value_print v);
                 lexp_fatal loc "Macro_ expects '(List Sexp) -> Sexp'" in
 
@@ -644,6 +670,7 @@ and _lexp_decls decls ctx i: (((vdef * lexp * ltype) list list) * lexp_context) 
   let offset = ref 1 in
 
   let ctx = List.fold_left (fun vctx expr ->
+    _global_lexp_trace := [];
     match expr with
       | Pexpr((l, s), pxp) ->(
         try let idx = senv_lookup s vctx in

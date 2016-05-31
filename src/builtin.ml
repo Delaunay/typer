@@ -165,6 +165,8 @@ let make_node loc args_val ctx    =
         | _ -> builtin_error loc
             "node_ expects one 'Sexp' and one 'List Sexp'" in
 
+    value_print tlist; print_string "\n";
+
     let args = tlist2olist [] tlist in
 
     let s = List.map (fun g -> match g with
@@ -172,8 +174,11 @@ let make_node loc args_val ctx    =
         (* eval transform sexp into those... *)
         | Vint (i)    -> Integer(dloc, i)
         | Vstring (s) -> String(dloc, s)
-        | _ -> value_print g;
-            builtin_error loc ("node_ expects sexp as arguments")) args in
+        | _ ->
+          print_rte_ctx ctx;
+          print_string (value_name g); print_string "\n";
+          value_print g; print_string "\n";
+            builtin_error loc ("node_ expects 'List Sexp' second as arguments")) args in
 
         Vsexp(Node(op, s))
 

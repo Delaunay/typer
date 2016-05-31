@@ -305,10 +305,16 @@ let main () =
                 loop n env Myers.nil in *)
 
         (if (get_p_option "typecheck") then(
+            print_string (make_title " TYPECHECK ");
+
             let cctx = lctx_to_cctx ctx in
             (* run type check *)
             List.iter (fun (_, lxp, _) ->
-                let _ = TC.check cctx lxp in ()) flexps));
+                let _ = TC.check cctx lxp in ()) flexps;
+
+            print_string (make_line '-' 76);
+
+            ));
 
         (if (get_p_option "lexp") then(
             print_string (make_title " Lexp ");
