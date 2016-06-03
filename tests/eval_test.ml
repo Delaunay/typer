@@ -286,7 +286,6 @@ let _ = (add_test "EVAL" "Mutually Recursive Definition" (fun () ->
         two = (succ one);
         three = (succ two);
 
-        odd : Nat -> Int;
         even : Nat -> Int;
         odd = lambda (n : Nat) -> case n
             | zero => 0

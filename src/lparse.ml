@@ -743,6 +743,7 @@ and _lexp_decls decls ctx i: (((vdef * lexp * ltype) list list) * lexp_context) 
             offset := 1);
 
           recursive_mode := true;
+          names := [s]::!names;
           mut := s::!mut;
 
           (* get type *)

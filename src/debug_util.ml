@@ -323,7 +323,19 @@ let main () =
         (if (get_p_option "lctx") then(
             print_lexp_ctx nctx; print_string "\n"));
 
+
+          (*
+        List.iter (fun ((_, n), lxp, _) ->
+          print_string n; print_string "\n")
+            (List.flatten lexps); *)
+
         let clean_lxp = EL.clean_toplevel lexps in
+
+        (*
+        List.iter (fun ((_, n), lxp) ->
+              print_string n; print_string "\n";
+          ) (List.flatten clean_lxp);
+        *)
 
         (* Eval declaration *)
         let rctx = default_rctx in
