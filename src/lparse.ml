@@ -560,7 +560,17 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
         (* Constructor. This case is rarely used *)
         | (Pcons(_, v), _) -> handle_named_call v
 
-        | e, _ -> lexp_fatal (pexp_location e) "This expression cannot be called"
+        | Pcall(fct, sargs2), ltp ->
+            let pargs = List.map pexp_parse sargs in
+            let largs = _lexp_parse_all pargs ctx i in
+            let new_args = List.map (fun g -> (Aexplicit, g)) largs in
+            let body, ltp = lexp_call fct sargs2 ctx (i + 1) in
+              Call(body, new_args), ltp
+
+        | e, _ ->
+        pexp_print e; print_string "\n";
+        print_string ((pexp_to_string e) ^ "\n");
+        lexp_fatal (pexp_location e) "This expression cannot be called"
 
 
 (*  Read a pattern and create the equivalent representation *)

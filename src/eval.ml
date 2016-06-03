@@ -225,7 +225,28 @@ and typer_builtins_impl = [
     ("int_eq"        , int_eq);
     ("sexp_eq"       , sexp_eq);
     ("eval_"         , typer_eval);
+    ("open"          , open_impl);
+    ("bind"          , bind_impl);
+    ("read"          , read_impl);
+    ("write"         , write_impl);
+
 ]
+and bind_impl loc args_val ctx =
+
+  let io, cb = match args_val with
+    | [io; callback] -> io, callback
+    | _ -> builtin_error loc "bind expects two arguments" in
+
+    (* get callback *)
+  let body, ctx = match cb with
+    | Closure(_, body, ctx) -> body, ctx
+    | _ -> builtin_error loc "A Closure was expected" in
+
+    (* add evaluated IO to arg list *)
+  let nctx = add_rte_variable None io ctx in
+
+    (* eval callback *)
+    _eval body nctx 0
 
 and typer_eval loc args ctx =
     let arg = match args with
@@ -248,7 +269,7 @@ and get_builtin_impl str loc =
 
     try SMap.find str !_builtin_lookup
     with Not_found ->
-        eval_error loc "Requested Built-in does not exist"
+        eval_error loc ("Requested Built-in \"" ^ str ^ "\" does not exist")
 
 (* Sexp -> (Sexp -> List Sexp -> Sexp) -> (String -> Sexp) ->
     (String -> Sexp) -> (Int -> Sexp) -> (Float -> Sexp) -> (List Sexp -> Sexp)

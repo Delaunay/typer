@@ -39,6 +39,7 @@ Int    = Built-in "Int";
 Float  = Built-in "Float";
 String = Built-in "String";
 Sexp   = Built-in "Sexp";
+Unit   = Built-in "Unit";
 
 % Basic operators
 _+_ = Built-in "_+_" (Int -> Int -> Int);
@@ -114,9 +115,29 @@ sexp_dispatch_ = Built-in "sexp_dispatch_" (Sexp
         ->  Sexp);
 
 
+% -----------------------------------------------------
+%       Monads
+% -----------------------------------------------------
 
+IO = Built-in "IO" (Type -> Type);
 
+% Builtin bind
+bind = Built-in "bind" (
+  (a : Type) ≡>
+  (b : Type) ≡>
+    IO a -> (a -> IO b) -> (IO b));
 
+% return = Built-in "return" ((a : Type) ≡> a -> IO a);
+
+% File monad
+
+% define a dummy type that supposed to represent a file
+FileHandle = Built-in "FileHandle";
+
+% define operation on file handle
+open  = Built-in "open"  (String -> String -> IO FileHandle);
+write = Built-in "write" (FileHandle -> String -> IO Unit);
+read  = Built-in "read"  (FileHandle -> Int -> IO String);
 
 
 

@@ -38,7 +38,7 @@ open Lexp
 
 open Debruijn
 open Env       (* get_rte_variable *)
-
+open Printf
 
 let builtin_error loc msg =
     msg_error "BUILT-IN" loc msg;
@@ -228,6 +228,44 @@ let sexp_eq loc args_val ctx =
                 | _ -> tfalse)
         | _ -> builtin_error loc "int_eq expects 2 sexp"
 
+
+let open_impl loc args_val ctx =
+
+  let file, mode = match args_val with
+    | [Vstring(file_name); Vstring(mode)] -> file_name, mode
+    | _ -> builtin_error loc "open expects 2 strings" in
+
+  (* open file *) (* return a file handle *)
+  match mode with
+    | "r" -> Vin(open_in file)
+    | "w" -> Vout(open_out file)
+    | _ -> builtin_error loc "wrong open mode"
+
+
+let read_impl loc args_val ctx =
+
+  let channel = match args_val with
+    | [Vin(c); _] -> c
+    | _ ->
+      List.iter (fun v -> value_print v; print_string "\n") args_val;
+      builtin_error loc "read expects a in_channel" in
+
+  let line = input_line channel in
+    Vstring(line)
+
+let write_impl loc args_val ctx =
+
+  let channel, msg = match args_val with
+    | [Vout(c); Vstring(msg)] -> c, msg
+    | _ ->
+      List.iter (fun v -> value_print v) args_val;
+      builtin_error loc "read expects a out_channel" in
+
+    fprintf channel "%s" msg;
+      Vdummy
+
+
+
 (*
  *  Should we have a function that
  *      -> returns a new context inside typer ? (So we need to add a ctx type too)
@@ -236,10 +274,6 @@ let sexp_eq loc args_val ctx =
  *      -> lexp_eval expr
  *      -> ou seulement: 'eval expr ctx'
  *)
-
-
-
-
 
 let is_lbuiltin idx ctx =
     let bsize = 1 in

@@ -169,7 +169,7 @@ let _env_lookup ctx (v: vref): env_elem  =
 let env_lookup_type ctx (v : vref): lexp =
   let (_, idx) = v in
   let (_, _, _, ltp) = _env_lookup ctx v in
-    (Susp (ltp, (S.shift (idx + 1))))
+    mkSusp ltp (S.shift (idx + 1))
 
 let env_lookup_expr ctx (v : vref): lexp =
   let (_, idx) = v in
@@ -179,18 +179,7 @@ let env_lookup_expr ctx (v : vref): lexp =
     | LetDef lxp -> lxp
     | _ -> Sort (dummy_location, Stype (SortLevel (SLn 0))) in
 
-    (*
-    (if (r != 1) then (
-    let s1 = (Susp (lxp, (S.shift (idx - r + 1)))) in
-    let s2 = (Susp (lxp, (S.shift (idx + 1)))) in
-
-      lexp_print (unsusp_all s1); print_string "\n";
-         lexp_print (unsusp_all s2); print_string "\n"; * )
-
-    )); *)
-    (*let idx = if r > 0 then idx - r else idx + 1 in *)
-
-  (Susp (lxp, (S.shift (idx - r + 1))))
+     mkSusp lxp (S.shift (idx + 1 - r))
 
 let env_lookup_by_index index (ctx: lexp_context): env_elem =
     (Myers.nth index (_get_env ctx))
