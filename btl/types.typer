@@ -114,8 +114,20 @@ sexp_dispatch_ = Built-in "sexp_dispatch_" (Sexp
         ->  Sexp);
 
 
+% -----------------------------------------------------
+%       Monads
+% -----------------------------------------------------
 
 
+IO = Built-in "IO" (Type -> Type);
+
+% Builtin bind
+>>= = Built-in ">>=" (
+  (a : Type) ≡>
+  (b : Type) ≡>
+    IO a -> (a -> IO b) -> (IO b));
+
+return = Built-in "return" ((a : Type) ≡> a -> IO a);
 
 
 
