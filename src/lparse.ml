@@ -659,15 +659,44 @@ and lexp_parse_inductive ctors ctx i =
  * to be processed *)
 and lexp_decls_macro (loc, mname) sargs ctx: pdecl list =
   (* lookup for mname_  *)
-  let _ = try senv_lookup mname ctx
+  let idx = try senv_lookup mname ctx
     with Not_found ->
       lexp_warning loc ("Macro \"" ^ mname ^ "\" was not found!"); 0 in
-    (* FIXME *)
-    (* (eval macro) -> Sexp *)
-    (* pexp_decls -> [pdecl] *)
 
-    lexp_warning loc "Macro decls are not implemented yet!";
-    []
+  (* get Macro declaration *)
+  let lxp = try env_lookup_expr ctx ((loc, mname), idx)
+    with Not_found ->
+      lexp_fatal loc (mname ^ " was found but " ^ (string_of_int idx) ^
+                  " is not a correct index.") in
+
+  (* get stored function *)
+  let lxp = match unsusp_all lxp with
+    | Call(Var((_, "Macro_"), _), [(_, fct)]) -> fct
+    | _ -> print_string "\n";
+      print_string (lexp_to_string lxp); print_string "\n";
+      lexp_print lxp; print_string "\n";
+      lexp_fatal loc "Macro is ill formed" in
+
+  (* build new function *)
+  let arg = olist2tlist_lexp sargs ctx in
+  let lxp = Call(lxp, [(Aexplicit, arg)]) in
+  let elexp = EL.erase_type lxp in
+  let rctx = (from_lctx ctx 0) in
+
+  (* get a list of declaration *)
+  let decls = eval elexp rctx in
+
+  (* convert typer list to ocaml *)
+  let decls = tlist2olist [] decls in
+
+  (* extract sexp from result *)
+  let decls = List.map (fun g ->
+    match g with
+      | Vsexp(sxp) -> sxp
+      | _ -> lexp_fatal loc "Macro expects sexp list") decls in
+
+  (* read as pexp_declaraton *)
+    pexp_decls_all decls
 
 (*  Parse let declaration *)
 and lexp_p_decls decls ctx = _lexp_decls decls ctx 0
@@ -762,9 +791,11 @@ and _lexp_decls decls ctx i: (((vdef * lexp * ltype) list list) * lexp_context) 
           glob := SMap.add s (l, s, None, ltp) !glob;
             env_extend vctx (l, s) ForwardRef ltp
 
-      | Pmcall((l, n), sargs) ->
+      | Pmcall((l, n), sargs) -> (
           let pdecls = lexp_decls_macro (l, n) sargs vctx in
-            vctx
+          let decls, nctx =_lexp_decls pdecls vctx (i + 1) in
+            print_lexp_ctx nctx;
+            vctx)
 
       | _ -> vctx) ctx decls in
 
