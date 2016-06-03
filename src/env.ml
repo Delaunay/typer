@@ -59,6 +59,8 @@ type value_type =
     | Vsexp of sexp             (* Values passed to macros.  *)
     (* Unable to eval during macro expansion, only throw if the value is used *)
     | Vdummy
+    | Vin of in_channel
+    | Vout of out_channel
 
 let rec value_print (vtp: value_type) =
     match vtp with
@@ -76,6 +78,9 @@ let rec value_print (vtp: value_type) =
 
         | Vbuiltin(str) -> print_string str
         | Vdummy -> print_string "value_print_dummy"
+        | Vin _ -> print_string "in_channel"
+        | Vout _ -> print_string "out_channel"
+        | _ -> print_string "debug print"
 
 let value_location (vtp: value_type) =
     match vtp with
