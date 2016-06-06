@@ -44,6 +44,9 @@ let builtin_error loc msg =
     msg_error "BUILT-IN" loc msg;
     raise (internal_error msg)
 
+let builtin_warning loc msg =
+    msg_warning "BUILT-IN" loc msg
+
 type predef_table = (lexp option ref) SMap.t
 
 let predef_name = [
@@ -264,7 +267,9 @@ let write_impl loc args_val ctx =
     fprintf channel "%s" msg;
       Vdummy
 
-
+let new_attribute loc args_val ctx =
+  builtin_warning loc "new-attributes to be implemented";
+    Vdummy
 
 (*
  *  Should we have a function that

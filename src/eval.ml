@@ -229,6 +229,7 @@ and typer_builtins_impl = [
     ("bind"          , bind_impl);
     ("read"          , read_impl);
     ("write"         , write_impl);
+    ("new-attribute" , new_attribute)
 
 ]
 and bind_impl loc args_val ctx =

@@ -794,6 +794,7 @@ and _lexp_decls decls ctx i: (((vdef * lexp * ltype) list list) * lexp_context) 
       | Pmcall((l, n), sargs) -> (
           let pdecls = lexp_decls_macro (l, n) sargs vctx in
           let _, _ =_lexp_decls pdecls vctx (i + 1) in
+          (* FIXME: append decls to current decls *)
             vctx)
 
       (* | _ -> vctx*)) ctx decls in
