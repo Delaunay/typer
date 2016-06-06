@@ -46,14 +46,21 @@ let debruijn_warning = msg_warning "DEBRUIJN"
 (*  Type definitions
  * ---------------------------------- *)
 
+
+type property_key = (int * string)  (* rev_dbi * Var name *)
+module PropertyMap
+    = Map.Make (struct type t = property_key let compare = compare end)
+
+module StringMap
+    = Map.Make (struct type t = string let compare = String.compare end)
+
+(* (* rev_dbi * Var name *) => (name * lexp) *)
+type property_elem = lexp StringMap.t
+type property_env = property_elem PropertyMap.t
+
 (* easier to debug with type annotations *)
 type env_elem = (int * vdef option * varbind * ltype)
 type env_type = env_elem myers
-
-
-(* This exist because I don't want that file to depend on anything *)
-module StringMap
-    = Map.Make (struct type t = string let compare = String.compare end)
 
 type db_idx  = int (* DeBruijn index.  *)
 type db_ridx = int (* DeBruijn reverse index (i.e. counting from the root).  *)
@@ -64,24 +71,7 @@ type scope = db_ridx StringMap.t  (*  Map<String, db_ridx>*)
 type senv_length = int  (* it is not the map true length *)
 type senv_type = senv_length * scope
 
-(*
- * outer_size represent the size of the context before entering a "temporary" scope
- * (i.e, function call, case, lambda...)
- * it is used to determine if a variable is bound or not
- *
- *  if var_idx > outer_ctx_size - current_ctx_size then
- *      free_variable
- *  else
- *      bound_variable
- *
- * r_offset was used when parsing declarations. It represented the index of
- * the declaration being parsed
- *
- * Both were used in an older version I left them as we may need to determine
- * if a variable is free or not later on
- *)
-(* name -> index * index -> info * (outer_size, r_offset) *)
-type lexp_context = senv_type * env_type * (int * int)
+type lexp_context = senv_type * env_type * property_env
 
 (*  internal definitions
  * ---------------------------------- *)
@@ -94,7 +84,7 @@ let _get_env(ctx: lexp_context): env_type = let (_, ev, _) = ctx in ev
 (*  Public methods: DO USE
  * ---------------------------------- *)
 
-let make_lexp_context = (_make_senv_type, _make_myers, (0, 0))
+let make_lexp_context = (_make_senv_type, _make_myers, PropertyMap.empty)
 
 let get_roffset ctx = let (_, _, (_, rof)) = ctx in rof
 
@@ -102,7 +92,7 @@ let get_size ctx = let ((n, _), _, _) = ctx in n
 
 (*  return its current DeBruijn index *)
 let rec senv_lookup (name: string) (ctx: lexp_context): int =
-    let ((n, map), _, (csize, rof)) = ctx in
+    let ((n, map), _, _) = ctx in
     let raw_idx =  n - (StringMap.find name map) - 1 in (*
         if raw_idx > (n - csize) then
             raw_idx - rof   (* Shift if the variable is not bound *)
@@ -125,7 +115,6 @@ let env_add_var_info var (ctx: lexp_context) =
         (a, cons (var) env, f)
 
 let env_extend (ctx: lexp_context) (def: vdef) (v: varbind) (t: lexp) =
-  let ((n, map), e, f) = ctx in
     env_add_var_info (1, Some def, v, t) (senv_add_var def ctx)
 
 
@@ -194,6 +183,12 @@ let replace_by ctx name by =
     match ctx with
       | Mnil -> debruijn_error dummy_location
             ("Replace error. This expression does not exist: " ^  name)
+      | Mcons((_, None, _, _) as elem, tl1, i, tl2) ->
+          (* Skip some elements if possible *)
+          if idx <= i then replace_by' tl1 by (elem::acc)
+          else replace_by' tl2 by (elem::acc)
+            (* replace_by' tl1 by (elem::acc) *)
+
       | Mcons((_, Some (b, n), _, _) as elem, tl1, i, tl2) ->
         if n = name then
           (cons by tl1), acc

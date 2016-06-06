@@ -80,7 +80,7 @@ let rec value_print (vtp: value_type) =
         | Vdummy -> print_string "value_print_dummy"
         | Vin _ -> print_string "in_channel"
         | Vout _ -> print_string "out_channel"
-        | _ -> print_string "debug print"
+        (* | _ -> print_string "debug print" *)
 
 let value_location (vtp: value_type) =
     match vtp with
@@ -100,6 +100,8 @@ let value_name v =
     | Closure _ -> "Closure"
     | Vsexp _ -> "Vsexp"
     | Vdummy -> "Vdummy"
+    | Vin _ -> "Vin"
+    | Vout _ -> "Vout"
 
 (*  Runtime Environ *)
 type env_cell = (string option * value_type) ref

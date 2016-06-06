@@ -719,7 +719,7 @@ and _lexp_decls decls ctx i: (((vdef * lexp * ltype) list list) * lexp_context) 
   let ctx = List.fold_left (fun vctx expr ->
     _global_lexp_trace := [];
     match expr with
-      | Pexpr((l, s), pxp) as e ->(
+      | Pexpr((l, s), pxp) ->(
         try let idx = senv_lookup s vctx in
             let ltp = env_lookup_type vctx ((l, s), idx) in
             let lxp = lexp_p_check pxp ltp vctx in
@@ -776,7 +776,7 @@ and _lexp_decls decls ctx i: (((vdef * lexp * ltype) list list) * lexp_context) 
 
             env_extend vctx (l, s) (LetDef lxp) ltp)
 
-      | Ptype((l, s), ptp) as e ->
+      | Ptype((l, s), ptp) ->
           (if !recursive_mode then () else
             last_decls := s;
             offset := 1);
@@ -793,11 +793,10 @@ and _lexp_decls decls ctx i: (((vdef * lexp * ltype) list list) * lexp_context) 
 
       | Pmcall((l, n), sargs) -> (
           let pdecls = lexp_decls_macro (l, n) sargs vctx in
-          let decls, nctx =_lexp_decls pdecls vctx (i + 1) in
-            print_lexp_ctx nctx;
+          let _, _ =_lexp_decls pdecls vctx (i + 1) in
             vctx)
 
-      | _ -> vctx) ctx decls in
+      (* | _ -> vctx*)) ctx decls in
 
   (*
   (if List.length !mut != 0 then names := !mut::!names); *)
