@@ -9,16 +9,13 @@ OBFLAGS = -build-dir _build
 
 all: typer debug tests-build
 
-ifeq ($(OS), Windows_NT)
+# ifeq ($(OS), Windows_NT)
 # Windows need '-r' and building to native can be problematic (linking error)
 # So we build to byte instead
-OBFLAGS = $(OBFLAGS) -r
-endif
+# OBFLAGS = $(OBFLAGS) -r
+# endif
 
 COMPILE_MODE = byte
-
-
-
 
 # debug file eval
 debug:

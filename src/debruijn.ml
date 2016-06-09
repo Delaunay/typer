@@ -55,7 +55,7 @@ module StringMap
     = Map.Make (struct type t = string let compare = String.compare end)
 
 (* (* rev_dbi * Var name *) => (name * lexp) *)
-type property_elem = lexp StringMap.t
+type property_elem = lexp PropertyMap.t
 type property_env = property_elem PropertyMap.t
 
 (* easier to debug with type annotations *)
@@ -202,51 +202,4 @@ let replace_by ctx name by =
   (* add old declarations *)
   let nenv = List.fold_left (fun ctx elem -> cons elem ctx) nenv decls in
     (a, nenv, b)
-
-(* shift an entire expression by n  *)
-let rec db_shift expr n =
-  let db_shift lxp = db_shift lxp n in
-    match expr with
-    (* Nothing to shift *)
-     | Imm _       -> expr
-     | SortLevel _ -> expr
-     | Sort _      -> expr
-     | Builtin _   -> expr
-
-     | Var (s, idx)       -> Var(s, idx + n)
-     | Susp(lxp, s)       -> Susp(db_shift lxp, s)
-     | Cons((s, idx), t)  -> Cons((s, idx + n), t)
-
-     | Let(l, decls, lxp) ->
-      let decls = List.map (fun (var, lxp, ltp) ->
-        var, db_shift lxp, db_shift ltp) decls in
-          Let(l, decls, db_shift lxp)
-
-     | Arrow(kind, var, ltp, l, lxp) ->
-      Arrow(kind, var, db_shift ltp, l, db_shift lxp)
-
-     | Lambda(kind, var, ltp, lxp) ->
-      Lambda(kind, var, db_shift ltp, db_shift lxp)
-
-     | Call(lxp, args) ->
-      let args = List.map (fun (kind, lxp) -> (kind, db_shift lxp)) args in
-        Call(db_shift lxp, args)
-
-     | Inductive(l, nm, fargs, ctors) ->
-      let fargs = List.map (fun (kind, var, ltp) -> (kind, var, db_shift ltp))
-        fargs in
-      let ctors = SMap.map (fun args ->
-        List.map (fun (kind, var, ltp) -> (kind, var, db_shift ltp)) args)
-        ctors in
-          Inductive(l, nm, fargs, ctors)
-
-     | Case(l, tlxp, tltp, retltp, branch, dflt) ->
-      let dflt = match dflt with
-        | Some lxp -> Some (db_shift lxp)
-        | None -> None in
-
-      let branch = SMap.map (fun (l, args, lxp) ->
-        (l, args, db_shift lxp)) branch in
-          Case(l, db_shift tlxp, db_shift tltp, db_shift retltp, branch, dflt)
-
 
