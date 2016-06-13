@@ -36,7 +36,9 @@ let rec unify (l: lexp) (r: lexp) (subst: substitution) : return_type =
     match (l, r) with
       | (Imm, Imm)   -> _unify_imm l r subst
       | (Builtin, _) -> _unify_builtin l r subst
+      | (_, Builtin) -> _unify_builtin r l subst
       | (Let, _)     -> _unify_let l r subst
+      | (_, Let)     -> _unify_let r l subst
       | (Cons, Cons) -> None (*Useless ??*)
       | (_, _)       -> None
 
