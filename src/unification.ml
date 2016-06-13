@@ -73,7 +73,10 @@ let _unify_builtin (l: lexp) (r: lexp) (subst: substitution) : return_type =
     | (Builtin (_, lxp), _) -> unify lxp r subst
     | (_, _) -> None
 
-let _unify_let (l: lexp) (r: lexp) (subst: substitution) : return_type = (*TODO*)
+let _unify_let (l: lexp) (r: lexp) (subst: substitution) : return_type =
+  match l with (* Discard the middle part of Let : right behavior ? *)
+    | Let (_, _, lxp) -> unify lxp r subst
+    | _ -> None
 
 (** Generate the next metavar by assuming that the key goes from
  * one to X, so the next metavar is `(lenght subst) + 1`*)
