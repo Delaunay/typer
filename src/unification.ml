@@ -18,7 +18,8 @@ type return_type = (substitution * constraints) option
  * Imm       , Imm                -> if Imm =/= Imm then ERROR else ??
  * Cons      , Cons               -> ERROR
  * Builtin   , Builtin            -> if Builtin =/= Builtin then error else UNIFY ?
- * Let       , lexp               -> try UNIFY
+ * Builtin   , lexp               -> try UNIFY ?
+ * Let       , lexp               -> try UNIFY (???)
  * Var       , lexp               -> try UNIFY
  * Arrow     , lexp               -> try UNIFY
  * Call      , lexp               -> try UNIFY
@@ -29,6 +30,9 @@ type return_type = (substitution * constraints) option
  * metavar   , metavar            -> ?
  * lexp      , lexp               -> ERROR
  * Sort(Level) ??
+
+ * lexp mean that that it ca be any lexp
+ * Let , lexp == lexp , Let
  *)
 (*Maybe transform the result to return_type only at the end of the function ?*)
 let rec unify (l: lexp) (r: lexp) (subst: substitution) : return_type =
@@ -42,7 +46,8 @@ let rec unify (l: lexp) (r: lexp) (subst: substitution) : return_type =
       | (Cons, Cons) -> None (*Useless ??*)
       | (_, _)       -> None
 
-(** Add one of the Imm (the first arguement) to the substitution *)
+(** Unify two Imm if they match *)
+(* Add one of the Imm (the first arguement) to the substitution *)
 let _unify_imm (l: lexp) (r: lexp) (subst: substitution) : return_type =
   match (l, r) with
     | (Imm (String (_, v1)), Imm (String (_, v2))
@@ -59,6 +64,7 @@ let _unify_imm (l: lexp) (r: lexp) (subst: substitution) : return_type =
        else None
     | (_, _) -> None
 
+(** Unify two a builtin (l) and a lexp (r) if it is possible *)
 let _unify_builtin (l: lexp) (r: lexp) (subst: substitution) : return_type =
   match (l, r) with
     | (Builtin ((_, name1), _), Builtin ((_, name2),_))
