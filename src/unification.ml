@@ -59,15 +59,15 @@ let rec _unify_arrow (arrow: lexp) (lxp: lexp) (subst: substitution)
   (*?????*)
   | (Arrow (_, _, ltype1, lexp1), Arrow (_, _, ltype2, lexp2))
     -> if var_kind1 = var_kind2
-    then _unify_inner_arrow ltype1 lexp1 ltype2 lexp2
+    then _unify_inner_arrow ltype1 lexp1 ltype2 lexp2 susbt
     else None
   (*| *)
   | (_, _) -> None
 
 let _unify_inner_arrow (lxp1: lexp) (lt1: lexp)
-    (lxp2: lexp) (lt2: lexp) : return_type =
+    (lxp2: lexp) (lt2: lexp) (subst: substitution): return_type =
   match unify lt1 lt2 subst with
-  | Some (subst_, const) -> (
+  | Some (subst_, const) -> ( (*bracket for formating*)
       match unify lxp1 lxp2 subst_ with
       | Some (s, c) -> Some(s, const@c)
       | None -> None )
