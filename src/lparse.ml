@@ -484,26 +484,6 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
         let elexp = EL.erase_type lxp in
         let rctx = (from_lctx ctx 0) in
 
-        (*
-        let rargs = eval (EL.erase_type arg) rctx in
-        let  rctx = add_rte_variable None rargs rctx in
-
-        let lxp = Susp(lxp, (SU.shift 1)) in
-        let body = eval (EL.erase_type lxp) rctx in
-
-        print_string "HERE2\n";
-        value_print body; *)
-        (*
-
-        print_string "\n\n";
-        lexp_print lxp; print_string "\n\n"; *)
-
-        (* print_string "DH: ";
-           value_print (eval (EL.erase_type arg) rctx);  print_string "\n"; *)
-        (*
-         print_rte_ctx rctx; print_string "\n";
-         print_lexp_ctx ctx; print_string "\n";*)
-
         _global_eval_trace := [];
 
         let vxp = try eval elexp rctx
@@ -524,34 +504,6 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
 
         let pxp = pexp_parse sxp in
             _lexp_p_infer pxp ctx (i + 1)  in
-
-    (*
-    let handle_qq loc =
-        (* In quasi quote we need to traverse the sexp tree and evaluate
-         * (uq) calls                                                         *)
-
-        let rec seek_n_replace sxp =
-            match sxp with
-                (* Unquote *)
-                | Node (Symbol(_, "uquote"), [arg]) ->(
-                     let parg = pexp_parse arg in
-                     let larg, _ = _lexp_p_infer parg ctx i in
-                     let vsxp = eval larg (from_lctx ctx) in
-                        match vsxp with
-                            | Vint    (i)   -> Integer(loc, i)
-                            | Vstring (s)   -> String (loc, s)
-                            | Vsexp(sxp)    -> sxp
-                            | _ ->
-                                value_print vsxp;
-                                lexp_warning loc "Sexp was expected"; Epsilon)
-
-                | Node (op, lst)     -> Node(op, (List.map seek_n_replace lst))
-                | _ -> sxp in
-
-        let sxp = match sargs with
-            | [sxp] -> seek_n_replace sxp
-            | _ -> lexp_error loc "qquote expects a sexp"; Epsilon in
-                Imm(sxp), type_sexp in *)
 
     (* determine function type *)
     match fun_name, ltp with
@@ -853,170 +805,8 @@ and _lexp_rec_decl decls ctx i =
 
         (List.rev !lst), ctx
 
-        (*
-and _lexp_decls decls ctx i: (((vdef * lexp * ltype) list list) * lexp_context) =
-
-  let names = ref [] in (* decls name in correct order *)
-  let glob = ref SMap.empty in
-  let mut = ref [] in
-  let offset = ref 1 in
-  let last_decls = ref "" in
-  let recursive_mode = ref false in
-
-  let ctx = List.fold_left (fun vctx expr ->
-    _global_lexp_trace := [];
-    match expr with
-      | Pexpr((l, s), pxp) ->(
-        try let idx = senv_lookup s vctx in
-            let ltp = env_lookup_type vctx ((l, s), idx) in
-            let lxp = lexp_p_check pxp ltp vctx in
-              (* update declaration *)
-              glob := SMap.add s (l, s, Some lxp, ltp) !glob;
-
-            (* check if recursive definition *)
-            (if !last_decls = s && !recursive_mode then
-              (
-                (* print_string "RECURSIVE END\n"; *)
-                (* push every variable with the correct offset *)
-                let d = List.rev !mut in
-                let length = (List.length d) + 1 in
-                let j = ref 0 in
-
-                let vctx =
-                List.fold_left (fun vctx n ->
-                  let (l, s, lxp, ltp) = SMap.find n !glob in
-                  let lxp = match lxp with
-                    | Some lxp -> LetDef lxp
-                    | None -> lexp_warning dloc "ForwardRef are not allowed";
-                      ForwardRef in
-
-                    j := !j + 1;
-                    replace_by vctx s (length - !j, Some (l, s), lxp, ltp)) vctx d
-
-                  in
-
-                (* Clean everything *)
-                mut := [];
-                last_decls := "";
-                recursive_mode := false;
-                vctx
-              )
-            else
-              (
-                (if !recursive_mode then offset := !offset + 1);
-                (* update context *)
-                replace_by vctx s (1, Some (l, s), (LetDef lxp), ltp);
-              ));
-
-        with Not_found ->
-          (* Add dummy first *)
-          let tctx = env_extend vctx (l, s) ForwardRef dltype in
-          let lxp, ltp = lexp_p_infer pxp tctx in
-
-            names := [s]::!names;
-
-            (if !recursive_mode then (
-              offset := !offset + 1;
-              mut := s::!mut));
-
-            glob := SMap.add s (l, s, Some lxp, ltp) !glob;
-
-            env_extend vctx (l, s) (LetDef lxp) ltp)
-
-      | Ptype((l, s), ptp) ->
-          (if !recursive_mode then () else
-            last_decls := s;
-            offset := 1);
-
-          recursive_mode := true;
-          names := [s]::!names;
-          mut := s::!mut;
-
-          (* get type *)
-          let ltp, _ = lexp_p_infer ptp vctx in
-          (* push *)
-          glob := SMap.add s (l, s, None, ltp) !glob;
-            env_extend vctx (l, s) ForwardRef ltp
-
-      | Pmcall((l, n), sargs) -> (
-          let pdecls = lexp_decls_macro (l, n) sargs vctx in
-          let _, _ =_lexp_decls pdecls vctx (i + 1) in
-
-            vctx)
-
-      (* | _ -> vctx*)) ctx decls in
-
-  (*
-  (if List.length !mut != 0 then names := !mut::!names); *)
-
-  (* return a list containing mutually recursive def *)
-  let merge_list names =
-    List.fold_left (fun acc key ->
-      let (l, s, lxp, ltp) = SMap.find key !glob in
-      let lxp = match lxp with
-        | Some lxp -> lxp
-        | None -> dltype in
-
-      (*
-      let ltp = unsusp_all ltp in
-      let lxp = unsusp_all lxp in *)
-          ((l, s), lxp, ltp)::acc) [] names in
-
-  let decls = List.map (fun names ->
-    merge_list names) (List.rev !names) in
-
-        decls, ctx
-*)
-
 and lexp_decls_toplevel decls ctx =
   _lexp_decls decls ctx 1
-
-  (* let names = ref [] in
-  let offset = ref 0 in
-  let merged = ref SMap.empty in
-  let acc = ref [] in
-
-  let ctx = List.fold_left (fun vctx expr ->
-    match expr with
-      | Pexpr ((l, s), pxp) ->(
-        try let idx = senv_lookup s vctx in
-          let ltp = env_lookup_type vctx ((l, s), idx) in
-          let lxp = lexp_p_check pxp ltp vctx in
-          let (_, _, _, ltp) = SMap.find s !merged in
-          merged := SMap.add s (l, s, Some lxp, ltp) !merged;
-          let r = !offset in
-          let r = if r = 0 then 1 else r in
-            offset := 0;
-            replace_by vctx s (r, Some (l, s), (LetDef lxp), ltp);
-
-        with Not_found ->
-          (* Add dummy first *)
-          let tctx = env_extend vctx (l, s) ForwardRef dltype in
-          let lxp, ltp = lexp_p_infer pxp tctx in
-            names := s::!names;
-            merged := SMap.add s (l, s, Some lxp, ltp) !merged;
-            env_extend vctx (l, s) (LetDef lxp) ltp)
-
-      | Ptype ((l, s), ptp) ->
-        offset := !offset + 1;
-        let ltp, _ = lexp_p_infer ptp vctx in
-          names := s::!names;
-          merged := SMap.add s (l, s, None, ltp) !merged;
-          env_extend vctx (l, s) ForwardRef ltp
-
-      | _ -> vctx) ctx decls in
-
-    (* merge type and expr *)
-    let decls = List.fold_left (fun acc key ->
-      let (l, s, lxp, ltp) = SMap.find key !merged in
-      let lxp = match lxp with
-        | Some lxp -> lxp
-        | None -> dltype in
-      let ltp = unsusp_all ltp in
-      let lxp = unsusp_all lxp in
-          ((l, s), lxp, ltp)::acc) [] !names in
-
-    decls, ctx *)
 
 and _lexp_parse_all (p: pexp list) (ctx: lexp_context) i : lexp list =
 
@@ -1194,13 +984,6 @@ let default_rctx =
       let rctx = eval_decls_toplevel (EL.clean_toplevel d) rctx in
         _global_eval_trace := [];
         rctx
-    (*
-    try (from_lctx (default_lctx))
-        with e ->(
-            print_eval_trace ();
-            lexp_error dloc "Could not convert lexp context into rte context";
-            raise e) *)
-
 
 (*      String Parsing
  * --------------------------------------------------------- *)
