@@ -45,11 +45,14 @@ let rec unify (l: lexp) (r: lexp) (subst: substitution) : return_type =
       | (_, Builtin) -> _unify_builtin r l subst
       | (Let, _)     -> _unify_let l r subst
       | (_, Let)     -> _unify_let r l subst
-      | (Var, _)     -> _unify_var l r subst (*TODO*)
-      | (_, Var)     -> _unify_var r l subst (*TODO*)
+      | (Var, _)     -> _unify_var l r subst (*TODO : work in progress*)
+      | (_, Var)     -> _unify_var r l subst (*TODO : work in progress*)
+      | (Arrow, _)   -> _unify_arrow l r subst
+      | (_, Arrow)   -> _unify_arrow r l subst
       | (Cons, Cons) -> None (*Useless ??*)
       | (_, _)       -> None
 
+let rec _unify_arrow (arrow: lexp) (lxp: lexp)
 
 (*TODO : shift db_index*)
 let _unify_var (l: lexp) (r: lexp) (subst: substitution) : return_type =
