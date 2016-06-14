@@ -18,7 +18,7 @@ type return_type = (substitution * constraints) option
  * Imm       , Imm                -> if Imm =/= Imm then ERROR else ??
  * Cons      , Cons               -> ERROR
  * Builtin   , Builtin            -> if Builtin =/= Builtin then error else UNIFY ?
- * Builtin   , lexp               -> try UNIFY ?
+ * Builtin   , lexp               -> try UNIFY lexp of Builtin with lexp (???)
  * Let       , lexp               -> try UNIFY (???)
  * Var       , Var                -> if db_index ~= db_index UNIFY else ERROR
  * Var       , MetaVar            -> UNIFY Metavar
@@ -58,7 +58,7 @@ let _unify_var (l: lexp) (r: lexp) (subst: substitution) : return_type =
       -> if idx1 = idx2 then (add_substitution l subst, ())
       else None
     | (Var, Metavar) -> _unify_metavar r l subst
-    (*(Var, _) -> ???(*TODO*)*)
+    (*| (Var, _) -> ???(*TODO*)*)
     | (_, _)   -> None
 
 (** Unify two Imm if they match *)
@@ -76,24 +76,24 @@ let _unify_imm (l: lexp) (r: lexp) (subst: substitution) : return_type =
        else None
     | (_, _) -> None
 
-(** Unify a builtin (l) and a lexp (r) if it is possible
+(** Unify a builtin (bltin) and a lexp (lxp) if it is possible
  * If the two arguments are builtin, unify based on name
  * If it's a Builtin and an other lexp, unify lexp part of Builtin with the lexp
  *)
-let _unify_builtin (l: lexp) (r: lexp) (subst: substitution) : return_type =
-  match (l, r) with
+let _unify_builtin (bltin: lexp) (lxp: lexp) (subst: substitution) : return_type =
+  match (bltin, lxp) with
     | (Builtin ((_, name1), _), Builtin ((_, name2),_))
       -> if name1 = name2 then (add_substitution l subst, ())
       else None (* assuming that builtin have unique name *)
-    | (Builtin (_, lxp), _) -> unify lxp r subst
+    | (Builtin (_, lxp_), _) -> unify lxp lxp subst
     | (_, _) -> None
 
-(** Unify a Let (l) and a lexp (r), if possible
+(** Unify a Let (let_) and a lexp (lxp), if possible
  * Unify the lexp pat of the Let with the lexp
  *)
-let _unify_let (l: lexp) (r: lexp) (subst: substitution) : return_type =
-  match l with (* Discard the middle part of Let : right behavior ? *)
-    | Let (_, _, lxp) -> unify lxp r subst
+let _unify_let (let_: lexp) (lxp: lexp) (subst: substitution) : return_type =
+  match let_ with (* Discard the middle part of Let : right behavior ? *)
+    | Let (_, _, lxp_) -> unify lxp_ lxp subst
     | _ -> None
 
 (** Generate the next metavar by assuming that the key goes from
