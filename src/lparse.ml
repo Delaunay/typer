@@ -462,9 +462,7 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
                 lexp_fatal loc ("Could not find Variable: " ^ name) in
 
         (* Get the macro *)
-        let lxp = try env_lookup_expr ctx ((loc, name), idx) (* with
-            | e -> e
-            | _ -> lexp_fatal loc "The macro cannot be expanded"; *)
+        let lxp = try env_lookup_expr ctx ((loc, name), idx)
           with Not_found ->
             lexp_fatal loc (name ^ " was found but " ^ (string_of_int idx) ^
                   " is not a correct index.") in
@@ -515,6 +513,18 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
             let new_args = List.map (fun g -> (Aexplicit, g)) largs in
                 Call(body, new_args), ltp
 
+        (* attribute *)
+        | Pvar(l, "new-attribute"), _ ->
+          let pargs = List.map pexp_parse sargs in
+          let largs = _lexp_parse_all pargs ctx i in
+
+          let eltp = match largs with
+              | [eltp] -> eltp
+              | _ -> lexp_warning l "new-attribute expects one argument";
+                dltype in
+
+            eltp, ltp
+
         | (Pvar (l, n), Var((_, "Macro"), _)) ->
             (* FIXME: check db_idx points too a Macro type *)
             handle_macro_call (l, n)
@@ -533,9 +543,9 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
               Call(body, new_args), ltp
 
         | e, _ ->
-        pexp_print e; print_string "\n";
-        print_string ((pexp_to_string e) ^ "\n");
-        lexp_fatal (pexp_location e) "This expression cannot be called"
+          pexp_print e; print_string "\n";
+          print_string ((pexp_to_string e) ^ "\n");
+          lexp_fatal (pexp_location e) "This expression cannot be called"
 
 
 (*  Read a pattern and create the equivalent representation *)
@@ -622,7 +632,7 @@ and lexp_parse_inductive ctors ctx i =
 
 (* Macro declaration handling, return a list of declarations
  * to be processed *)
-and lexp_decls_macro (loc, mname) sargs ctx: pdecl list =
+and lexp_decls_macro (loc, mname) sargs ctx: (pdecl list * lexp_context) =
   (* lookup for mname_  *)
   let idx = try senv_lookup mname ctx
     with Not_found ->
@@ -642,26 +652,43 @@ and lexp_decls_macro (loc, mname) sargs ctx: pdecl list =
       lexp_print lxp; print_string "\n";
       lexp_fatal loc "Macro is ill formed" in
 
-  (* build new function *)
-  let arg = olist2tlist_lexp sargs ctx in
-  let lxp = Call(lxp, [(Aexplicit, arg)]) in
-  let elexp = EL.erase_type lxp in
-  let rctx = (from_lctx ctx 0) in
+    match lxp with
+      | Var((_, "add-attribute"), _) ->(
+        (* Builtin macro *)
+          let pargs = List.map pexp_parse sargs in
+          let largs = _lexp_parse_all pargs ctx 0 in
 
-  (* get a list of declaration *)
-  let decls = eval elexp rctx in
+          (* extract info *)
+          let var, att, fn = match largs with
+            | [Var((_, vn), vi); Var((_, an), ai); fn] -> (vn, vi), (an, ai), fn
+            | _ -> lexp_fatal loc "add-attribute expects 3 args" in
 
-  (* convert typer list to ocaml *)
-  let decls = tlist2olist [] decls in
+          let ctx = add_property ctx var att fn in
 
-  (* extract sexp from result *)
-  let decls = List.map (fun g ->
-    match g with
-      | Vsexp(sxp) -> sxp
-      | _ -> lexp_fatal loc "Macro expects sexp list") decls in
+          [], ctx
+        )
+        (* Standard Macro *)
+      | _ -> (
+        (* build new function *)
+        let arg = olist2tlist_lexp sargs ctx in
+        let lxp = Call(lxp, [(Aexplicit, arg)]) in
+        let elexp = EL.erase_type lxp in
+        let rctx = (from_lctx ctx 0) in
 
-  (* read as pexp_declaraton *)
-    pexp_decls_all decls
+        (* get a list of declaration *)
+        let decls = eval elexp rctx in
+
+        (* convert typer list to ocaml *)
+        let decls = tlist2olist [] decls in
+
+        (* extract sexp from result *)
+        let decls = List.map (fun g ->
+          match g with
+            | Vsexp(sxp) -> sxp
+            | _ -> lexp_fatal loc "Macro expects sexp list") decls in
+
+        (* read as pexp_declaraton *)
+          pexp_decls_all decls, ctx)
 
 (*  Parse let declaration *)
 and lexp_p_decls decls ctx = _lexp_decls decls ctx 0
@@ -753,7 +780,7 @@ and _lexp_decls decls ctx i: ((vdef * lexp * ltype) list list * lexp_context) =
       (* Special case *)
       | [Lmcall ((l, s), sargs)] ->
         (* get pexp decls *)
-        let pdecls = lexp_decls_macro (l, s) sargs ctx in
+        let pdecls, ctx = lexp_decls_macro (l, s) sargs ctx in
         let decls, ctx = _lexp_decls pdecls ctx i in
           all := (List.append (List.rev decls) !all);
             ctx

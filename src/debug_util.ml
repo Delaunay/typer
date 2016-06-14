@@ -321,6 +321,10 @@ let main () =
 
             ) flexps));
 
+        (if (get_p_option "dump-prop") then(
+          dump_properties ctx;
+          print_string "\n"));
+
         (* get typecheck context *)
         let lctx_to_cctx (lctx: lexp_context) =
           let (_, env, _) = ctx in env in

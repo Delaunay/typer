@@ -150,7 +150,7 @@ read  = Built-in "read"  (FileHandle -> Int -> IO String);
 Attribute = Built-in "Attribute";
 new-attribute = Built-in "new-attribute" (Type -> Attribute);
 
-
+add-attribute = Built-in "add-attribute" (Sexp ->  Sexp -> Sexp -> List Sexp);
 
 
 

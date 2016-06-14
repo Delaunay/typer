@@ -106,7 +106,7 @@ let rec _eval lxp ctx i: (value_type) =
 
 
 and get_predef_eval name ctx =
-  let r = (get_rte_size ctx) - !builtin_size + 1in
+  let r = (get_rte_size ctx) - !builtin_size in
   let v = mkSusp (get_predef name) (S.shift r) in
     _eval (erase_type v) ctx 0
 
@@ -241,9 +241,8 @@ and typer_builtins_impl = [
     ("run-io"        , run_io);
     ("read"          , read_impl);
     ("write"         , write_impl);
-    ("new-attribute" , new_attribute)
-
 ]
+
 and bind_impl loc args_val ctx =
 
   let io, cb = match args_val with
@@ -395,45 +394,3 @@ let from_lctx (ctx: lexp_context) rm: runtime_env =
     done;
 
     !rctx
-
-    (* let ((n, _), env, _) = ctx in
-    let rctx = ref make_runtime_ctx in
-
-    let bsize = 0 in
-    let csize = n - 1 in
-
-    (* add all variables * )
-    for i = bsize to csize do
-        let name = match (Myers.nth (csize - i) env) with
-          | (_, Some (_, name), _, _) -> Some name
-          | _ -> None in
-
-        rctx := add_rte_variable name Vdummy (!rctx)
-    done; *)
-
-    let diff = csize - bsize in
-
-    (* process all of them *)
-    for i = 0 to diff do
-      try
-        let j = diff - i (* - 1 *) in
-        let name, exp = match Myers.nth (csize - i) env with
-          | (_, Some (_, name), LetDef exp, _) -> Some name, Some exp
-          | _ -> None, None in
-
-        let vxp = match exp with
-            | Some lxp ->
-                let lxp = (erase_type lxp) in
-                    (try (eval lxp !rctx)
-                        with e -> elexp_print lxp;
-                          print_string "\n"; raise e)
-
-            | None -> Vdummy in
-                rctx := add_rte_variable name vxp (!rctx)
-
-      with Not_found ->
-        print_int n; print_string " ";
-        print_int (csize - i); print_string "\n ";
-        raise Not_found
-    done;
-        !rctx *)

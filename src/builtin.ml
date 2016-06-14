@@ -161,7 +161,9 @@ let rec tlist2olist acc expr =
             tlist2olist (hd::acc) tl
         | Vcons((_, "nil"), []) -> List.rev acc
         | _ ->
+            print_string (value_name expr); print_string "\n";
             value_print expr;
+
             builtin_error dloc "List conversion failure'"
 
 let make_node loc args_val ctx    =

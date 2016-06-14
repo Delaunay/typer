@@ -203,3 +203,71 @@ let replace_by ctx name by =
   let nenv = List.fold_left (fun ctx elem -> cons elem ctx) nenv decls in
     (a, nenv, b)
 
+(* -------------------------------------------------------------------------- *)
+(*          PropertyMap                                                       *)
+(* -------------------------------------------------------------------------- *)
+
+
+let add_property ctx (var_n, var_i) (att_n, att_i) (prop: lexp)
+    : lexp_context =
+
+  let (a, b, property_map) = ctx in
+  let n = get_size ctx in
+
+  (* get_var properties  *)
+  let vmap = try PropertyMap.find (var_i, var_n) property_map
+    with Not_found -> PropertyMap.empty in
+
+  (* add property *)
+  let nvmap = PropertyMap.add (n - att_i, att_n) prop vmap in
+
+  (* update properties *)
+  let property_map = PropertyMap.add (n - var_i, var_n) nvmap property_map in
+
+    (a, b, property_map)
+
+
+let dump_properties ctx =
+  let (a, b, property_map) = ctx in
+  print_string (make_title " Properties ");
+
+  make_rheader [
+        (Some ('l', 10), "V-NAME");
+        (Some ('l',  4), "RIDX");
+        (Some ('l', 10), "P-NAME");
+        (Some ('l',  4), "RIDX");
+        (Some ('l', 32), "LEXP")];
+
+  print_string (make_sep '-');
+
+  PropertyMap.iter (fun (var_i, var_n) pmap ->
+    print_string "    | ";
+    lalign_print_string var_n 10; print_string " | ";
+    ralign_print_int var_i 4; print_string " | ";
+    let first = ref true in
+
+    PropertyMap.iter (fun (att_i, att_n) lxp ->
+      (if (!first = false) then
+        print_string (make_line ' ' 20)
+      else
+        first := false);
+
+      lalign_print_string att_n 10; print_string " | ";
+      ralign_print_int att_i 4; print_string " : ";
+      lexp_print lxp; print_string "\n") pmap) property_map;
+
+  print_string (make_sep '-');
+
+
+
+
+
+
+
+
+
+
+
+
+
+
