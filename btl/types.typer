@@ -134,6 +134,11 @@ bind = Built-in "bind" (
 FileHandle = Built-in "FileHandle";
 
 % define operation on file handle
+run-io = Built-in "run-io" (
+  (a : Type) ≡>
+  (b : Type) ≡>
+    IO a -> (a -> IO b) -> (IO b) -> Unit);
+
 open  = Built-in "open"  (String -> String -> IO FileHandle);
 write = Built-in "write" (FileHandle -> String -> IO Unit);
 read  = Built-in "read"  (FileHandle -> Int -> IO String);
@@ -143,7 +148,7 @@ read  = Built-in "read"  (FileHandle -> Int -> IO String);
 % -----------------------------------------------------
 
 Attribute = Built-in "Attribute";
-new-attribute = Built-in "new-attribute"  (Type -> Attribute);
+new-attribute = Built-in "new-attribute" (Type -> Attribute);
 
 
 

@@ -61,6 +61,7 @@ let _eval_max_recursion_depth = ref 255
 let reset_eval_trace () = _global_eval_trace := []
 let _builtin_lookup = ref SMap.empty
 
+
 (* This is an internal definition
  * 'i' is the recursion depth used to print the call trace *)
 let rec _eval lxp ctx i: (value_type) =
@@ -103,6 +104,12 @@ let rec _eval lxp ctx i: (value_type) =
         | _ -> print_string "debug catch-all eval: ";
             elexp_print lxp; print_string "\n"; Vstring("eval Not Implemented")
 
+
+and get_predef_eval name ctx =
+  let r = (get_rte_size ctx) - !builtin_size + 1in
+  let v = mkSusp (get_predef name) (S.shift r) in
+    _eval (erase_type v) ctx 0
+
 and eval_var ctx lxp v =
     let ((loc, name), idx) = v in
     try get_rte_variable (Some name) (idx) ctx
@@ -111,38 +118,38 @@ and eval_var ctx lxp v =
 
 and eval_call ctx i lname eargs =
     let loc = elexp_location lname in
-    let args = List.map (fun e ->
-      (* elexp_print e; print_string "\n"; *)
-      _eval e ctx (i + 1)) eargs in
     let f = _eval lname ctx (i + 1) in
 
+    (* standard function *)
     let rec eval_call f args ctx =
-        match f, args with
-            | Vcons (n, []), _ ->
-              let e = Vcons(n, args) in
-                (* value_print e; print_string "\n"; *) e
+      match f, args with
+        | Vcons (n, []), _ ->
+          let e = Vcons(n, args) in
+            (* value_print e; print_string "\n"; *) e
 
-            (* we add an argument to the closure *)
-            | Closure (n, lxp, ctx), hd::tl ->
-                let nctx = add_rte_variable (Some n) hd ctx in
-                let ret = _eval lxp nctx (i + 1) in
-                    eval_call ret tl nctx
+        (* we add an argument to the closure *)
+        | Closure (n, lxp, ctx), hd::tl ->
+            let nctx = add_rte_variable (Some n) hd ctx in
+            let ret = _eval lxp nctx (i + 1) in
+                eval_call ret tl nctx
 
-            (* bind is lazily evaluated *)
-            | Vbuiltin ("bind"), _ ->
-                Vbind eargs
+        | Vbuiltin (str), args ->
+            (* lookup the built-in implementation and call it *)
+            (get_builtin_impl str loc) loc args ctx
 
-            | Vbuiltin (str), args ->
-                (* lookup the built-in implementation and call it *)
-                (get_builtin_impl str loc) loc args ctx
+        (* return result of eval *)
+        | _, [] -> f
 
-            (* return result of eval *)
-            | _, [] -> f
+        | _ -> debug_msg (value_print f);
+            eval_error loc "Cannot eval function" in
 
-            | _ -> debug_msg (value_print f);
-                eval_error loc "Cannot eval function" in
-
-        eval_call f args ctx
+    (* eval function here *)
+      match f with
+        (* Does not eval args *)
+        | Vbuiltin ("bind") ->  Vbind eargs
+        | _ ->
+          let args = List.map (fun e -> _eval e ctx (i + 1)) eargs in
+            eval_call f args ctx
 
 and eval_case ctx i loc target pat dflt =
     (* Eval target *)
@@ -231,6 +238,7 @@ and typer_builtins_impl = [
     ("eval_"         , typer_eval);
     ("open"          , open_impl);
     ("bind"          , bind_impl);
+    ("run-io"        , run_io);
     ("read"          , read_impl);
     ("write"         , write_impl);
     ("new-attribute" , new_attribute)
@@ -252,6 +260,20 @@ and bind_impl loc args_val ctx =
 
     (* eval callback *)
     _eval body nctx 0
+
+and run_io loc args_val ctx =
+
+  let io, callback = match args_val with
+    | [Vbind([io; callback])] -> io, callback
+    | _ -> builtin_error loc "run-io expects a single Vbind argument" in
+
+  (* eval args *)
+  let io = _eval io ctx 0 in
+  let callback = _eval callback ctx 0 in
+
+  (* eval bind *)
+  let a = bind_impl loc [io; callback] ctx in
+    get_predef_eval "Unit" ctx
 
 and typer_eval loc args ctx =
     let arg = match args with

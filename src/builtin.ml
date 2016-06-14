@@ -51,8 +51,11 @@ type predef_table = (lexp option ref) SMap.t
 
 let predef_name = [
     "cons";
-    "nil"
+    "nil";
+    "Unit"
 ]
+
+let builtin_size = ref 0
 
 let predef_map : predef_table =
     (* add predef name, expr will be populated when parsing *)
@@ -270,6 +273,7 @@ let write_impl loc args_val ctx =
 let new_attribute loc args_val ctx =
   builtin_warning loc "new-attributes to be implemented";
     Vdummy
+
 
 (*
  *  Should we have a function that

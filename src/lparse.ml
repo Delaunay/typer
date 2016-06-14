@@ -749,9 +749,19 @@ and _lexp_decls decls ctx i: ((vdef * lexp * ltype) list list * lexp_context) =
   let all = ref [] in
 
   let ctx = List.fold_left (fun ctx decl ->
-    let d, ctx = _lexp_rec_decl decl ctx i in
-      all := d::!all;
-      ctx) ctx decls in
+    match decl with
+      (* Special case *)
+      | [Lmcall ((l, s), sargs)] ->
+        (* get pexp decls *)
+        let pdecls = lexp_decls_macro (l, s) sargs ctx in
+        let decls, ctx = _lexp_decls pdecls ctx i in
+          all := (List.append (List.rev decls) !all);
+            ctx
+
+      | _ ->
+        let d, ctx = _lexp_rec_decl decl ctx i in
+          all := d::!all;
+          ctx) ctx decls in
 
       (List.rev !all), ctx
 
@@ -949,6 +959,8 @@ let default_lctx =
         print_string "[";
         List.iter (fun ((_, s), _, _) ->
           print_string (s ^ ", ")) decls; print_string "] \n") d; *)
+
+      builtin_size := get_size lctx;
 
       (* Once default builtin are set we can populate the predef table *)
       try
