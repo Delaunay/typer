@@ -122,11 +122,11 @@ let ipexp_parse (sxps: sexp list): (pdecl list * pexp list) =
         _pxp_parse sxps [] []
 
 
-let ierase_type (lexps: (ldecl list * lexpr list)) =
+let ierase_type (lexps: (ldecl list list * lexpr list)) =
     let (ldecls, lexprs) = lexps in
-        (EL.clean_decls ldecls), (List.map EL.erase_type  lexprs)
+        (EL.clean_toplevel ldecls), (List.map EL.erase_type  lexprs)
 
-let ilexp_parse pexps lctx: ((ldecl list * lexpr list) * lexp_context) =
+let ilexp_parse pexps lctx: ((ldecl list list * lexpr list) * lexp_context) =
     let pdecls, pexprs = pexps in
     let ldecls, lctx = lexp_p_decls pdecls lctx in
     let lexprs = lexp_parse_all pexprs lctx in
@@ -134,7 +134,7 @@ let ilexp_parse pexps lctx: ((ldecl list * lexpr list) * lexp_context) =
 
 let ieval lexps rctx =
     let (ldecls, lexprs) = lexps in
-    let rctx = eval_decls ldecls rctx in
+    let rctx = eval_decls_toplevel ldecls rctx in
     let vals = eval_all lexprs rctx false in
         vals, rctx
 
@@ -158,8 +158,8 @@ let _raw_eval f str lctx rctx =
     let nods = sexp_parse_all_to_list default_grammar sxps (Some ";") in
     let pxps = pexp_decls_all nods in
     let lxps, lctx = lexp_p_decls pxps lctx in
-    let elxps = EL.clean_decls lxps in
-    let rctx = eval_decls elxps rctx in
+    let elxps = EL.clean_toplevel lxps in
+    let rctx = eval_decls_toplevel elxps rctx in
         (* This is for consistency with ieval *)
         [], lctx, rctx
 

@@ -81,9 +81,9 @@ let rec value_print (vtp: value_type) =
         | Vdummy -> print_string "value_print_dummy"
         | Vin _ -> print_string "in_channel"
         | Vout _ -> print_string "out_channel"
-        | Vbind [a; b] -> print_string "bind ";
-          elexp_print a; print_string " ";
-          elexp_print b;
+        | Vbind [a; b] -> print_string "bind (";
+          elexp_print a; print_string ") (";
+          elexp_print b; print_string ")";
 
         | Vbind _ -> print_string "bind"
         (* | _ -> print_string "debug print" *)

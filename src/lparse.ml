@@ -70,6 +70,12 @@ let _parsing_internals = ref false
 let _shift_glob = ref 0
 let btl_folder = ref "./btl/"
 
+(* merged declaration, allow us to process declaration in multiple pass *)
+(* first detect recursive decls then lexp decls*)
+type mdecl =
+  | Ldecl of symbol * pexp option * pexp option
+  | Lmcall of symbol * sexp list
+
 (* This is used to make Type annotation and inferred type having the same index *)
 (* since inferred type might need to parse a lambda var to infer the type *)
 
@@ -165,7 +171,7 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
         | Plet(loc, decls, body) ->
             let decls, nctx = _lexp_decls decls ctx i in
             let bdy, ltp = lexp_infer body nctx in
-                (lexp_let_decls decls bdy nctx i), ltp
+              (lexp_let_decls decls bdy nctx i), ltp
 
         (* ------------------------------------------------------------------ *)
         | Parrow (kind, ovar, tp, loc, expr) ->
@@ -270,6 +276,13 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
 
         | _ -> pexp_print p; print_string "\n";
             lexp_fatal tloc "Unhandled Pexp"
+
+
+and lexp_let_decls decls (body: lexp) ctx i =
+  (* build the weird looking let *)
+  let decls = List.rev decls in
+    List.fold_left (fun lxp decls ->
+      Let(dloc, decls, lxp)) body decls
 
 and lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context): lexp =
   _lexp_p_check p t ctx 1
@@ -701,12 +714,146 @@ and lexp_decls_macro (loc, mname) sargs ctx: pdecl list =
 (*  Parse let declaration *)
 and lexp_p_decls decls ctx = _lexp_decls decls ctx 0
 
-and lexp_let_decls decls (body: lexp) ctx i =
-  (* build the weird looking let *)
-  let decls = List.rev decls in
-    List.fold_left (fun lxp decls ->
-      Let(dloc, decls, lxp)) body decls
+and lexp_detect_recursive pdecls =
+  (* Pack mutually recursive declarations                 *)
+  (* mutually recursive def must use forward declarations *)
 
+  let decls = ref [] in
+  let pending = ref [] in
+  let merged = ref [] in
+
+  List.iter (fun expr ->
+    match expr with
+      | Pexpr((l, s), pxp) ->(
+        let was_forward = (List.exists
+                      (fun (Ldecl((_, p), _, _)) -> p = s) !pending) in
+
+        let is_empty = (List.length !pending) = 0 in
+        let is_one = (List.length !pending) = 1 in
+
+        (* This is a standard declaration: not forwarded *)
+        if (was_forward = false) && is_empty then(
+          decls := [Ldecl((l, s), Some pxp, None)]::!decls;
+        )
+        (* This is an annotated expression
+         * or the last element of a mutually rec definition *)
+        else if (was_forward && is_one) then (
+
+          (* we know that names match already *)
+          let ptp = (match (!pending) with
+            | Ldecl(_, _, ptp)::[] -> ptp
+            (* we already checked that len(pending) == 1*)
+            | Ldecl(_, _, ptp)::_  -> lexp_fatal l "Unreachable"
+            | []                   -> lexp_fatal l "Unreachable"
+            | Lmcall _ :: _        -> lexp_fatal l "Unreachable") in
+
+          (* add declaration to merged decl *)
+          merged := Ldecl((l, s), Some pxp, ptp)::(!merged);
+
+          (* append decls *)
+          decls := (List.rev !merged)::!decls;
+
+          (* Reset State *)
+          pending := [];
+          merged := [];
+        )
+        (* This is a mutually recursive definition *)
+        else (
+          (* get pending element and remove it from the list *)
+          let elem, lst = List.partition
+                                (fun (Ldecl((_, n), _, _)) -> n = s) !pending in
+
+          let _ = (match elem with
+              (* nothing to merge *)
+              | [] ->
+                merged := Ldecl((l, s), Some pxp, None)::!merged;
+
+              (* append new element to merged list *)
+              | Ldecl((l, s), _, Some ptp)::[] ->
+                merged := Ldecl((l, s), Some pxp, (Some ptp))::!merged;
+
+              (* s should be unique *)
+              | _ -> lexp_error l "declaration must be unique") in
+
+          (* element is not pending anymore *)
+          pending := lst;
+        ))
+
+      | Ptype((l, s), ptp) ->
+        pending := Ldecl((l, s), None, Some ptp)::!pending
+
+      (* macro will be handled later *)
+      | Pmcall(a, sargs) ->
+          decls := [Lmcall(a, sargs)]::!decls;
+
+      ) pdecls;
+
+      (List.rev !decls)
+
+
+and _lexp_decls decls ctx i: ((vdef * lexp * ltype) list list * lexp_context) =
+  (* detect mutually recursive def and merge definition *)
+  let decls = lexp_detect_recursive decls in
+  let all = ref [] in
+
+  let ctx = List.fold_left (fun ctx decl ->
+    let d, ctx = _lexp_rec_decl decl ctx i in
+      all := d::!all;
+      ctx) ctx decls in
+
+      (List.rev !all), ctx
+
+and _lexp_rec_decl decls ctx i =
+  (* parse a groupe of mutually recursive definition
+   * i.e let decl parsing *)
+
+  (* to compute recursive offset *)
+  let n = (List.length decls) + 1 in
+  let lst = ref [] in
+
+  (* add all elements to the environment *)
+  let tctx = List.fold_left (fun vctx expr ->
+    match expr with
+      | Ldecl((l, s), _, None) ->
+        env_extend vctx (l, s) ForwardRef dltype
+
+      | Ldecl((l, s), _, Some ptp) ->
+        let lxp, _ = lexp_p_infer ptp vctx in
+          env_extend vctx (l, s) ForwardRef lxp
+
+      | Lmcall _ ->
+        lexp_fatal dloc "use lexp_decl_macro to parse macro decls") ctx decls in
+
+  let i = ref 0 in
+  let ctx = List.fold_left (fun vctx expr ->
+    i := !i + 1;
+    match expr with
+      (* lexp infer *)
+      | Ldecl ((l, s), Some pxp, None) ->
+          let lxp, ltp = lexp_p_infer pxp vctx in
+          lst := ((l, s), lxp, ltp)::!lst;
+          (* replace forward ref by its true value *)
+            replace_by vctx s (n - !i, Some (l, s), LetDef lxp, ltp)
+
+      (* lexp check *)
+      | Ldecl ((l, s), Some pxp, Some ptp) ->
+          let ltp, _ = lexp_p_infer ptp vctx in
+          let lxp = lexp_p_check pxp ltp vctx in
+          lst := ((l, s), lxp, ltp)::!lst;
+            replace_by vctx s (n - !i, Some (l, s), LetDef lxp, ltp)
+
+      (* macros *)
+      | Lmcall (a, sargs) ->
+        lexp_fatal dloc "use lexp_decl_macro to parse macro decls"
+
+      (* unused arg *)
+      | Ldecl ((l, s), None, _) ->
+        lexp_error l ("Variable \"" ^ s ^ "\" is unused!");
+        vctx) tctx decls in
+
+        (List.rev !lst), ctx
+
+        (*
 and _lexp_decls decls ctx i: (((vdef * lexp * ltype) list list) * lexp_context) =
 
   let names = ref [] in (* decls name in correct order *)
@@ -819,6 +966,7 @@ and _lexp_decls decls ctx i: (((vdef * lexp * ltype) list list) * lexp_context) 
     merge_list names) (List.rev !names) in
 
         decls, ctx
+*)
 
 and lexp_decls_toplevel decls ctx =
   _lexp_decls decls ctx 1
@@ -1043,7 +1191,9 @@ let default_rctx =
       _parsing_internals := false;
 
       let rctx = make_runtime_ctx in
-        eval_decls_toplevel (EL.clean_toplevel d) rctx
+      let rctx = eval_decls_toplevel (EL.clean_toplevel d) rctx in
+        _global_eval_trace := [];
+        rctx
     (*
     try (from_lctx (default_lctx))
         with e ->(
@@ -1072,7 +1222,6 @@ let _lexp_decl_str (str: string) tenv grm limit ctx =
 (* specialized version *)
 let lexp_decl_str str lctx =
     _lexp_decl_str str default_stt default_grammar (Some ";") lctx
-
 
 
 (*  Eval String
