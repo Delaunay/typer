@@ -109,4 +109,8 @@ let add_substitution (lxp: lexp) (subst: substitution) : substitution =
   let last_idx = VMap.fold (fun _ acc -> acc + 1) subst 1
   in VMap.add last_idx lxp subst
 
+let find_or_none (value: lexp) (map: substitution) : lexp option =
+  if VMap.mem value map
+  then Some (VMap.find value map)
+  else None
 
