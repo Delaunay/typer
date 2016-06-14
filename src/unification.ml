@@ -20,7 +20,9 @@ type return_type = (substitution * constraints) option
  * Builtin   , Builtin            -> if Builtin =/= Builtin then error else UNIFY ?
  * Builtin   , lexp               -> try UNIFY ?
  * Let       , lexp               -> try UNIFY (???)
- * Var       , lexp               -> try UNIFY
+ * Var       , Var                -> if db_index ~= db_index UNIFY else ERROR
+ * Var       , MetaVar            -> UNIFY Metavar
+ * Var       , lexp               -> ???
  * Arrow     , lexp               -> try UNIFY
  * Call      , lexp               -> try UNIFY
  * Inductive , lexp               -> ????
@@ -59,12 +61,12 @@ let _unify_imm (l: lexp) (r: lexp) (subst: substitution) : return_type =
     | (Imm (Float (_, v1)), Imm (Float (_, v2))
        -> if v1 = v2 then (add_substitution l subst, ())
        else None
-    | (Imm (Node (_, v1)), Imm (Node (_, v2))
-       -> if v1 = v2 then (add_substitution l subst, ())
-       else None
     | (_, _) -> None
 
-(** Unify two a builtin (l) and a lexp (r) if it is possible *)
+(** Unify a builtin (l) and a lexp (r) if it is possible
+ * If the two arguments are builtin, unify based on name
+ * If it's a Builtin and an other lexp, unify lexp part of Builtin with the lexp
+ *)
 let _unify_builtin (l: lexp) (r: lexp) (subst: substitution) : return_type =
   match (l, r) with
     | (Builtin ((_, name1), _), Builtin ((_, name2),_))
@@ -73,6 +75,9 @@ let _unify_builtin (l: lexp) (r: lexp) (subst: substitution) : return_type =
     | (Builtin (_, lxp), _) -> unify lxp r subst
     | (_, _) -> None
 
+(** Unify a Let (l) and a lexp (r), if possible
+ * Unify the lexp pat of the Let with the lexp
+ *)
 let _unify_let (l: lexp) (r: lexp) (subst: substitution) : return_type =
   match l with (* Discard the middle part of Let : right behavior ? *)
     | Let (_, _, lxp) -> unify lxp r subst
@@ -87,3 +92,5 @@ let _unify_let (l: lexp) (r: lexp) (subst: substitution) : return_type =
 let add_substitution (lxp: lexp) (subst: substitution) : substitution =
   let last_idx = VMap.fold (fun _ acc -> acc + 1) subst 1
   in VMap.add last_idx lxp subst
+
+
