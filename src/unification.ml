@@ -45,8 +45,21 @@ let rec unify (l: lexp) (r: lexp) (subst: substitution) : return_type =
       | (_, Builtin) -> _unify_builtin r l subst
       | (Let, _)     -> _unify_let l r subst
       | (_, Let)     -> _unify_let r l subst
+      | (Var, _)     -> _unify_var l r subst (*TODO*)
+      | (_, Var)     -> _unify_var r l subst (*TODO*)
       | (Cons, Cons) -> None (*Useless ??*)
       | (_, _)       -> None
+
+
+(*TODO : shift db_index*)
+let _unify_var (l: lexp) (r: lexp) (subst: substitution) : return_type =
+  match (l, r) with
+    | (Var (_, idx1), Var (_, idx2))
+      -> if idx1 = idx2 then (add_substitution l subst, ())
+      else None
+    | (Var, Metavar) -> _unify_metavar r l subst
+    (*(Var, _) -> ???(*TODO*)*)
+    | (_, _)   -> None
 
 (** Unify two Imm if they match *)
 (* Add one of the Imm (the first arguement) to the substitution *)
