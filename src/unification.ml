@@ -15,44 +15,75 @@ type a' expected =
 type return_type = (substitution * constraints) option
 
 (**
- * Imm       , Imm                -> if Imm =/= Imm then ERROR else ??
+ * Imm       , Imm                -> if Imm =/= Imm then ERROR else OK
  * Cons      , Cons               -> ERROR
- * Builtin   , Builtin            -> if Builtin =/= Builtin then error else UNIFY ?
- * Builtin   , lexp               -> try UNIFY lexp of Builtin with lexp (???)
- * Let       , lexp               -> try UNIFY (???)
+
+ * Builtin   , Builtin            -> if Builtin =/= Buitin
+                                     then ERROR else OK
+ * Builtin   , lexp               -> UNIFY lexp of Builtin with lexp
+
+ * Let       , lexp               -> UNIFY right part of Let with lexp
+
  * Var       , Var                -> if db_index ~= db_index UNIFY else ERROR
  * Var       , MetaVar            -> UNIFY Metavar
- * Var       , lexp               -> ???
- * Arrow     , lexp               -> try UNIFY
- * Call      , lexp               -> try UNIFY
- * Inductive , lexp               -> ????
- * Case      , case               -> ??
+ * Var       , lexp               -> ERROR
+
+ * Arrow     , Arrow              -> if var_kind = var_kind
+                                     then UNIFY ltype & lexp else ERROR
+ * Arrow     , lexp               -> ERROR
+
+   (*work in progress*)
  * lexp      , {metavar <-> none} -> UNIFY
  * lexp      , {metavar <-> lexp} -> if lexp ~= lexp then UNIFY else ERROR
  * metavar   , metavar            -> ?
- * lexp      , lexp               -> ERROR
- * Sort(Level) ??
 
- * lexp mean that that it ca be any lexp
+   (*TODO*)
+ * Call      , lexp               -> try UNIFY
+ * Inductive , lexp               -> ????
+ * Case      , case               -> ??
+ * lexp      , lexp               -> ERROR
+
+ * lexp is equivalent to _ in ocaml
  * (Let , lexp) == (lexp , Let)
 *)
+(*TODO FIXME : concat result with subst*)
 (*Maybe transform the result to return_type only at the end of the function ?*)
 (*l & r commutative ?*)
 let rec unify (l: lexp) (r: lexp) (subst: substitution) : return_type =
   (* Dispatch to the right unifyer*)
   match (l, r) with
-  | (Imm, Imm)   -> _unify_imm l r subst
-  | (Builtin, _) -> _unify_builtin l r subst
-  | (_, Builtin) -> _unify_builtin r l subst
-  | (Let, _)     -> _unify_let l r subst
-  | (_, Let)     -> _unify_let r l subst
-  | (Var, _)     -> _unify_var l r subst (*TODO : work in progress*)
-  | (_, Var)     -> _unify_var r l subst (*TODO : work in progress*)
-  | (Arrow, _)   -> _unify_arrow l r subst
-  | (_, Arrow)   -> _unify_arrow r l subst
-  | (Cons, Cons) -> None (*Useless ??*)
+  | (Imm, Imm)   -> _unify_imm      l r subst
+  | (Cons, Cons) -> None
+  | (Builtin, _) -> _unify_builtin  l r subst
+  | (_, Builtin) -> _unify_builtin  r l subst
+  | (Let, _)     -> _unify_let      l r subst
+  | (_, Let)     -> _unify_let      r l subst
+  | (Var, _)     -> _unify_var      l r subst
+  | (_, Var)     -> _unify_var      r l subst
+  | (Arrow, _)   -> _unify_arrow    l r subst
+  | (Metavar, _) -> _unify_metavar  l r subst
+  | (_, MetaVar) -> _unify_metavar  r l susbt
+  | (_, Arrow)   -> _unify_arrow    r l subst
   | (_, _)       -> None
 
+let _unify_metavar (meta: lexp) (lxp: lexp) (subst: substitution) : return_type =
+  match (meta, lxp) with (*TODO*)
+  | (Metavar val1, Metavar val2) ->
+    if val1 = val2
+    then (add_substitution meta lxp subst, ())
+    else None
+  | (Metavar v, _) -> (
+      match find_or_none v subst with
+      | None          -> (associate v lxp subst, ())
+      | Some (lxp_)   -> unify lxp_ lxp subst )
+  | (_, _) -> None
+
+(** Unify a Arrow and a lexp if possible
+ * (Arrow, Arrow) -> if var_kind = var_kind
+                     then unify ltype & lexp (Arrow (var_kind, _, ltype, lexp))
+                     else None
+ * (_, _) -> None
+ *)
 let rec _unify_arrow (arrow: lexp) (lxp: lexp) (subst: substitution)
   : return_type =
   match (arrow, lxp) with
@@ -64,6 +95,7 @@ let rec _unify_arrow (arrow: lexp) (lxp: lexp) (subst: substitution)
   (*| *)
   | (_, _) -> None
 
+(** Unify lexp & ltype (Arrow (_,_,ltype, lexp)) of two Arrow*)
 let _unify_inner_arrow (lxp1: lexp) (lt1: lexp)
     (lxp2: lexp) (lt2: lexp) (subst: substitution): return_type =
   match unify lt1 lt2 subst with
@@ -73,18 +105,22 @@ let _unify_inner_arrow (lxp1: lexp) (lt1: lexp)
       | None -> None )
   | None -> None
 
-(*TODO : shift db_index*)
-let _unify_var (l: lexp) (r: lexp) (subst: substitution) : return_type =
-  match (l, r) with
+(** Unify a Var and a lexp, if possible
+ * (Var, Var) -> unify if they have the same bebuijn index FIXME : shift indexes
+ * (Var, Metavar) -> unify_metavar Metavar var subst
+ * (_, _) -> None
+ *)
+let _unify_var (var: lexp) (r: lexp) (subst: substitution) : return_type =
+  match (var, r) with
   | (Var (_, idx1), Var (_, idx2))
-    -> if idx1 = idx2 then (add_substitution l subst, ())
+    -> if idx1 = idx2 then (add_substitution var subst, ())
     else None
-  | (Var, Metavar) -> _unify_metavar r l subst
+  | (Var, Metavar) -> _unify_metavar r var subst
   (*| (Var, _) -> ???(*TODO*)*)
   | (_, _)   -> None
 
-(** Unify two Imm if they match *)
-(* Add one of the Imm (the first arguement) to the substitution *)
+(** Unify two Imm if they match <=> Same type and same value
+ * Add one of the Imm (the first arguement) to the substitution *)
 let _unify_imm (l: lexp) (r: lexp) (subst: substitution) : return_type =
   match (l, r) with
   | (Imm (String (_, v1)), Imm (String (_, v2)))
@@ -111,23 +147,27 @@ let _unify_builtin (bltin: lexp) (lxp: lexp) (subst: substitution) : return_type
   | (_, _) -> None
 
 (** Unify a Let (let_) and a lexp (lxp), if possible
- * Unify the lexp pat of the Let with the lexp
-*)
+ * Unify the left lexp part of the Let (Let (_, _, lxp)) with the lexp
+ *)
 let _unify_let (let_: lexp) (lxp: lexp) (subst: substitution) : return_type =
   match let_ with (* Discard the middle part of Let : right behavior ? *)
   | Let (_, _, lxp_) -> unify lxp_ lxp subst
   | _ -> None
 
-(** Generate the next metavar by assuming that the key goes from
- * one to X, so the next metavar is `(lenght subst) + 1`*)
+(** Generate the next metavar by taking the highest value and
+ * adding it one
+ *)
 (*FIXME : find a better solution to have the size of the map :
  * - have the map carry its size with it
  *            -> 'private function' that handle this kind of map
  * - global last_idx :-( *)
 let add_substitution (lxp: lexp) (subst: substitution) : substitution =
-  let last_idx = VMap.fold (fun _ acc -> acc + 1) subst 1
-  in VMap.add last_idx lxp subst
+  let last_idx = VMap.fold (fun elt acc -> max elt acc) subst 0
+  in VMap.add (last_idx + 1) lxp subst
 
+(** If key is in map returns the value associated
+ * else returns None
+ *)
 let find_or_none (value: lexp) (map: substitution) : lexp option =
   match value with
   | Metavar idx -> if VMap.mem idx map
@@ -135,3 +175,6 @@ let find_or_none (value: lexp) (map: substitution) : lexp option =
     else None
   | _ -> None
 
+(** Alias for VMap.add*)
+let associate (meta: int) (lxp: lexp) (subst: substitution) : substitution =
+  VMap.add meta lexp subst
