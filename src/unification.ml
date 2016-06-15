@@ -70,13 +70,33 @@ let rec unify (l: lexp) (r: lexp) (subst: substitution) : return_type =
   | (Var, _)     -> _unify_var      l r subst
   | (_, Var)     -> _unify_var      r l subst
   | (Arrow, _)   -> _unify_arrow    l r subst
+  | (_, Arrow)   -> _unify_arrow    r l subst
   | (Metavar, _) -> _unify_metavar  l r subst
   | (_, MetaVar) -> _unify_metavar  r l susbt
-  | (_, Arrow)   -> _unify_arrow    r l subst
+  | (Lambda, _)  -> _unify_lambda   l r subst
+  | (_, Lambda)  -> _unify_lambda   r l subst
   | (_, _)       -> None
 
+(*FIXME check that unification of part of type add the whole object to the subst*)
+(*maybe split unify into 2 function : is_unifyable and unify ?*)
+
+(** Unify a Lambda and a lexp if possible
+ * See above for result
+ *)
+let _unify_lambda (lambda: lexp) (lxp: lexp) (subst: substituion) : return_type =
+  match (lambda, lexp) with
+  | (Lambda (var_kind1, _, ltype1, lexp1), Lambda (var_kind2, _, ltype2, lexp2))
+    -> if var_kind1 = var_kind2
+    then _unify_inner_arrow ltype1 lexp1 ltype2 lexp2 subst
+    else None
+  | (Lambda, Var) -> (subst, (lambda, lexp))
+  | (_, _) -> None
+
+(** Unify a Metavar and a lexp if possible
+ * See above for result
+ *)
 let _unify_metavar (meta: lexp) (lxp: lexp) (subst: substitution) : return_type =
-  match (meta, lxp) with (*TODO*)
+  match (meta, lxp) with
   | (Metavar val1, Metavar val2) ->
     if val1 = val2
     then (add_substitution meta lxp subst, ())
