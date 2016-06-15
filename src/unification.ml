@@ -16,6 +16,7 @@ type return_type = (substitution * constraints) option
 
 (**
  * Imm       , Imm                -> if Imm =/= Imm then ERROR else OK
+
  * Cons      , Cons               -> ERROR
 
  * Builtin   , Builtin            -> if Builtin =/= Buitin
@@ -32,10 +33,15 @@ type return_type = (substitution * constraints) option
                                      then UNIFY ltype & lexp else ERROR
  * Arrow     , lexp               -> ERROR
 
-   (*work in progress*)
  * lexp      , {metavar <-> none} -> UNIFY
- * lexp      , {metavar <-> lexp} -> if lexp ~= lexp then UNIFY else ERROR
- * metavar   , metavar            -> ?
+ * lexp      , {metavar <-> lexp} -> UNFIFY lexp subst[metavar]
+ * metavar   , metavar            -> if Metavar = Metavar then OK else ERROR
+ * metavar   , lexp               -> ERROR
+
+ * Lamda     , Lambda             -> if var_kind = var_kind
+                                     then unify ltype & lxp else ERROR
+ * Lambda    , Var                -> constraints
+ * Lambda    , lexp               -> ERROR
 
    (*TODO*)
  * Call      , lexp               -> try UNIFY
@@ -45,12 +51,15 @@ type return_type = (substitution * constraints) option
 
  * lexp is equivalent to _ in ocaml
  * (Let , lexp) == (lexp , Let)
+ * UNIFY -> recursive call or dispatching
+ * OK -> add a substituion to the list of substitution
 *)
 (*TODO FIXME : concat result with subst*)
 (*Maybe transform the result to return_type only at the end of the function ?*)
 (*l & r commutative ?*)
 let rec unify (l: lexp) (r: lexp) (subst: substitution) : return_type =
   (* Dispatch to the right unifyer*)
+  (* TODO : check rule ordering*)
   match (l, r) with
   | (Imm, Imm)   -> _unify_imm      l r subst
   | (Cons, Cons) -> None
@@ -75,7 +84,7 @@ let _unify_metavar (meta: lexp) (lxp: lexp) (subst: substitution) : return_type 
   | (Metavar v, _) -> (
       match find_or_none v subst with
       | None          -> (associate v lxp subst, ())
-      | Some (lxp_)   -> unify lxp_ lxp subst )
+      | Some (lxp_)   -> unify lxp_ lxp subst) (*Not sure if it's the expected behavior*)
   | (_, _) -> None
 
 (** Unify a Arrow and a lexp if possible
