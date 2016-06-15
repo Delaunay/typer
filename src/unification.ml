@@ -119,14 +119,16 @@ let rec _unify_arrow (arrow: lexp) (lxp: lexp) (subst: substitution)
   (*?????*)
   | (Arrow (_, _, ltype1, lexp1), Arrow (_, _, ltype2, lexp2))
     -> if var_kind1 = var_kind2
-    then _unify_inner_arrow ltype1 lexp1 ltype2 lexp2 susbt
+    then (match _unify_inner_arrow ltype1 lexp1 ltype2 lexp2 susbt with
+        | Some -> (add_substitution arrow subst, ())
+        | None -> None)
     else None
   (*| *)
   | (_, _) -> None
 
 (** Unify lexp & ltype (Arrow (_,_,ltype, lexp)) of two Arrow*)
-let _unify_inner_arrow (lxp1: lexp) (lt1: lexp)
-    (lxp2: lexp) (lt2: lexp) (subst: substitution): return_type =
+let _unify_inner_arrow (lt1: lexp) (lxp1: lexp)
+    (lt2: lexp) (lxp2: lexp) (subst: substitution): return_type =
   match unify lt1 lt2 subst with
   | Some (subst_, const) -> ( (*bracket for formating*)
       match unify lxp1 lxp2 subst_ with
