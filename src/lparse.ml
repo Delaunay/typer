@@ -513,7 +513,46 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
             let new_args = List.map (fun g -> (Aexplicit, g)) largs in
                 Call(body, new_args), ltp
 
-        (* attribute *)
+        (* Context acessor *)
+        | Pvar(l, "decltype"), _ ->
+          let pargs = List.map pexp_parse sargs in
+          let largs = _lexp_parse_all pargs ctx i in
+          let (vi, vn) = match largs with
+            | [Var((_, vn), vi)] -> (vi, vn)
+            | _ -> lexp_fatal l "decltype expects one argument" in
+
+          let ltype = env_lookup_type ctx ((dloc, vn), vi) in
+            (* mkSusp prop (S.shift (var_i + 1)) *)
+            ltype, dltype
+
+        | Pvar(l, "declexpr"), _ ->
+          let pargs = List.map pexp_parse sargs in
+          let largs = _lexp_parse_all pargs ctx i in
+          let (vi, vn) = match largs with
+            | [Var((_, vn), vi)] -> (vi, vn)
+            | _ -> lexp_fatal l "declexpr expects one argument" in
+
+          let lxp = env_lookup_expr ctx ((dloc, vn), vi) in
+          let ltp = env_lookup_type ctx ((dloc, vn), vi) in
+            lxp, ltp
+
+        (* attributes are special case they does not exist after lexp_parsing
+         * in that respect they are quite similar to macros *)
+        | Pvar(l, "get-attribute"), _ ->
+          let pargs = List.map pexp_parse sargs in
+          let largs = _lexp_parse_all pargs ctx i in
+          let (vi, vn), (ai, an) = match largs with
+              | [Var((_, vn), vi); Var((_, an), ai)] -> (vi, vn), (ai, an)
+              | _ -> lexp_fatal l "get-attribute expects two arguments" in
+
+          let lxp = get_property ctx (vi, vn) (ai, an) in
+          let ltype = env_lookup_expr ctx ((dloc, an), ai) in
+            lxp, ltype
+
+        (*
+        | Pvar(l, "has-attribute"), _ ->  *)
+
+
         | Pvar(l, "new-attribute"), _ ->
           let pargs = List.map pexp_parse sargs in
           let largs = _lexp_parse_all pargs ctx i in
@@ -660,7 +699,7 @@ and lexp_decls_macro (loc, mname) sargs ctx: (pdecl list * lexp_context) =
 
           (* extract info *)
           let var, att, fn = match largs with
-            | [Var((_, vn), vi); Var((_, an), ai); fn] -> (vn, vi), (an, ai), fn
+            | [Var((_, vn), vi); Var((_, an), ai); fn] -> (vi, vn), (ai, an), fn
             | _ -> lexp_fatal loc "add-attribute expects 3 args" in
 
           let ctx = add_property ctx var att fn in

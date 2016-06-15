@@ -27,6 +27,7 @@
 %*
 %*      Description:
 %*          Define builtin types and functions
+%*          This file MUST be correctly typed
 %*
 %* ---------------------------------------------------------------------------
 
@@ -34,12 +35,14 @@
 %       Base Types
 % -----------------------------------------------------
 
-Type   = Built-in "Type";
-Int    = Built-in "Int";
-Float  = Built-in "Float";
-String = Built-in "String";
-Sexp   = Built-in "Sexp";
-Unit   = Built-in "Unit";
+Type    = Built-in "Type";
+Int     = Built-in "Int";
+Float   = Built-in "Float";
+String  = Built-in "String";
+Sexp    = Built-in "Sexp";
+
+Unit    = Built-in "Unit";      % Nothing
+Context = Built-in "Context";   % Lexp Context
 
 % Basic operators
 _+_ = Built-in "_+_" (Int -> Int -> Int);
@@ -151,12 +154,17 @@ Attribute = Built-in "Attribute";
 new-attribute = Built-in "new-attribute" (Type -> Attribute);
 
 add-attribute = Built-in "add-attribute" (Sexp ->  Sexp -> Sexp -> List Sexp);
+attribute = Macro_ add-attribute;
 
+get-attribute = Built-in "get-attribute" (String -> Attribute);
+has-attribute = Built-in "has-attribute" (String -> Attribute -> Bool);
 
+% -----------------------------------------------------
+%       Context Accessors
+% -----------------------------------------------------
 
-
-
-
+decltype = Built-in "decltype" Macro;
+declexpr = Built-in "declexpr" Macro;
 
 
 

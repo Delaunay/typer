@@ -243,12 +243,12 @@ let open_impl loc args_val ctx =
     | [Vstring(file_name); Vstring(mode)] -> file_name, mode
     | _ -> builtin_error loc "open expects 2 strings" in
 
-  (* open file *) (* return a file handle *)
-  match mode with
-    | "r" -> Vin(open_in file)
-    | "w" -> Vout(open_out file)
-    | _ -> builtin_error loc "wrong open mode"
-
+   (* open file *) (* return a file handle *)
+   Vcommand(fun () ->
+      match mode with
+        | "r" -> Vin(open_in file)
+        | "w" -> Vout(open_out file)
+        | _ -> builtin_error loc "wrong open mode")
 
 let read_impl loc args_val ctx =
 
@@ -256,7 +256,7 @@ let read_impl loc args_val ctx =
     | [Vin(c); _] -> c
     | _ ->
       List.iter (fun v -> value_print v; print_string "\n") args_val;
-      builtin_error loc "read expects a in_channel" in
+      builtin_error loc "read expects an in_channel" in
 
   let line = input_line channel in
     Vstring(line)
@@ -267,14 +267,10 @@ let write_impl loc args_val ctx =
     | [Vout(c); Vstring(msg)] -> c, msg
     | _ ->
       List.iter (fun v -> value_print v) args_val;
-      builtin_error loc "read expects a out_channel" in
+      builtin_error loc "read expects an out_channel" in
 
     fprintf channel "%s" msg;
       Vdummy
-
-let new_attribute loc args_val ctx =
-  builtin_warning loc "new-attributes to be implemented";
-    Vdummy
 
 
 (*

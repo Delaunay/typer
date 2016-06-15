@@ -102,7 +102,7 @@ let rec _eval lxp ctx i: (value_type) =
           -> (eval_case ctx i loc target pat dflt)
 
         | _ -> print_string "debug catch-all eval: ";
-            elexp_print lxp; print_string "\n"; Vstring("eval Not Implemented")
+            elexp_print lxp; print_string "\n"; Vdummy
 
 
 and get_predef_eval name ctx =
@@ -144,12 +144,8 @@ and eval_call ctx i lname eargs =
             eval_error loc "Cannot eval function" in
 
     (* eval function here *)
-      match f with
-        (* Does not eval args *)
-        | Vbuiltin ("bind") ->  Vbind eargs
-        | _ ->
-          let args = List.map (fun e -> _eval e ctx (i + 1)) eargs in
-            eval_call f args ctx
+    let args = List.map (fun e -> _eval e ctx (i + 1)) eargs in
+      eval_call f args ctx
 
 and eval_case ctx i loc target pat dflt =
     (* Eval target *)
@@ -249,30 +245,42 @@ and bind_impl loc args_val ctx =
     | [io; callback] -> io, callback
     | _ -> builtin_error loc "bind expects two arguments" in
 
+  (* build Vcommand from io function *)
+  let cmd = match io with
+    | Vcommand (cmd) -> cmd
+    | _ -> builtin_error loc "bind first arguments must be a monad" in
+
+  (* bind return another Vcommand *)
+  Vcommand (fun () ->
     (* get callback *)
-  let body, ctx = match cb with
-    | Closure(_, body, ctx) -> body, ctx
-    | _ -> builtin_error loc "A Closure was expected" in
+    let body, ctx = match cb with
+      | Closure(_, body, ctx) -> body, ctx
+      | _ -> builtin_error loc "A Closure was expected" in
+
+    (* run given command *)
+    let underlying = cmd () in
 
     (* add evaluated IO to arg list *)
-  let nctx = add_rte_variable None io ctx in
+    let nctx = add_rte_variable None underlying ctx in
 
     (* eval callback *)
-    _eval body nctx 0
+    _eval body nctx 0)
 
 and run_io loc args_val ctx =
 
-  let io, callback = match args_val with
-    | [Vbind([io; callback])] -> io, callback
-    | _ -> builtin_error loc "run-io expects a single Vbind argument" in
+  let io, ltp = match args_val with
+    | [io; ltp] -> io, ltp
+    | _ -> builtin_error loc "run-io expects 2 arguments" in
 
-  (* eval args *)
-  let io = _eval io ctx 0 in
-  let callback = _eval callback ctx 0 in
+  let cmd = match io with
+    | Vcommand (cmd) -> cmd
+    | _ -> builtin_error loc "run-io expects a monad as first argument" in
 
-  (* eval bind *)
-  let a = bind_impl loc [io; callback] ctx in
-    get_predef_eval "Unit" ctx
+  (* run given command *)
+  let _ = cmd () in
+
+  (* return given type *)
+    ltp
 
 and typer_eval loc args ctx =
     let arg = match args with

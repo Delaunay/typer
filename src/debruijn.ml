@@ -158,7 +158,7 @@ let _env_lookup ctx (v: vref): env_elem  =
 let env_lookup_type ctx (v : vref): lexp =
   let (_, idx) = v in
   let (_, _, _, ltp) = _env_lookup ctx v in
-    mkSusp ltp (S.shift (idx + 1))
+    mkSusp ltp (S.shift (idx + 0))
 
 let env_lookup_expr ctx (v : vref): lexp =
   let (_, idx) = v in
@@ -208,7 +208,7 @@ let replace_by ctx name by =
 (* -------------------------------------------------------------------------- *)
 
 
-let add_property ctx (var_n, var_i) (att_n, att_i) (prop: lexp)
+let add_property ctx (var_i, var_n) (att_i, att_n) (prop: lexp)
     : lexp_context =
 
   let (a, b, property_map) = ctx in
@@ -225,6 +225,31 @@ let add_property ctx (var_n, var_i) (att_n, att_i) (prop: lexp)
   let property_map = PropertyMap.add (n - var_i, var_n) nvmap property_map in
 
     (a, b, property_map)
+
+let get_property ctx (var_i, var_n) (att_i, att_n): lexp =
+  let (a, b, property_map) = ctx in
+  let n = get_size ctx in
+
+  (* /!\ input index are reversed or not ? I think not so I shift them *)
+  let pmap = try PropertyMap.find (n - var_i, var_n) property_map
+    with Not_found ->
+      debruijn_error dummy_location ("Variable \"" ^ var_n ^ "\" does not have any properties") in
+
+  let prop = try PropertyMap.find (n - att_i, att_n) pmap
+    with Not_found ->
+      debruijn_error dummy_location ("Property \"" ^ att_n ^ "\" not found") in
+        mkSusp prop (S.shift (var_i + 1))
+
+
+let has_property ctx (var_i, var_n) (att_i, att_n): bool =
+  let (a, b, property_map) = ctx in
+  let n = get_size ctx in
+
+  try
+    let pmap = PropertyMap.find (n - var_i, var_n) property_map in
+    let prop = PropertyMap.find (n - att_i, att_n) pmap in
+      true
+  with Not_found -> false
 
 
 let dump_properties ctx =
