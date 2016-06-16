@@ -3,7 +3,7 @@ open Lexp
 
 module VMap = Map.Make (struct type t = int let compare = compare end)
 
-type substitution = lexp VMap.t
+type substitution = lexp VMap.t * int
 type constraints  = (lexp * lexp) list
 (* IMPROVEMENT For error handling : can carry location and name of type error *)
 type a' expected =
@@ -44,22 +44,20 @@ type return_type = (substitution * constraints) option
  * Lambda    , lexp               -> ERROR
 
    (*TODO*)
- * Call      , lexp               -> try UNIFY
- * Inductive , lexp               -> ????
- * Case      , case               -> ??
- * lexp      , lexp               -> ERROR
+ * Call      , lexp               ->
+ * Inductive , lexp               ->
+ * Case      , case               ->
+ * lexp      , lexp               ->
 
  * lexp is equivalent to _ in ocaml
  * (Let , lexp) == (lexp , Let)
  * UNIFY -> recursive call or dispatching
  * OK -> add a substituion to the list of substitution
 *)
-(*TODO FIXME : concat result with subst*)
-(*Maybe transform the result to return_type only at the end of the function ?*)
 (*l & r commutative ?*)
 let rec unify (l: lexp) (r: lexp) (subst: substitution) : return_type =
   (* Dispatch to the right unifyer*)
-  (* TODO : check rule ordering*)
+  (* TODO : check rule order*)
   match (l, r) with
   | (Imm, Imm)   -> _unify_imm      l r subst
   | (Cons, Cons) -> None
@@ -77,8 +75,8 @@ let rec unify (l: lexp) (r: lexp) (subst: substitution) : return_type =
   | (_, Lambda)  -> _unify_lambda   r l subst
   | (_, _)       -> None
 
-(*FIXME check that unification of part of type add the whole object to the subst*)
-(*maybe split unify into 2 function : is_unifyable and unify ?*)
+(* maybe split unify into 2 function : is_unifyable and unify ?
+ * cf _unify_lambda for (Lambda, Lambda) behavior*)
 
 (** Unify a Lambda and a lexp if possible
  * See above for result
@@ -193,24 +191,22 @@ let _unify_let (let_: lexp) (lxp: lexp) (subst: substitution) : return_type =
 (** Generate the next metavar by taking the highest value and
  * adding it one
  *)
-(*FIXME : find a better solution to have the size of the map :
- * - have the map carry its size with it
- *            -> 'private function' that handle this kind of map
- * - global last_idx :-( *)
-let add_substitution (lxp: lexp) (subst: substitution) : substitution =
-  let last_idx = VMap.fold (fun elt acc -> max elt acc) subst 0
-  in VMap.add (last_idx + 1) lxp subst
+let add_substitution (lxp: lexp) ((subst, max_): substitution) : substitution =
+  associate (max_ + 1) lxp (subst, max_)
 
 (** If key is in map returns the value associated
  * else returns None
  *)
-let find_or_none (value: lexp) (map: substitution) : lexp option =
+let find_or_none (value: lexp) ((map, max_): substitution) : lexp option =
   match value with
-  | Metavar idx -> if VMap.mem idx map
-    then Some (VMap.find idx map)
+  | Metavar idx -> if VMap.mem idx map (*optimisation with lazy bool op*)
+    then Some ((VMap.find idx map, max_))
     else None
   | _ -> None
 
 (** Alias for VMap.add*)
-let associate (meta: int) (lxp: lexp) (subst: substitution) : substitution =
-  VMap.add meta lexp subst
+let associate (meta: int) (lxp: lexp) ((subst, max_): substitution)
+  : substitution =
+  (VMap.add meta lexp subst, (max max_ meta ))
+
+let empty_subst = (VMap.empty, 0)
