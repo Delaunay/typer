@@ -172,7 +172,7 @@ let _unify_builtin (bltin: lexp) (lxp: lexp) (subst: substitution) : return_type
     else None (* assuming that builtin have unique name *)
   | (Builtin (_, lxp_), _) -> (match unify lxp lxp subst with
       | None -> None
-      | Some (s, c)-> (add_substitution bltin subst, c))
+      | Some (_, c)-> (add_substitution bltin subst, c))
   | (_, _) -> None
 
 (** Unify a Let (let_) and a lexp (lxp), if possible
@@ -182,7 +182,7 @@ let _unify_let (let_: lexp) (lxp: lexp) (subst: substitution) : return_type =
   match let_ with (* Discard the middle part of Let : right behavior ? *)
   | Let (_, _, lxp_) -> (match unify lxp_ lxp subst with
       | None -> None
-      | Some _ -> (add_substitution let_ subst, ()) )
+      | Some (_, c) -> (add_substitution let_ subst, c))
   | _ -> None
 
 (** Generate the next metavar by taking the highest value and
