@@ -89,8 +89,11 @@ let _unify_lambda (lambda: lexp) (lxp: lexp) (subst: substituion) : return_type 
     -> if var_kind1 = var_kind2
     then _unify_inner_arrow ltype1 lexp1 ltype2 lexp2 subst
     else None
-  | (Lambda, Var) -> (subst, (lambda, lexp))
-  | (_, _) -> None
+  | (Lambda, Var)   -> (subst, (lambda, lexp))
+  | (Lambda, Let)   -> (subst, (lambda, lexp))
+  | (Lambda, Arrow) -> (subst, (lambda, lexp)) (* ?? *)
+  | (Lambda, Call)  -> (subst, (lambda, lexp))
+  | (_, _)          -> None
 
 (** Unify a Metavar and a lexp if possible
  * See above for result
