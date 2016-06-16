@@ -199,9 +199,11 @@ let add_substitution (lxp: lexp) ((subst, max_): substitution) : substitution =
  *)
 let find_or_none (value: lexp) ((map, max_): substitution) : lexp option =
   match value with
-  | Metavar idx -> if VMap.mem idx map (*optimisation with lazy bool op*)
-    then Some ((VMap.find idx map, max_))
-    else None
+  | Metavar idx -> (if max_ < idx (* 0 < keys <= max_ *)
+                    then None
+                    else (if VMap.mem idx map
+                           then Some ((VMap.find idx map, max_))
+                           else None))
   | _ -> None
 
 (** Alias for VMap.add*)
