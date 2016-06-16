@@ -175,7 +175,9 @@ let _unify_builtin (bltin: lexp) (lxp: lexp) (subst: substitution) : return_type
   | (Builtin ((_, name1), _), Builtin ((_, name2),_))
     -> if name1 = name2 then (add_substitution l subst, ())
     else None (* assuming that builtin have unique name *)
-  | (Builtin (_, lxp_), _) -> unify lxp lxp subst
+  | (Builtin (_, lxp_), _) -> (match unify lxp lxp subst with
+      | None -> None
+      | Some (s, c)-> (add_substitution bltin subst, c))
   | (_, _) -> None
 
 (** Unify a Let (let_) and a lexp (lxp), if possible
