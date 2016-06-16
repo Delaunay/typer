@@ -62,17 +62,11 @@ let rec unify (l: lexp) (r: lexp) (subst: substitution) : return_type =
   | (Imm, Imm)   -> _unify_imm      l r subst
   | (Cons, Cons) -> None
   | (Builtin, _) -> _unify_builtin  l r subst
-  | (_, Builtin) -> _unify_builtin  r l subst
   | (Let, _)     -> _unify_let      l r subst
-  | (_, Let)     -> _unify_let      r l subst
   | (Var, _)     -> _unify_var      l r subst
-  | (_, Var)     -> _unify_var      r l subst
   | (Arrow, _)   -> _unify_arrow    l r subst
-  | (_, Arrow)   -> _unify_arrow    r l subst
-  | (Metavar, _) -> _unify_metavar  l r subst
-  | (_, MetaVar) -> _unify_metavar  r l susbt
   | (Lambda, _)  -> _unify_lambda   l r subst
-  | (_, Lambda)  -> _unify_lambda   r l subst
+  | (Metavar, _) -> _unify_metavar  l r subst (* end function : can't call unify with his exact parameter (re-ordered) *)
   | (_, _)       -> None
 
 (* maybe split unify into 2 function : is_unifyable and unify ?
@@ -91,10 +85,12 @@ let _unify_lambda (lambda: lexp) (lxp: lexp) (subst: substituion) : return_type 
   | (Lambda, Let)   -> (subst, (lambda, lexp))
   | (Lambda, Arrow) -> (subst, (lambda, lexp)) (* ?? *)
   | (Lambda, Call)  -> (subst, (lambda, lexp))
+  | (Lambda, _)     -> unify lexp lambda subst
   | (_, _)          -> None
 
 (** Unify a Metavar and a lexp if possible
  * See above for result
+ * Metavar is the 'end' of the rules i.e. : it can call unify with his argument (re-ordered)
  *)
 let _unify_metavar (meta: lexp) (lxp: lexp) (subst: substitution) : return_type =
   match (meta, lxp) with
@@ -124,7 +120,7 @@ let rec _unify_arrow (arrow: lexp) (lxp: lexp) (subst: substitution)
         | Some -> (add_substitution arrow subst, ())
         | None -> None)
     else None
-  (*| *)
+  | (Arrow, _) -> unfiy lxp arrow subst
   | (_, _) -> None
 
 (** Unify lexp & ltype (Arrow (_,_,ltype, lexp)) of two Arrow*)
@@ -138,7 +134,7 @@ let _unify_inner_arrow (lt1: lexp) (lxp1: lexp)
   | None -> None
 
 (** Unify a Var and a lexp, if possible
- * (Var, Var) -> unify if they have the same bebuijn index FIXME : shift indexes
+ * (Var, Var) -> unify if they have the same debruijn index FIXME : shift indexes
  * (Var, Metavar) -> unify_metavar Metavar var subst
  * (_, _) -> None
  *)
@@ -147,8 +143,7 @@ let _unify_var (var: lexp) (r: lexp) (subst: substitution) : return_type =
   | (Var (_, idx1), Var (_, idx2))
     -> if idx1 = idx2 then (add_substitution var subst, ())
     else None
-  | (Var, Metavar) -> _unify_metavar r var subst
-  (*| (Var, _) -> ???(*TODO*)*)
+  | (Var, _) -> unify r var subst (*returns to unify*)
   | (_, _)   -> None
 
 (** Unify two Imm if they match <=> Same type and same value
