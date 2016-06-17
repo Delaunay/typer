@@ -69,9 +69,15 @@ let empty_subst = (VMap.empty, 0)
                                      then unify ltype & lxp else ERROR
  * Lambda    , Var                -> constraints
  * Lambda    , lexp               -> ERROR
+ * Call      , Imm                -> CONSTRAINT
+ * Call      , Cons               -> ERROR
+ * Call      , Buitin             -> ERROR
+ * Call      , Var                -> CONSTRAINT
+ * Call      , Let                -> ERROR
+ * Call      , Arrow              -> ERROR
+ * Call      , Call               -> CONSTRAINT
 
    (*TODO*)
- * Call      , lexp               ->
  * Inductive , lexp               ->
  * Case      , case               ->
  * lexp      , lexp               ->
@@ -81,20 +87,35 @@ let empty_subst = (VMap.empty, 0)
  * UNIFY -> recursive call or dispatching
  * OK -> add a substituion to the list of substitution
 *)
-(*l & r commutative ?*)
+
+(** Dispatch to the right unifyer.
+ * If (_unify_X X Y) don't handle the case (X, Y), it call (unify Y X)
+ * The metavar unifyer is the end rule, it can't call unify with it's parameter (changing their order)
+ *)
 let rec unify (l: lexp) (r: lexp) (subst: substitution) : return_type =
-  (* Dispatch to the right unifyer*)
-  (* TODO : check rule order*)
   match (l, r) with
-  | (Imm, Imm)   -> _unify_imm      l r subst
-  | (Cons, Cons) -> None
-  | (Builtin, _) -> _unify_builtin  l r subst
-  | (Let, _)     -> _unify_let      l r subst
-  | (Var, _)     -> _unify_var      l r subst
-  | (Arrow, _)   -> _unify_arrow    l r subst
-  | (Lambda, _)  -> _unify_lambda   l r subst
-  | (Metavar, _) -> _unify_metavar  l r subst (* end function : can't call unify with his exact parameter (re-ordered) *)
-  | (_, _)       -> None
+  | (Imm _, _)       -> _unify_imm      l r subst
+  | (Cons _, Cons _) -> None
+  | (Builtin _, _)   -> _unify_builtin  l r subst
+  | (Let _, _)       -> _unify_let      l r subst
+  | (Var _, _)       -> _unify_var      l r subst
+  | (Arrow _, _)     -> _unify_arrow    l r subst
+  | (Lambda _, _)    -> _unify_lambda   l r subst
+  | (Metavar _, _)   -> _unify_metavar  l r subst
+  | (Call _, _)      -> _unify_call     l r subst
+  | (_, _)           -> None
+
+and _unify_call (call: lexp) (lxp: lexp) (subst: substitution) : return_type =
+  match (call, lxp) with
+  | (Call _, Imm _)     -> Some ((subst, [(call, lxp)]))
+  | (Call _, Cons _)    -> None
+  | (Call _, Builtin _) -> None
+  | (Call _, Var _)     -> Some ((subst, [(call, lxp)]))
+  | (Call _, Let _)     -> None (*¿?*)
+  | (Call _, Arrow _)   -> None (*¿?*)
+  | (Call _, Call _)    -> Some ((subst, [(call, lxp)]))
+  | (Call _, _)         -> unify lxp call subst
+  | (_, _)              -> None
 
 (* maybe split unify into 2 function : is_unifyable and unify ?
  * cf _unify_lambda for (Lambda, Lambda) behavior*)
