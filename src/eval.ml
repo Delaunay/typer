@@ -107,13 +107,13 @@ and eval_var ctx lxp v =
     let ((loc, name), idx) = v in
     try get_rte_variable (Some name) (idx) ctx
     with e ->
-        eval_error loc ("Variable: " ^ name ^ (str_idx idx) ^ " was not found ")
+      eval_error loc ("Variable: " ^ name ^ (str_idx idx) ^ " was not found ")
 
-and eval_call ctx i lname args =
+and eval_call ctx i lname eargs =
     let loc = elexp_location lname in
     let args = List.map (fun e ->
       (* elexp_print e; print_string "\n"; *)
-      _eval e ctx (i + 1)) args in
+      _eval e ctx (i + 1)) eargs in
     let f = _eval lname ctx (i + 1) in
 
     let rec eval_call f args ctx =
@@ -127,6 +127,10 @@ and eval_call ctx i lname args =
                 let nctx = add_rte_variable (Some n) hd ctx in
                 let ret = _eval lxp nctx (i + 1) in
                     eval_call ret tl nctx
+
+            (* bind is lazily evaluated *)
+            | Vbuiltin ("bind"), _ ->
+                Vbind eargs
 
             | Vbuiltin (str), args ->
                 (* lookup the built-in implementation and call it *)
@@ -229,6 +233,7 @@ and typer_builtins_impl = [
     ("bind"          , bind_impl);
     ("read"          , read_impl);
     ("write"         , write_impl);
+    ("new-attribute" , new_attribute)
 
 ]
 and bind_impl loc args_val ctx =
@@ -360,6 +365,7 @@ let from_lctx (ctx: lexp_context) rm: runtime_env =
                   with e -> elexp_print lxp;
                     print_string "\n"; raise e)
 
+            (* Happen once *)
           | None -> eval_warning dloc ("Unable to eval expr: " ^ (maybe name));
                 Vdummy in
 

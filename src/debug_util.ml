@@ -272,18 +272,55 @@ let main () =
             debug_pexp_decls pexps; print_string "\n"));
 
         (* get lexp *)
-        let ctx = default_lctx in
+        let octx = default_lctx in
 
-        print_string yellow;
-        let lexps, nctx =
-            try lexp_p_decls pexps ctx
-            with e -> (
-                print_string reset;
-                print_lexp_ctx (!_global_lexp_ctx);
-                print_lexp_trace ();
-                raise e
-            ) in
-        print_string reset;
+        (* Debug declarations merging *)
+
+        (** )
+        let merged = lexp_detect_recursive pexps in
+
+        let _ = List.iter (fun lst ->
+          print_string (make_line '-' 80);
+          print_string "\n";
+
+            List.iter (fun v ->
+              match v with
+                | Ldecl((l, s), pxp, ptp) -> (
+                  lalign_print_string s 20;
+
+                  let _ = match ptp with
+                    | Some pxp -> pexp_print pxp;
+                    | None -> print_string " " in
+
+                  print_string "\n";
+                  lalign_print_string s 20;
+
+                  let _ = match pxp with
+                    | Some pxp -> pexp_print pxp;
+                    | None -> print_string " " in
+
+                  print_string "\n")
+                | Lmcall((l, s), _ ) ->
+                  print_string s; print_string "\n"
+            ) lst;
+
+          ) merged in ( **)
+
+        (* debug lexp parsing once merged *)
+        let lexps, nctx = _lexp_decls pexps octx 0 in
+
+        (*
+        List.iter (fun ((l, s), lxp, ltp) ->
+          lalign_print_string s 20;
+          lexp_print ltp; print_string "\n";
+
+          lalign_print_string s 20;
+          lexp_print lxp; print_string "\n";
+
+          ) decls; *)
+
+        (* use the new way of parsing expr *)
+        let ctx = nctx in
         let flexps = List.flatten lexps in
 
         (* convert a lctx context into a typecheck context *)

@@ -114,7 +114,6 @@ sexp_dispatch_ = Built-in "sexp_dispatch_" (Sexp
     -> (List Sexp -> Sexp)
         ->  Sexp);
 
-
 % -----------------------------------------------------
 %       Monads
 % -----------------------------------------------------
@@ -138,6 +137,21 @@ FileHandle = Built-in "FileHandle";
 open  = Built-in "open"  (String -> String -> IO FileHandle);
 write = Built-in "write" (FileHandle -> String -> IO Unit);
 read  = Built-in "read"  (FileHandle -> Int -> IO String);
+
+% -----------------------------------------------------
+%       Attributes
+% -----------------------------------------------------
+
+Attribute = Built-in "Attribute";
+new-attribute = Built-in "new-attribute"  (Type -> Attribute);
+
+
+
+
+
+
+
+
 
 
 

@@ -205,6 +205,6 @@ and elexp_str lxp =
         | Inductive(_, (_, s)) ->
             "inductive_ " ^ s
 
-        | _ -> "Why do you still have those ? "
+        | Type -> "Type "
 
 

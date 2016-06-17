@@ -61,6 +61,7 @@ type value_type =
     | Vdummy
     | Vin of in_channel
     | Vout of out_channel
+    | Vbind of elexp list
 
 let rec value_print (vtp: value_type) =
     match vtp with
@@ -80,6 +81,11 @@ let rec value_print (vtp: value_type) =
         | Vdummy -> print_string "value_print_dummy"
         | Vin _ -> print_string "in_channel"
         | Vout _ -> print_string "out_channel"
+        | Vbind [a; b] -> print_string "bind (";
+          elexp_print a; print_string ") (";
+          elexp_print b; print_string ")";
+
+        | Vbind _ -> print_string "bind"
         (* | _ -> print_string "debug print" *)
 
 let value_location (vtp: value_type) =
@@ -102,6 +108,7 @@ let value_name v =
     | Vdummy -> "Vdummy"
     | Vin _ -> "Vin"
     | Vout _ -> "Vout"
+    | Vbind _ -> "Vbind"
 
 (*  Runtime Environ *)
 type env_cell = (string option * value_type) ref
