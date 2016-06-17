@@ -1,18 +1,45 @@
 
 open Lexp
+open Sexp
 
 module VMap = Map.Make (struct type t = int let compare = compare end)
 
 type substitution = lexp VMap.t * int
 type constraints  = (lexp * lexp) list
 (* IMPROVEMENT For error handling : can carry location and name of type error *)
-type a' expected =
+type 'a expected =
   | Some of 'a
-  | Error of location * string (*location * type name*)
+  | Error of Util.location * string (*location * type name*)
   | None
 
 (* For convenience *)
 type return_type = (substitution * constraints) option
+
+
+(** Alias for VMap.add*)
+let associate (meta: int) (lxp: lexp) ((subst, max_): substitution)
+  : substitution =
+  (VMap.add meta lxp subst, (max max_ meta ))
+
+(** Generate the next metavar by taking the highest value and
+ * adding it one
+ *)
+let add_substitution (lxp: lexp) ((subst, max_): substitution) : substitution =
+  associate (max_ + 1) lxp (subst, max_)
+
+(** If key is in map returns the value associated
+ * else returns None
+ *)
+let find_or_none (value: lexp) ((map, max_): substitution) : lexp option =
+  match value with
+  | Metavar (idx, _, _) -> (if max_ < idx (* 0 < keys <= max_ *)
+                    then None
+                    else (if VMap.mem idx map
+                           then Some (VMap.find idx map)
+                           else None))
+  | _ -> None
+
+let empty_subst = (VMap.empty, 0)
 
 (**
  * Imm       , Imm                -> if Imm =/= Imm then ERROR else OK
