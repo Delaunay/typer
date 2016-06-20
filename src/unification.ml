@@ -76,24 +76,28 @@ let empty_subst = (VMap.empty)
  * Call      , Let                -> ERROR
  * Call      , Arrow              -> ERROR
  * Call      , Call               -> CONSTRAINT
+ * Case      , lexp               -> ERROR
 
    (*TODO*)
  * Inductive , lexp               ->
- * Case      , case               ->
+ * Susp      , lexp               ->
  * lexp      , lexp               ->
 
  * lexp is equivalent to _ in ocaml
  * (Let , lexp) == (lexp , Let)
- * UNIFY -> recursive call or dispatching
- * OK -> add a substituion to the list of substitution
+ * UNIFY      -> recursive call or dispatching
+ * OK         -> add a substituion to the list of substitution
+ * CONSTRAINT -> returns a constraint
 *)
 
 (** Dispatch to the right unifyer.
  * If (_unify_X X Y) don't handle the case (X, Y), it call (unify Y X)
  * The metavar unifyer is the end rule, it can't call unify with it's parameter (changing their order)
- *)
+*)
 let rec unify (l: lexp) (r: lexp) (subst: substitution) : return_type =
   match (l, r) with
+  | (_, Metavar _)   -> _unify_metavar  r l subst
+  | (_, Call _)      -> _unify_call     r l subst
   | (Imm _, _)       -> _unify_imm      l r subst
   | (Cons _, Cons _) -> None
   | (Builtin _, _)   -> _unify_builtin  l r subst
@@ -103,26 +107,20 @@ let rec unify (l: lexp) (r: lexp) (subst: substitution) : return_type =
   | (Lambda _, _)    -> _unify_lambda   l r subst
   | (Metavar _, _)   -> _unify_metavar  l r subst
   | (Call _, _)      -> _unify_call     l r subst
+  | (Case _, _)      -> None
   | (_, _)           -> None
 
 and _unify_call (call: lexp) (lxp: lexp) (subst: substitution) : return_type =
   match (call, lxp) with
-  | (Call _, Imm _)     -> Some ((subst, [(call, lxp)]))
-  | (Call _, Cons _)    -> None
-  | (Call _, Builtin _) -> None
-  | (Call _, Var _)     -> Some ((subst, [(call, lxp)]))
-  | (Call _, Let _)     -> None (*¿?*)
-  | (Call _, Arrow _)   -> None (*¿?*)
-  | (Call _, Call _)    -> Some ((subst, [(call, lxp)]))
-  | (Call _, _)         -> unify lxp call subst
-  | (_, _)              -> None
+  | (Call _, _) -> Some ((subst, [(call, lxp)]))
+  | (_, _)      -> None
 
 (* maybe split unify into 2 function : is_unifyable and unify ?
  * cf _unify_lambda for (Lambda, Lambda) behavior*)
 
 (** Unify a Lambda and a lexp if possible
  * See above for result
- *)
+*)
 and _unify_lambda (lambda: lexp) (lxp: lexp) (subst: substitution) : return_type =
   match (lambda, lxp) with
   | (Lambda (var_kind1, _, ltype1, lexp1), Lambda (var_kind2, _, ltype2, lexp2))
@@ -131,7 +129,7 @@ and _unify_lambda (lambda: lexp) (lxp: lexp) (subst: substitution) : return_type
     else None
   | (Lambda _, Var _)   -> Some ((subst, [(lambda, lxp)]))
   | (Lambda _, Let _)   -> Some ((subst, [(lambda, lxp)]))
-  | (Lambda _, Arrow _) -> Some ((subst, [(lambda, lxp)])) (* ?? *)
+  | (Lambda _, Arrow _) -> None
   | (Lambda _, Call _)  -> Some ((subst, [(lambda, lxp)]))
   | (Lambda _, _)       -> unify lxp lambda subst
   | (_, _)              -> None
@@ -139,13 +137,11 @@ and _unify_lambda (lambda: lexp) (lxp: lexp) (subst: substitution) : return_type
 (** Unify a Metavar and a lexp if possible
  * See above for result
  * Metavar is the 'end' of the rules i.e. : it can call unify with his argument (re-ordered)
- *)
+*)
 and _unify_metavar (meta: lexp) (lxp: lexp) (subst: substitution) : return_type =
   match (meta, lxp) with
-  | (Metavar (val1, _, _), Metavar (val2, _, _)) ->
-    if val1 = val2
-    then Some ((add_substitution meta subst, []))
-    else None
+  | (Metavar (val1, _, _), Metavar (val2, _, _)) when val1 = val2 ->
+    Some ((subst, []))
   | (Metavar (v, _, _), _) -> (
       match find_or_none meta subst with
       | None          -> Some ((associate v lxp subst, []))
@@ -157,16 +153,14 @@ and _unify_metavar (meta: lexp) (lxp: lexp) (subst: substitution) : return_type 
                      then unify ltype & lexp (Arrow (var_kind, _, ltype, lexp))
                      else None
  * (_, _) -> None
- *)
+*)
 and _unify_arrow (arrow: lexp) (lxp: lexp) (subst: substitution)
   : return_type =
   match (arrow, lxp) with
   (*?????*)
   | (Arrow (var_kind1, _, ltype1, _, lexp1), Arrow (var_kind2, _, ltype2, _, lexp2))
     -> if var_kind1 = var_kind2
-    then (match _unify_inner_arrow ltype1 lexp1 ltype2 lexp2 subst with
-        | Some _ -> Some ((add_substitution arrow subst, []))
-        | None -> None)
+    then _unify_inner_arrow ltype1 lexp1 ltype2 lexp2 subst
     else None
   | (Arrow _, _) -> unify lxp arrow subst
   | (_, _) -> None
@@ -185,11 +179,11 @@ and _unify_inner_arrow (lt1: lexp) (lxp1: lexp)
  * (Var, Var) -> unify if they have the same debruijn index FIXME : shift indexes
  * (Var, Metavar) -> unify_metavar Metavar var subst
  * (_, _) -> None
- *)
+*)
 and _unify_var (var: lexp) (r: lexp) (subst: substitution) : return_type =
   match (var, r) with
   | (Var (_, idx1), Var (_, idx2))
-    -> if idx1 = idx2 then Some ((add_substitution var subst, []))
+    -> if idx1 = idx2 then Some ((subst, []))
     else None
   | (Var _, _) -> unify r var subst (*returns to unify*)
   | (_, _)   -> None
@@ -199,13 +193,13 @@ and _unify_var (var: lexp) (r: lexp) (subst: substitution) : return_type =
 and _unify_imm (l: lexp) (r: lexp) (subst: substitution) : return_type =
   match (l, r) with
   | (Imm (String (_, v1)), Imm (String (_, v2)))
-    -> if v1 = v2 then Some ((add_substitution l subst, []))
+    -> if v1 = v2 then Some ((subst, []))
     else None
   | (Imm (Integer (_, v1)), Imm (Integer (_, v2)))
-    -> if v1 = v2 then Some ((add_substitution l subst, []))
+    -> if v1 = v2 then Some ((subst, []))
     else None
   | (Imm (Float (_, v1)), Imm (Float (_, v2)))
-    -> if v1 = v2 then Some ((add_substitution l subst, []))
+    -> if v1 = v2 then Some ((subst, []))
     else None
   | (Imm _, Imm _) -> None
   | (Imm _, _) -> unify r l subst
