@@ -111,7 +111,13 @@ let rec unify (l: lexp) (r: lexp) (subst: substitution) : return_type =
   | (_, _)           -> None
 
 and _unify_call (call: lexp) (lxp: lexp) (subst: substitution) : return_type =
-  match (call, lxp) with
+  let combine list1 list2 =
+    let l1 = List.fold_left (fun acc (_, x) -> x::acc) [] list1
+    and l2 = List.fold_left (fun acc (_, x) -> x::acc) [] list2
+    in List.combine l1 l2
+  in match (call, lxp) with
+  | (Call (lxp1, lxp_list1), Call (lxp2, lxp_list2)) ->
+    _unify_inner ((lxp1, lxp2)::(combine lxp_list1 lxp_list2)) subst
   | (Call _, _) -> Some ((subst, [(call, lxp)]))
   | (_, _)      -> None
 
@@ -157,7 +163,6 @@ and _unify_metavar (meta: lexp) (lxp: lexp) (subst: substitution) : return_type 
 and _unify_arrow (arrow: lexp) (lxp: lexp) (subst: substitution)
   : return_type =
   match (arrow, lxp) with
-  (*?????*)
   | (Arrow (var_kind1, _, ltype1, _, lexp1), Arrow (var_kind2, _, ltype2, _, lexp2))
     -> if var_kind1 = var_kind2
     then _unify_inner_arrow ltype1 lexp1 ltype2 lexp2 subst
