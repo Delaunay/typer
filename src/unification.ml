@@ -94,6 +94,8 @@ let empty_subst = (VMap.empty)
  * If (_unify_X X Y) don't handle the case (X, Y), it call (unify Y X)
  * The metavar unifyer is the end rule, it can't call unify with it's parameter (changing their order)
 *)
+
+(*FIXME : check infintie mutual recursion*)
 let rec unify (l: lexp) (r: lexp) (subst: substitution) : return_type =
   match (l, r) with
   | (_, Metavar _)   -> _unify_metavar  r l subst
@@ -190,8 +192,9 @@ and _unify_var (var: lexp) (r: lexp) (subst: substitution) : return_type =
   | (Var (_, idx1), Var (_, idx2))
     -> if idx1 = idx2 then Some ((subst, []))
     else None
-  | (Var _, _) -> unify r var subst (*returns to unify*)
-  | (_, _)   -> None
+  | (Var _, Imm _) -> Some (subst, [(var, r)])(*FIXME : check for the value of Var -> need context ?*)
+  | (Var _, _)     -> unify r var subst (*returns to unify*)
+  | (_, _)         -> None
 
 (** Unify two Imm if they match <=> Same type and same value
  * Add one of the Imm (the first arguement) to the substitution *)
