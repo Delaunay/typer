@@ -222,8 +222,19 @@ and _unify_builtin (bltin: lexp) (lxp: lexp) (subst: substitution) : return_type
 *)
 and _unify_let (let_: lexp) (lxp: lexp) (subst: substitution) : return_type =
   match (let_, lxp) with
-  | (Let (_, ltype_, lxp_), Let (_, lt2, lxp2)) -> unify lxp_ lxp subst
+  | (Let (_, m, lxp_), Let (_, m1, lxp2)) ->
+    _unify_inner ((lxp_, lxp2)::(combine m m1)) subst
   | _, _ -> None
+
+(** take two list [(vdef * ltype * lexp), (vdef2 * ltype2 * lexp2)...]
+    map them to [ltype, lexp, ltype2, lexp2, ...]
+    and zip them to
+    [(ltype * ltype), (lexp * lexp), (ltype2 * ltype2), (lexp2 * lexp2), ...]
+*)
+and combine list1 list2 =
+  let l1 = List.fold_left (fun acc (_, t, x) -> t::x::acc) [] list1
+  and l2 = List.fold_left (fun acc (_, t, x) -> t::x::acc) [] list2
+  in List.combine l1 l2
 
 and _unify_inner (lxp_l: (lexp * lexp) list) (subst: substitution) : return_type =
   let merge ((s, c): (substitution * constraints))
