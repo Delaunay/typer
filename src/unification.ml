@@ -4,7 +4,7 @@ open Sexp
 
 module VMap = Map.Make (struct type t = int let compare = compare end)
 
-type substitution = lexp VMap.t * int
+type substitution = lexp VMap.t
 type constraints  = (lexp * lexp) list
 (* IMPROVEMENT For error handling : can carry location and name of type error *)
 type 'a expected =
@@ -12,34 +12,34 @@ type 'a expected =
   | Error of Util.location * string (*location * type name*)
   | None
 
+let global_last_metavar = ref 0
+let create_metavar = global_last_metavar := !global_last_metavar + 1; !global_last_metavar
+
+let expected_to_option (e: 'a expected) : ('a option) =
+  match e with
+  | Some elt -> Some elt
+  | Error _  -> None
+  | None     -> None
+
 (* For convenience *)
 type return_type = (substitution * constraints) option
 
-
 (** Alias for VMap.add*)
-let associate (meta: int) (lxp: lexp) ((subst, max_): substitution)
+let associate (meta: int) (lxp: lexp) (subst: substitution)
   : substitution =
-  (VMap.add meta lxp subst, (max max_ meta ))
-
-(** Generate the next metavar by taking the highest value and
- * adding it one
- *)
-let add_substitution (lxp: lexp) ((subst, max_): substitution) : substitution =
-  associate (max_ + 1) lxp (subst, max_)
+  (VMap.add meta lxp subst)
 
 (** If key is in map returns the value associated
  * else returns None
- *)
-let find_or_none (value: lexp) ((map, max_): substitution) : lexp option =
+*)
+let find_or_none (value: lexp) (map: substitution) : lexp option =
   match value with
-  | Metavar (idx, _, _) -> (if max_ < idx (* 0 < keys <= max_ *)
-                    then None
-                    else (if VMap.mem idx map
-                           then Some (VMap.find idx map)
-                           else None))
+  | Metavar (idx, _, _) -> (if VMap.mem idx map
+                            then Some (VMap.find idx map)
+                            else None)
   | _ -> None
 
-let empty_subst = (VMap.empty, 0)
+let empty_subst = (VMap.empty)
 
 (**
  * Imm       , Imm                -> if Imm =/= Imm then ERROR else OK
