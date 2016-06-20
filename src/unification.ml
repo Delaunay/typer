@@ -34,7 +34,7 @@ let associate (meta: int) (lxp: lexp) (subst: substitution)
 *)
 let find_or_none (value: lexp) (map: substitution) : lexp option =
   match value with
-  | Metavar (idx, _, _) -> (if VMap.mem idx map
+  | Metavar (idx, _) -> (if VMap.mem idx map
                             then Some (VMap.find idx map)
                             else None)
   | _ -> None
@@ -146,9 +146,9 @@ and _unify_lambda (lambda: lexp) (lxp: lexp) (subst: substitution) : return_type
 *)
 and _unify_metavar (meta: lexp) (lxp: lexp) (subst: substitution) : return_type =
   match (meta, lxp) with
-  | (Metavar (val1, _, _), Metavar (val2, _, _)) when val1 = val2 ->
+  | (Metavar (val1, _), Metavar (val2, _)) when val1 = val2 ->
     Some ((subst, []))
-  | (Metavar (v, _, _), _) -> (
+  | (Metavar (v, _), _) -> (
       match find_or_none meta subst with
       | None          -> Some ((associate v lxp subst, []))
       | Some (lxp_)   -> unify lxp_ lxp subst)
