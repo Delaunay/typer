@@ -212,20 +212,28 @@ and _unify_imm (l: lexp) (r: lexp) (subst: substitution) : return_type =
 and _unify_builtin (bltin: lexp) (lxp: lexp) (subst: substitution) : return_type =
   match (bltin, lxp) with
   | (Builtin ((_, name1), _), Builtin ((_, name2),_))
-    -> if name1 = name2 then Some ((add_substitution lxp subst, []))
+    -> if name1 = name2 then Some ((subst, []))
     else None (* assuming that builtin have unique name *)
-  | (Builtin (_, lxp_bltin), _) -> (match unify lxp_bltin lxp subst with
-      | None -> None
-      | Some (_, c)-> Some ((add_substitution bltin subst, c)))
+  | (Builtin (_, lxp_bltin), _) -> unify lxp_bltin lxp subst
   | (_, _) -> None
 
 (** Unify a Let (let_) and a lexp (lxp), if possible
  * Unify the left lexp part of the Let (Let (_, _, lxp)) with the lexp
- *)
+*)
 and _unify_let (let_: lexp) (lxp: lexp) (subst: substitution) : return_type =
-  match let_ with (* Discard the middle part of Let : right behavior ? *)
-  | Let (_, _, lxp_) -> (match unify lxp_ lxp subst with
-      | None -> None
-      | Some (_, c) -> Some ((add_substitution let_ subst, c)))
-  | _ -> None
+  match (let_, lxp) with
+  | (Let (_, ltype_, lxp_), Let (_, lt2, lxp2)) -> unify lxp_ lxp subst
+  | _, _ -> None
 
+and _unify_inner (lxp_l: (lexp * lexp) list) (subst: substitution) : return_type =
+  let merge ((s, c): (substitution * constraints))
+      (lxp_list: (lexp * lexp) list) : return_type =
+    match _unify_inner lxp_list s with
+    | None -> Some (s, c)
+    | Some (s_,c_) -> Some (s_, c@c_)
+  in
+  match lxp_l with
+  | (lxp1, lxp2)::tail -> ( match unify lxp1 lxp2 subst with
+      | Some (s, c) -> merge (s, c) tail
+      | None -> None)
+  | [] -> None
