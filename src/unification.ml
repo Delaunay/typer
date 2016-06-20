@@ -145,7 +145,7 @@ and _unify_metavar (meta: lexp) (lxp: lexp) (subst: substitution) : return_type 
   | (Metavar (v, _, _), _) -> (
       match find_or_none meta subst with
       | None          -> Some ((associate v lxp subst, []))
-      | Some (lxp_)   -> unify lxp_ lxp subst) (*Not sure if it's the expected behavior*)
+      | Some (lxp_)   -> unify lxp_ lxp subst)
   | (_, _) -> None
 
 (** Unify a Arrow and a lexp if possible
@@ -224,6 +224,7 @@ and _unify_let (let_: lexp) (lxp: lexp) (subst: substitution) : return_type =
   match (let_, lxp) with
   | (Let (_, m, lxp_), Let (_, m1, lxp2)) ->
     _unify_inner ((lxp_, lxp2)::(combine m m1)) subst
+  | (Let _,  _) -> Some (subst, [(let_, lxp)])
   | _, _ -> None
 
 (** take two list [(vdef * ltype * lexp), (vdef2 * ltype2 * lexp2)...]
@@ -248,3 +249,5 @@ and _unify_inner (lxp_l: (lexp * lexp) list) (subst: substitution) : return_type
       | Some (s, c) -> merge (s, c) tail
       | None -> None)
   | [] -> None
+
+
