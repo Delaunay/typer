@@ -58,7 +58,8 @@ let empty_subst = (VMap.empty)
 
  * Arrow     , Arrow              -> if var_kind = var_kind
                                      then UNIFY ltype & lexp else ERROR
- * Arrow     , lexp               -> ERROR
+ * Arrow     , Imm                -> ERROR
+ * Arrow     , Var                -> CONSTRAINT
 
  * lexp      , {metavar <-> none} -> UNIFY
  * lexp      , {metavar <-> lexp} -> UNFIFY lexp subst[metavar]
@@ -95,22 +96,31 @@ let empty_subst = (VMap.empty)
  * The metavar unifyer is the end rule, it can't call unify with it's parameter (changing their order)
 *)
 
-(*FIXME : check infintie mutual recursion*)
 let rec unify (l: lexp) (r: lexp) (subst: substitution) : return_type =
   match (l, r) with
-  | (_, Metavar _)   -> _unify_metavar  r l subst
-  | (_, Call _)      -> _unify_call     r l subst
-  | (Imm _, _)       -> _unify_imm      l r subst
-  | (Cons _, Cons _) -> None
-  | (Builtin _, _)   -> _unify_builtin  l r subst
-  | (Let _, _)       -> _unify_let      l r subst
-  | (Var _, _)       -> _unify_var      l r subst
-  | (Arrow _, _)     -> _unify_arrow    l r subst
-  | (Lambda _, _)    -> _unify_lambda   l r subst
-  | (Metavar _, _)   -> _unify_metavar  l r subst
-  | (Call _, _)      -> _unify_call     l r subst
-  | (Case _, _)      -> None
-  | (_, _)           -> None
+  | (_, Metavar _) -> _unify_metavar  r l subst
+  | (_, Call _)    -> _unify_call     r l subst
+  | (Imm _, _)     -> _unify_imm      l r subst
+  | (Cons _, _)    -> _unify_cons     l r subst
+  | (Builtin _, _) -> _unify_builtin  l r subst
+  | (Let _, _)     -> _unify_let      l r subst
+  | (Var _, _)     -> _unify_var      l r subst
+  | (Arrow _, _)   -> _unify_arrow    l r subst
+  | (Lambda _, _)  -> _unify_lambda   l r subst
+  | (Metavar _, _) -> _unify_metavar  l r subst
+  | (Call _, _)    -> _unify_call     l r subst
+  | (Case _, _)    -> None
+  | (_, _)         -> None
+
+and _unify_cons (cons: lexp) (lxp: lexp) (subst: substitution) : return_type =
+  (* symbol = (location * string)*)
+  match (cons, lxp) with
+  (*FIXME which parameter of Cons is it's name ?*)
+  | (Cons ((_, idx),  (_, name)),
+     Cons ((_, idx2), (_, name2))) when name = name2 ->
+          if idx = idx2 then Some (subst, []) (*TODO shift indexes ?*)
+          else None
+  | (_, _) -> None
 
 and _unify_call (call: lexp) (lxp: lexp) (subst: substitution) : return_type =
   let combine list1 list2 =
@@ -122,9 +132,6 @@ and _unify_call (call: lexp) (lxp: lexp) (subst: substitution) : return_type =
     _unify_inner ((lxp1, lxp2)::(combine lxp_list1 lxp_list2)) subst
   | (Call _, _) -> Some ((subst, [(call, lxp)]))
   | (_, _)      -> None
-
-(* maybe split unify into 2 function : is_unifyable and unify ?
- * cf _unify_lambda for (Lambda, Lambda) behavior*)
 
 (** Unify a Lambda and a lexp if possible
  * See above for result
@@ -139,6 +146,7 @@ and _unify_lambda (lambda: lexp) (lxp: lexp) (subst: substitution) : return_type
   | (Lambda _, Let _)   -> Some ((subst, [(lambda, lxp)]))
   | (Lambda _, Arrow _) -> None
   | (Lambda _, Call _)  -> Some ((subst, [(lambda, lxp)]))
+  | (Lambda _, Imm _)   -> None
   | (Lambda _, _)       -> unify lxp lambda subst
   | (_, _)              -> None
 
@@ -169,7 +177,10 @@ and _unify_arrow (arrow: lexp) (lxp: lexp) (subst: substitution)
     -> if var_kind1 = var_kind2
     then _unify_inner_arrow ltype1 lexp1 ltype2 lexp2 subst
     else None
+  | (Arrow _, Imm _) -> None
+  | (Arrow _, Var _) -> Some (subst, [(arrow, lxp)]) (* FIXME Var can contain type ???*)
   | (Arrow _, _) -> unify lxp arrow subst
+  (*| (Arrow _, Call _) -> None*) (* Call can return type (?) *)
   | (_, _) -> None
 
 (** Unify lexp & ltype (Arrow (_,_,ltype, lexp)) of two Arrow*)
