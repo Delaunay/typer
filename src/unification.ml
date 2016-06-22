@@ -67,8 +67,8 @@ let empty_subst = (VMap.empty)
  * metavar   , lexp               -> ERROR
 
  * Lamda     , Lambda             -> if var_kind = var_kind
-                                     then unify ltype & lxp else ERROR
- * Lambda    , Var                -> constraints
+                                     then UNIFY ltype & lxp else ERROR
+ * Lambda    , Var                -> CONSTRAINT
  * Lambda    , lexp               -> ERROR
  * Call      , Imm                -> CONSTRAINT
  * Call      , Cons               -> ERROR
@@ -109,8 +109,14 @@ let rec unify (l: lexp) (r: lexp) (subst: substitution) : return_type =
   | (Lambda _, _)  -> _unify_lambda   l r subst
   | (Metavar _, _) -> _unify_metavar  l r subst
   | (Call _, _)    -> _unify_call     l r subst
+  | (Susp _, _)    -> _unify_susp     l r subst
   | (Case _, _)    -> None
   | (_, _)         -> None
+
+and _unify_susp (susp_: lexp) (lxp: lexp) (subst: substitution) : return_type =
+  match susp_ with
+  | Susp _ -> unify (unsusp_all susp_) lxp subst
+  | _ -> None
 
 and _unify_cons (cons: lexp) (lxp: lexp) (subst: substitution) : return_type =
   (* symbol = (location * string)*)
