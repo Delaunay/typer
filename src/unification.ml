@@ -7,19 +7,19 @@ module VMap = Map.Make (struct type t = int let compare = compare end)
 type substitution = lexp VMap.t
 type constraints  = (lexp * lexp) list
 (* IMPROVEMENT For error handling : can carry location and name of type error *)
-type 'a expected =
-  | Some of 'a
-  | Error of Util.location * string (*location * type name*)
-  | None
+(*type 'a expected =*)
+(*| Some of 'a*)
+(*| Error of Util.location * string (*location * type name*)*)
+(*| None*)
 
 let global_last_metavar = ref 0
 let create_metavar = global_last_metavar := !global_last_metavar + 1; !global_last_metavar
 
-let expected_to_option (e: 'a expected) : ('a option) =
-  match e with
-  | Some elt -> Some elt
-  | Error _  -> None
-  | None     -> None
+(*let expected_to_option (e: 'a expected) : ('a option) =*)
+(*match e with*)
+(*| Some elt -> Some elt*)
+(*| Error _  -> None*)
+(*| None     -> None*)
 
 (* For convenience *)
 type return_type = (substitution * constraints) option
@@ -35,8 +35,8 @@ let associate (meta: int) (lxp: lexp) (subst: substitution)
 let find_or_none (value: lexp) (map: substitution) : lexp option =
   match value with
   | Metavar (idx, _) -> (if VMap.mem idx map
-                            then Some (VMap.find idx map)
-                            else None)
+                         then Some (VMap.find idx map)
+                         else None)
   | _ -> None
 
 let empty_subst = (VMap.empty)
@@ -95,20 +95,63 @@ let empty_subst = (VMap.empty)
 
 let rec unify (l: lexp) (r: lexp) (subst: substitution) : return_type =
   match (l, r) with
-  | (_, Metavar _) -> _unify_metavar  r l subst
-  | (_, Call _)    -> _unify_call     r l subst
-  | (Imm _, _)     -> _unify_imm      l r subst
-  | (Cons _, _)    -> _unify_cons     l r subst
-  | (Builtin _, _) -> _unify_builtin  l r subst
-  | (Let _, _)     -> _unify_let      l r subst
-  | (Var _, _)     -> _unify_var      l r subst
-  | (Arrow _, _)   -> _unify_arrow    l r subst
-  | (Lambda _, _)  -> _unify_lambda   l r subst
-  | (Metavar _, _) -> _unify_metavar  l r subst
-  | (Call _, _)    -> _unify_call     l r subst
-  | (Susp _, _)    -> _unify_susp     l r subst
-  | (Case _, _)    -> None
-  | (_, _)         -> None
+  | (_, Metavar _)   -> _unify_metavar  r l subst
+  | (_, Call _)      -> _unify_call     r l subst
+  | (Imm _, _)       -> _unify_imm      l r subst
+  | (Cons _, _)      -> _unify_cons     l r subst
+  | (Builtin _, _)   -> _unify_builtin  l r subst
+  | (Let _, _)       -> _unify_let      l r subst
+  | (Var _, _)       -> _unify_var      l r subst
+  | (Arrow _, _)     -> _unify_arrow    l r subst
+  | (Lambda _, _)    -> _unify_lambda   l r subst
+  | (Metavar _, _)   -> _unify_metavar  l r subst
+  | (Call _, _)      -> _unify_call     l r subst
+  | (Susp _, _)      -> _unify_susp     l r subst
+  | (Case _, _)      -> None (* Maybe Constraint instead ?*)
+  | (Inductive _, _) -> _unfiy_induct   l r subst
+  | (_, _)           -> None
+
+and _unify_inner_induct_2 lst subst : return_type =
+  let test ((a1, _, l1), (a2, _, l2)) subst : return_type = if a1 = a2
+    then unify l1 l2 subst
+    else None
+  in
+  List.fold_left (fun a e -> (match a with
+      | Some (s, c) -> (match test e s with
+          | Some (s1, c1) -> Some (s1, c1@c)
+          | None -> Some (s, c))
+      | None -> test e subst)
+    ) None lst
+
+and test_list l1 l2 subst =
+  let test l1 l2 subst = match l1, l2 with
+    | (k1, v1)::t1, (k2, v2)::t2 when k1 = k2 -> (match _unify_inner_induct_2 (List.combine v1 v2) subst with
+        | Some (s, c) -> (match (test_list t1 t2 s) with
+            | Some (s1, c1) -> Some (s1, c1@c)
+            | None -> Some (s, c))
+        | None -> (test_list t1 t2 subst))
+    | _, _ -> None
+  in test l1 l2 subst
+
+and _unify_inner_induct_1 lst subst : return_type =
+  let test ((a1, _, l1), (a2, _, l2)) subst : return_type = if a1 = a2
+    then unify l1 l2 subst
+    else None
+  in
+  List.fold_left (fun a e -> (match a with
+      | Some (s, c) -> (match test e s with
+          | Some (s1, c1) -> Some (s1, c1@c)
+          | None -> Some (s, c))
+      | None -> test e subst)
+    ) None lst
+
+and _unfiy_induct (induct: lexp) (lxp: lexp) (subst: substitution) : return_type =
+  match (induct, lxp) with
+  | (Inductive (_, lbl1, farg1, m1), Inductive (_, lbl2, farg2, m2)) when lbl1 = lbl2 ->
+    (match _unify_inner_induct_1 (List.combine farg1 farg2) subst with
+     | None -> None
+     | Some (s, c) -> test_list (SMap.bindings m1) (SMap.bindings m2) subst)
+  | (_, _) -> None
 
 and _unify_susp (susp_: lexp) (lxp: lexp) (subst: substitution) : return_type =
   match susp_ with
@@ -121,8 +164,8 @@ and _unify_cons (cons: lexp) (lxp: lexp) (subst: substitution) : return_type =
   (*FIXME which parameter of Cons is it's name ?*)
   | (Cons ((_, idx),  (_, name)),
      Cons ((_, idx2), (_, name2))) when name = name2 ->
-          if idx = idx2 then Some (subst, []) (*TODO shift indexes ?*)
-          else None
+    if idx = idx2 then Some (subst, []) (*TODO shift indexes ?*)
+    else None
   | (_, _) -> None
 
 and _unify_call (call: lexp) (lxp: lexp) (subst: substitution) : return_type =
@@ -180,7 +223,7 @@ and _unify_arrow (arrow: lexp) (lxp: lexp) (subst: substitution)
   | (Arrow (var_kind1, _, ltype1, _, lexp1), Arrow (var_kind2, _, ltype2, _, lexp2))
     -> if var_kind1 = var_kind2
     then _unify_inner ((ltype1, ltype2)::(lexp1, lexp2)::[]) subst
-      (* _unify_inner_arrow ltype1 lexp1 ltype2 lexp2 subst *)
+    (* _unify_inner_arrow ltype1 lexp1 ltype2 lexp2 subst *)
     else None
   | (Arrow _, Imm _) -> None
   | (Arrow _, Var _) -> Some (subst, [(arrow, lxp)]) (* FIXME Var can contain type ???*)
