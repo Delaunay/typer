@@ -50,11 +50,12 @@ let empty_subst = (VMap.empty)
                                      then ERROR else OK
  * Builtin   , lexp               -> UNIFY lexp of Builtin with lexp
 
- * Let       , lexp               -> UNIFY right part of Let with lexp
+ * Let       , Let                -> UNIFY inside of Let
+ * Let       , lexp               -> CONSTRAINT
 
  * Var       , Var                -> if db_index ~= db_index UNIFY else ERROR
  * Var       , MetaVar            -> UNIFY Metavar
- * Var       , lexp               -> ERROR
+ * Var       , lexp               -> CONSTRAINT
 
  * Arrow     , Arrow              -> if var_kind = var_kind
                                      then UNIFY ltype & lexp else ERROR
@@ -64,24 +65,20 @@ let empty_subst = (VMap.empty)
  * lexp      , {metavar <-> none} -> UNIFY
  * lexp      , {metavar <-> lexp} -> UNFIFY lexp subst[metavar]
  * metavar   , metavar            -> if Metavar = Metavar then OK else ERROR
- * metavar   , lexp               -> ERROR
+ * metavar   , lexp               -> OK
 
  * Lamda     , Lambda             -> if var_kind = var_kind
                                      then UNIFY ltype & lxp else ERROR
  * Lambda    , Var                -> CONSTRAINT
  * Lambda    , lexp               -> ERROR
- * Call      , Imm                -> CONSTRAINT
- * Call      , Cons               -> ERROR
- * Call      , Buitin             -> ERROR
- * Call      , Var                -> CONSTRAINT
- * Call      , Let                -> ERROR
- * Call      , Arrow              -> ERROR
- * Call      , Call               -> CONSTRAINT
- * Case      , lexp               -> ERROR
+
+ * Call      , lexp               -> CONSTRAINT
+
+ * Case      , lexp               -> ERROR (or CONSTRAINT ?)
+ * Susp      , lexp               -> UNIFY (unsusp Susp) lexp
 
    (*TODO*)
  * Inductive , lexp               ->
- * Susp      , lexp               ->
  * lexp      , lexp               ->
 
  * lexp is equivalent to _ in ocaml
@@ -130,8 +127,8 @@ and _unify_cons (cons: lexp) (lxp: lexp) (subst: substitution) : return_type =
 
 and _unify_call (call: lexp) (lxp: lexp) (subst: substitution) : return_type =
   let combine list1 list2 =
-    let l1 = List.fold_left (fun acc (_, x) -> x::acc) [] list1
-    and l2 = List.fold_left (fun acc (_, x) -> x::acc) [] list2
+    let l1 = List.fold_right (fun (_, x) acc -> x::acc) list1 []
+    and l2 = List.fold_right (fun (_, x) acc -> x::acc) list2 []
     in List.combine l1 l2
   in match (call, lxp) with
   | (Call (lxp1, lxp_list1), Call (lxp2, lxp_list2)) ->
@@ -146,7 +143,8 @@ and _unify_lambda (lambda: lexp) (lxp: lexp) (subst: substitution) : return_type
   match (lambda, lxp) with
   | (Lambda (var_kind1, _, ltype1, lexp1), Lambda (var_kind2, _, ltype2, lexp2))
     -> if var_kind1 = var_kind2
-    then _unify_inner_arrow ltype1 lexp1 ltype2 lexp2 subst
+    then _unify_inner ((ltype1, ltype2)::(lexp1, lexp2)::[]) subst
+    (*then _unify_inner_arrow ltype1 lexp1 ltype2 lexp2 subst*)
     else None
   | (Lambda _, Var _)   -> Some ((subst, [(lambda, lxp)]))
   | (Lambda _, Let _)   -> Some ((subst, [(lambda, lxp)]))
@@ -181,7 +179,8 @@ and _unify_arrow (arrow: lexp) (lxp: lexp) (subst: substitution)
   match (arrow, lxp) with
   | (Arrow (var_kind1, _, ltype1, _, lexp1), Arrow (var_kind2, _, ltype2, _, lexp2))
     -> if var_kind1 = var_kind2
-    then _unify_inner_arrow ltype1 lexp1 ltype2 lexp2 subst
+    then _unify_inner ((ltype1, ltype2)::(lexp1, lexp2)::[]) subst
+      (* _unify_inner_arrow ltype1 lexp1 ltype2 lexp2 subst *)
     else None
   | (Arrow _, Imm _) -> None
   | (Arrow _, Var _) -> Some (subst, [(arrow, lxp)]) (* FIXME Var can contain type ???*)
@@ -243,7 +242,8 @@ and _unify_builtin (bltin: lexp) (lxp: lexp) (subst: substitution) : return_type
   | (_, _) -> None
 
 (** Unify a Let (let_) and a lexp (lxp), if possible
- * Unify the left lexp part of the Let (Let (_, _, lxp)) with the lexp
+ * Let , Let -> check the 'inside' of the let
+ * Let , lexp -> constraint
 *)
 and _unify_let (let_: lexp) (lxp: lexp) (subst: substitution) : return_type =
   match (let_, lxp) with
@@ -258,8 +258,8 @@ and _unify_let (let_: lexp) (lxp: lexp) (subst: substitution) : return_type =
     [(ltype * ltype), (lexp * lexp), (ltype2 * ltype2), (lexp2 * lexp2), ...]
 *)
 and combine list1 list2 =
-  let l1 = List.fold_left (fun acc (_, t, x) -> t::x::acc) [] list1
-  and l2 = List.fold_left (fun acc (_, t, x) -> t::x::acc) [] list2
+  let l1 = List.fold_right (fun (_, t, x) acc -> t::x::acc) list1 []
+  and l2 = List.fold_right (fun (_, t, x) acc -> t::x::acc) list2 []
   in List.combine l1 l2
 
 and _unify_inner (lxp_l: (lexp * lexp) list) (subst: substitution) : return_type =
