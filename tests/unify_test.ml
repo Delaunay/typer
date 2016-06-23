@@ -46,6 +46,11 @@ let rec string_of_lxp lxp =
   | Lambda (_,(_, name), dcl, body) -> "Lambda(" ^ name ^ " : " ^ (string_of_lxp dcl) ^ " => (" ^ (string_of_lxp body) ^ ") )"
   | Metavar (value, (_, name))      -> "Metavar(" ^ (string_of_int value) ^ ", " ^ name ^ ")"
   | Call (_)                        -> "Call(...)"
+  | Inductive _                     -> ("Inductive") ^ "(...)"
+  | Sort _                          -> ("Sort") ^ "(...)"
+  | SortLevel _                     -> ("SortLevel") ^ "(...)"
+  | Case _                          -> ("Case") ^ "(...)"
+  | Susp _                          -> "Susp(...)"
   | _                               -> "???"
 
 let _color = false
@@ -69,6 +74,11 @@ let colored_string_of_lxp lxp lcol vcol =
                                        ^ " => (" ^ (vcol (string_of_lxp body)) ^ ") )"
   | Metavar (value, (_, name))      -> (lcol "Metavar" ) ^ "(" ^ (vcol (string_of_int value)) ^ ", " ^ (vcol name) ^ ")"
   | Call (_)                        -> (lcol "Call(...)" )
+  | Case _                          -> (lcol "Case") ^ "(...)"
+  | Inductive _                     -> (lcol "Inductive") ^ "(...)"
+  | Sort _                          -> (lcol "Sort") ^ "(...)"
+  | SortLevel _                     -> (lcol "SortLevel") ^ "(...)"
+  | Susp _                          -> (lcol "Susp") ^ "(...)"
   | _                               -> "???"
 
 let padding_right (str: string ) (dim: int ) (char_: char) : string =
@@ -134,7 +144,7 @@ let input_, _  = lexp_decl_str "
             let a = (twice x); b = (mult 2 x); in
                 a + b;" default_lctx
 
-let input = List.map (fun (_, l, _)-> l) (List.flatten input_)
+let input = List.flatten (List.map (fun (_, l, l2)-> l::l2::[]) (List.flatten input_))
 
 let man_input =
   Imm (Integer (Util.dummy_location, 3))
@@ -205,6 +215,7 @@ let generate_testable (_: lexp list) : ((lexp * lexp * result) list) =
               (Util.dummy_location, "L2"),
               Var((Util.dummy_location, "z"), 4),
               Imm (Integer (Util.dummy_location, 3))), Unification )
+
   ::( Cons (((Util.dummy_location, "Cons"), 3), (Util.dummy_location, "Cons")) ,
       Imm (Integer (Util.dummy_location, 3)) , Nothing )
 
@@ -235,14 +246,12 @@ let test_if (input: lexp list) sample_generator checker : bool =
     | [] -> true
   in test_if_ (sample_generator input) checker
 
-let print_as_json (input: lexp list) =
-  let h::t = tests input (generate_couples) (fmt_all)
-  in let s = "[\n" ^ (List.fold_right (fun e a -> a ^ e ^ ",\n") t "") ^ h ^ "\n]\n"
-  in print_string s
+(*let print_as_json (input: lexp list) =*)
+  (*let h::t = tests input (generate_couples) (fmt_all)*)
+  (*in let s = "[\n" ^ (List.fold_right (fun e a -> a ^ e ^ ",\n") t "") ^ h ^ "\n]\n"*)
+  (*in print_string s*)
 
 (*let () = print_as_json (input@man_input)*)
-
-(*let () = (fun () ->  if test_if [] generate_testable check then () else ()) ()*)
 
 let _ = List.map
     (fun (l1, l2, r) ->
@@ -252,3 +261,5 @@ let _ = List.map
     (generate_testable [])
 
 let _ = run_all ()
+
+
