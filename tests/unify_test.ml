@@ -1,5 +1,6 @@
 
 open Sexp
+open Pexp
 open Lexp
 open Unification
 
@@ -122,6 +123,9 @@ let fmt_title l1 l2 r = string_of_lxp l1 ^ ", " ^ string_of_lxp l2 ^ " -> " ^ st
 
 (* Inputs for the test *)
 let input_, _  = lexp_decl_str "
+        sqr = lambda (x : Int) -> x * x;
+        cube = lambda (x : Int) -> x * (sqr x);
+
         mult = lambda (x : Int) -> lambda (y : Int) -> x * y;
 
         twice = (mult 2);
@@ -178,11 +182,46 @@ let tests (input: lexp list) sample_generator formatter : (string list) =
   in formatter res
 
 let generate_testable (_: lexp list) : ((lexp * lexp * result) list) =
-  ( Imm (Integer (Util.dummy_location, 3)) , Imm (Integer (Util.dummy_location, 3)) , Equivalent)
-  ::( Imm (Integer (Util.dummy_location, 4)) , Imm (Integer (Util.dummy_location, 3)) , Nothing )
-  ::( Builtin ((Util.dummy_location, "Int=3"), Imm (Integer (Util.dummy_location, 3))), Imm (Integer (Util.dummy_location, 3)), Equivalent)
-  ::( Var ((Util.dummy_location, "x"), 3), Var ((Util.dummy_location, "y"), 4), Nothing )
-  ::( Var ((Util.dummy_location, "x"), 3), Metavar (0, (Util.dummy_location, "M")), Unification )
+  ( Imm (Integer (Util.dummy_location, 3)) ,
+    Imm (Integer (Util.dummy_location, 3)) , Equivalent)
+
+  ::( Imm (Integer (Util.dummy_location, 4)) ,
+      Imm (Integer (Util.dummy_location, 3)) , Nothing )
+
+  ::( Builtin ((Util.dummy_location, "Int=3"), Imm (Integer (Util.dummy_location, 3))),
+      Imm (Integer (Util.dummy_location, 3)), Equivalent)
+
+  ::( Var ((Util.dummy_location, "x"), 3),
+      Var ((Util.dummy_location, "y"), 4), Nothing )
+
+  ::( Var ((Util.dummy_location, "x"), 3),
+      Metavar (0, (Util.dummy_location, "M")), Unification )
+
+  ::( Lambda ((Aexplicit),
+              (Util.dummy_location, "L1"),
+              Var((Util.dummy_location, "z"), 3),
+              Imm (Integer (Util.dummy_location, 3))),
+      Lambda ((Aexplicit),
+              (Util.dummy_location, "L2"),
+              Var((Util.dummy_location, "z"), 4),
+              Imm (Integer (Util.dummy_location, 3))), Unification )
+  ::( Cons (((Util.dummy_location, "Cons"), 3), (Util.dummy_location, "Cons")) ,
+      Imm (Integer (Util.dummy_location, 3)) , Nothing )
+
+  ::( Cons (((Util.dummy_location, "Cons"), 3), (Util.dummy_location, "Cons")) ,
+      Imm (Integer (Util.dummy_location, 3)), Nothing)
+
+  ::( Cons (((Util.dummy_location, "Cons"), 3), (Util.dummy_location, "Cons")) ,
+      Var ((Util.dummy_location, "y"), 4), Nothing )
+
+  ::( Cons (((Util.dummy_location, "Cons"), 3), (Util.dummy_location, "Cons")) ,
+      Metavar (0, (Util.dummy_location, "M")), Unification )
+
+  ::( Cons (((Util.dummy_location, "Cons"), 3), (Util.dummy_location, "Cons")) ,
+      Lambda ((Aexplicit),
+              (Util.dummy_location, "L2"),
+              Var((Util.dummy_location, "z"), 4),
+              Imm (Integer (Util.dummy_location, 3))), Nothing )
   ::[]
 
 let check (lxp1: lexp ) (lxp2: lexp ) (res: result) (subst: substitution ): bool =
@@ -197,8 +236,8 @@ let test_if (input: lexp list) sample_generator checker : bool =
   in test_if_ (sample_generator input) checker
 
 let print_as_json (input: lexp list) =
-  let str = tests input (generate_couples) (fmt_all)
-  in let s = "[\n" ^ (List.fold_right (fun e a -> a ^ e ^ ",\n") str "") ^ "]\n"
+  let h::t = tests input (generate_couples) (fmt_all)
+  in let s = "[\n" ^ (List.fold_right (fun e a -> a ^ e ^ ",\n") t "") ^ h ^ "\n]\n"
   in print_string s
 
 (*let () = print_as_json (input@man_input)*)
