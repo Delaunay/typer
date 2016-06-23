@@ -76,9 +76,10 @@ let empty_subst = (VMap.empty)
 
  * Case      , lexp               -> ERROR (or CONSTRAINT ?)
  * Susp      , lexp               -> UNIFY (unsusp Susp) lexp
+ * Inductive , Inductive          -> UNIFY
+ * Inductive , lexp               -> ERROR (???)
 
    (*TODO*)
- * Inductive , lexp               ->
  * lexp      , lexp               ->
 
  * lexp is equivalent to _ in ocaml
@@ -111,6 +112,14 @@ let rec unify (l: lexp) (r: lexp) (subst: substitution) : return_type =
   | (Inductive _, _) -> _unfiy_induct   l r subst
   | (_, _)           -> None
 
+(*
+   Those part of Inductive :
+      * ((arg_kind * vdef * ltype) list) (* formal Args *)
+      * ((arg_kind * vdef option * ltype) list)
+   are almost identical except for the 'vdef option' (which is ignored) so the same function  (_unify_inner_induct) should
+   work for those part, but it don't work because of 'vdef option'
+*)
+(** for _unfiy_induct_sub_list*)
 and _unify_inner_induct_2 lst subst : return_type =
   let test ((a1, _, l1), (a2, _, l2)) subst : return_type = if a1 = a2
     then unify l1 l2 subst
@@ -123,16 +132,7 @@ and _unify_inner_induct_2 lst subst : return_type =
       | None -> test e subst)
     ) None lst
 
-and test_list l1 l2 subst =
-  let test l1 l2 subst = match l1, l2 with
-    | (k1, v1)::t1, (k2, v2)::t2 when k1 = k2 -> (match _unify_inner_induct_2 (List.combine v1 v2) subst with
-        | Some (s, c) -> (match (test_list t1 t2 s) with
-            | Some (s1, c1) -> Some (s1, c1@c)
-            | None -> Some (s, c))
-        | None -> (test_list t1 t2 subst))
-    | _, _ -> None
-  in test l1 l2 subst
-
+(** for _unify_induct : unify the formal arg*)
 and _unify_inner_induct_1 lst subst : return_type =
   let test ((a1, _, l1), (a2, _, l2)) subst : return_type = if a1 = a2
     then unify l1 l2 subst
@@ -145,12 +145,26 @@ and _unify_inner_induct_1 lst subst : return_type =
       | None -> test e subst)
     ) None lst
 
+(** unify the SMap of list in Inductive *)
+and _unify_induct_sub_list l1 l2 subst =
+  let test l1 l2 subst = match l1, l2 with
+    | (k1, v1)::t1, (k2, v2)::t2 when k1 = k2 -> (match _unify_inner_induct_2 (List.combine v1 v2) subst with
+        | Some (s, c) -> (match (_unify_induct_sub_list t1 t2 s) with
+            | Some (s1, c1) -> Some (s1, c1@c)
+            | None -> Some (s, c))
+        | None -> (_unify_induct_sub_list t1 t2 subst))
+    | _, _ -> None
+  in test l1 l2 subst
+
+(** Unify a Inductive and a lexp
+ * Inductive, Inductive -> try t unify
+ * Inductive, _ -> None*)
 and _unfiy_induct (induct: lexp) (lxp: lexp) (subst: substitution) : return_type =
   match (induct, lxp) with
   | (Inductive (_, lbl1, farg1, m1), Inductive (_, lbl2, farg2, m2)) when lbl1 = lbl2 ->
     (match _unify_inner_induct_1 (List.combine farg1 farg2) subst with
      | None -> None
-     | Some (s, c) -> test_list (SMap.bindings m1) (SMap.bindings m2) subst)
+     | Some (s, c) -> _unify_induct_sub_list (SMap.bindings m1) (SMap.bindings m2) s)
   | (_, _) -> None
 
 and _unify_susp (susp_: lexp) (lxp: lexp) (subst: substitution) : return_type =
