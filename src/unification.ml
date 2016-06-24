@@ -108,9 +108,47 @@ let rec unify (l: lexp) (r: lexp) (subst: substitution) : return_type =
   | (Metavar _, _)   -> _unify_metavar  l r subst
   | (Call _, _)      -> _unify_call     l r subst
   | (Susp _, _)      -> _unify_susp     l r subst
-  | (Case _, _)      -> None (* Maybe Constraint instead ?*)
+  | (Case _, _)      -> _unify_case     l r subst
   | (Inductive _, _) -> _unfiy_induct   l r subst
   | (_, _)           -> None
+
+(** Check arg_king in (arg_kind * vdef option) list in Case *)
+and is_same arglist arglist2 =
+  match arglist, arglist2 with
+  | (akind, _)::t1, (akind2, _)::t2 when akind = akind2 -> is_same t1 t2
+  | [], [] -> true
+  | _, _ -> false
+
+(** try to unify the SMap part of the case *)
+and _unify_inner_case l s =
+  let rec _unify_inner_case l s =
+  match l with
+  | ((key, (_, arglist, lxp)), (key2, (_, arglist2, lxp2)))::t when key = key2 ->
+    (if is_same arglist arglist2 then ( match unify lxp lxp2 s with
+          | Some (s', c) -> (match _unify_inner_case l s' with
+              | Some (s_, c_) -> Some (s_, c@c_)
+              | None -> None)
+          | None -> None)
+      else None)
+  | [] -> Some (s, [])
+  | _ -> None
+  in _unify_inner_case l s
+
+(** Unify a Case with a lexp
+ * Case, Var -> constraint (if the variable type and the type of the return value is equivalent, it should be unifiable)
+ * Case, Case -> try to unify
+ * Case, _ -> None
+ *)
+and _unify_case (case: lexp) (lxp: lexp) (subst: substitution) : return_type =
+(* Maybe Constraint instead ?*)
+  match case, lxp with
+  (*TODO : check the lexp option part*)
+  | (Case (_, lxp, lt11, lt12, smap, lxpopt), Case (_, lxp2, lt21, lt22, smap2, lxopt2))
+    -> (match _unify_inner ((lxp, lxp2)::(lt11, lt21)::(lt12, lt22)::[]) subst with
+        | Some (s, c) -> _unify_inner_case (List.combine (SMap.bindings smap) (SMap.bindings smap2)) s (* TODO match on result *)
+        | None -> None)
+  | (Case _, Var _) -> Some (subst, [(case, lxp)]) (* ??? *)
+  | (_, _) -> None
 
 (*
    Those part of Inductive :
@@ -323,7 +361,7 @@ and _unify_inner (lxp_l: (lexp * lexp) list) (subst: substitution) : return_type
   let merge ((s, c): (substitution * constraints))
       (lxp_list: (lexp * lexp) list) : return_type =
     match _unify_inner lxp_list s with
-    | None -> Some (s, c)
+    | None -> None (* Some (s, c) *)
     | Some (s_,c_) -> Some (s_, c@c_)
   in
   match lxp_l with
