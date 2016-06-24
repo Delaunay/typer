@@ -80,6 +80,8 @@ let empty_subst = (VMap.empty)
  * Inductive , lexp               -> ERROR (???)
 
    (*TODO*)
+ * Sort      , lexp               ->
+ * SortLevel , lexp               ->
  * lexp      , lexp               ->
 
  * lexp is equivalent to _ in ocaml
@@ -142,11 +144,12 @@ and _unify_inner_case l s =
 and _unify_case (case: lexp) (lxp: lexp) (subst: substitution) : return_type =
 (* Maybe Constraint instead ?*)
   match case, lxp with
-  (*TODO : check the lexp option part*)
   | (Case (_, lxp, lt11, lt12, smap, lxpopt), Case (_, lxp2, lt21, lt22, smap2, lxopt2))
-    -> (match _unify_inner ((lxp, lxp2)::(lt11, lt21)::(lt12, lt22)::[]) subst with
-        | Some (s, c) -> _unify_inner_case (List.combine (SMap.bindings smap) (SMap.bindings smap2)) s (* TODO match on result *)
-        | None -> None)
+    -> ( match lxpopt, lxopt2 with
+        | Some l1, Some l2 -> (match _unify_inner ((lxp, lxp2)::(lt11, lt21)::(lt12, lt22)::(l1, l2)::[]) subst with
+            | Some (s, c) -> _unify_inner_case (List.combine (SMap.bindings smap) (SMap.bindings smap2)) s (* TODO match on result *)
+            | None -> None)
+        | _, _ -> None)
   | (Case _, Var _) -> Some (subst, [(case, lxp)]) (* ??? *)
   | (_, _) -> None
 
