@@ -135,7 +135,7 @@ and eval_call ctx i lname eargs =
 
         | Vbuiltin (str), args ->
             (* lookup the built-in implementation and call it *)
-            (get_builtin_impl str loc) loc args ctx
+            (get_builtin_impl str loc) loc (i + 1) args ctx
 
         (* return result of eval *)
         | _, [] -> f
@@ -239,7 +239,7 @@ and typer_builtins_impl = [
     ("write"         , write_impl);
 ]
 
-and bind_impl loc args_val ctx =
+and bind_impl loc depth args_val ctx =
 
   let io, cb = match args_val with
     | [io; callback] -> io, callback
@@ -264,9 +264,9 @@ and bind_impl loc args_val ctx =
     let nctx = add_rte_variable None underlying ctx in
 
     (* eval callback *)
-    _eval body nctx 0)
+    _eval body nctx depth)
 
-and run_io loc args_val ctx =
+and run_io loc depth args_val ctx =
 
   let io, ltp = match args_val with
     | [io; ltp] -> io, ltp
@@ -282,14 +282,14 @@ and run_io loc args_val ctx =
   (* return given type *)
     ltp
 
-and typer_eval loc args ctx =
+and typer_eval loc depth args ctx =
     let arg = match args with
         | [a] -> a
         | _ -> eval_error loc "eval_ expects a single argument" in
     (* I need to be able to lexp sexp but I don't have lexp ctx *)
     match arg with
         (* Nodes that can be evaluated *)
-        | Closure (_, body, ctx) -> _eval body ctx 1
+        | Closure (_, body, ctx) -> _eval body ctx depth
         (* Leaf *)
         | _ -> arg
 
@@ -308,7 +308,7 @@ and get_builtin_impl str loc =
 (* Sexp -> (Sexp -> List Sexp -> Sexp) -> (String -> Sexp) ->
     (String -> Sexp) -> (Int -> Sexp) -> (Float -> Sexp) -> (List Sexp -> Sexp)
         ->  Sexp *)
-and sexp_dispatch loc args ctx =
+and sexp_dispatch loc depth args ctx =
     let eval a b = _eval a b 1 in
     let sxp, nd, sym, str, it, flt, blk, rctx = match args with
         | [sxp; Closure(_, nd, rctx); Closure(_, sym, _);

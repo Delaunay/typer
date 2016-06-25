@@ -97,7 +97,7 @@ let type_float = Builtin((dloc, "Float"), type0)
 let type_string = Builtin((dloc, "String"), type0)
 
 (* Builtin of builtin * string * ltype *)
-let _generic_binary_iop name f loc (args_val: value_type list)
+let _generic_binary_iop name f loc (depth: int) (args_val: value_type list)
                                                     (ctx: runtime_env) =
 
    let l, r = match args_val with
@@ -117,11 +117,11 @@ let idiv_impl  = _generic_binary_iop "Integer::div"  (fun a b -> a / b)
 
 
 (* loc is given by the compiler *)
-let none_fun : (location -> value_type list -> runtime_env -> value_type)
+let none_fun : (location -> int -> value_type list -> runtime_env -> value_type)
     = (fun loc args_val ctx ->
     builtin_error loc "Requested Built-in was not implemented")
 
-let make_symbol loc args_val ctx  =
+let make_symbol loc depth args_val ctx  =
     (* symbol is a simple string *)
     let lxp = match args_val with
         | [r] -> r
@@ -166,7 +166,7 @@ let rec tlist2olist acc expr =
 
             builtin_error dloc "List conversion failure'"
 
-let make_node loc args_val ctx    =
+let make_node loc depth args_val ctx    =
 
     let op, tlist = match args_val with
         | [Vsexp(op); lst] -> op, lst
@@ -190,7 +190,7 @@ let make_node loc args_val ctx    =
 
         Vsexp(Node(op, s))
 
-let make_string loc args_val ctx  =
+let make_string loc depth args_val ctx  =
     let lxp = match args_val with
         | [r] -> r
         | _ -> builtin_error loc ("string_ expects 1 argument") in
@@ -199,7 +199,7 @@ let make_string loc args_val ctx  =
             | Vstring(str) -> Vsexp(String(loc, str))
             | _ -> builtin_error loc ("string_ expects one string as argument")
 
-let make_integer loc args_val ctx =
+let make_integer loc depth args_val ctx =
     let lxp = match args_val with
         | [r] -> r
         | _ -> builtin_error loc ("integer_ expects 1 argument") in
@@ -208,24 +208,24 @@ let make_integer loc args_val ctx =
             | Vint(str) -> Vsexp(Integer(loc, str))
             | _ -> builtin_error loc ("integer_ expects one string as argument")
 
-let make_float loc args_val ctx   = Vdummy
-let make_block loc args_val ctx   = Vdummy
+let make_float loc depth args_val ctx   = Vdummy
+let make_block loc depth args_val ctx   = Vdummy
 
 let ttrue = Vcons((dloc, "True"), [])
 let tfalse = Vcons((dloc, "False"), [])
 let btyper b = if b then ttrue else tfalse
 
-let string_eq loc args_val ctx =
+let string_eq loc depth args_val ctx =
     match args_val with
         | [Vstring(s1); Vstring(s2)] -> btyper (s1 = s2)
         | _ -> builtin_error loc "string_eq expects 2 strings"
 
-let int_eq loc args_val ctx =
+let int_eq loc depth args_val ctx =
     match args_val with
         | [Vint(s1); Vint(s2)] -> btyper (s1 = s2)
         | _ -> builtin_error loc "int_eq expects 2 integer"
 
-let sexp_eq loc args_val ctx =
+let sexp_eq loc depth args_val ctx =
     match args_val with
         | [Vsexp(s1); Vsexp(s2)] -> (
             match s1, s2 with
@@ -237,7 +237,7 @@ let sexp_eq loc args_val ctx =
         | _ -> builtin_error loc "int_eq expects 2 sexp"
 
 
-let open_impl loc args_val ctx =
+let open_impl loc depth args_val ctx =
 
   let file, mode = match args_val with
     | [Vstring(file_name); Vstring(mode)] -> file_name, mode
@@ -250,7 +250,7 @@ let open_impl loc args_val ctx =
         | "w" -> Vout(open_out file)
         | _ -> builtin_error loc "wrong open mode")
 
-let read_impl loc args_val ctx =
+let read_impl loc depth args_val ctx =
 
   let channel = match args_val with
     | [Vin(c); _] -> c
@@ -261,7 +261,7 @@ let read_impl loc args_val ctx =
   let line = input_line channel in
     Vstring(line)
 
-let write_impl loc args_val ctx =
+let write_impl loc depth args_val ctx =
 
   let channel, msg = match args_val with
     | [Vout(c); Vstring(msg)] -> c, msg

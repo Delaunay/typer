@@ -153,10 +153,10 @@ read  = Built-in "read"  (FileHandle -> Int -> IO String);
 Attribute = Built-in "Attribute";
 new-attribute = Built-in "new-attribute" (Type -> Attribute);
 
-add-attribute = Built-in "add-attribute" (Sexp ->  Sexp -> Sexp -> List Sexp);
+add-attribute = Built-in "add-attribute" (Sexp -> Sexp -> Sexp -> List Sexp);
 attribute = Macro_ add-attribute;
 
-get-attribute = Built-in "get-attribute" (String -> Attribute);
+get-attribute = Built-in "get-attribute" Macro;
 has-attribute = Built-in "has-attribute" (String -> Attribute -> Bool);
 
 % -----------------------------------------------------
