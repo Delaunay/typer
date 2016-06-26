@@ -84,7 +84,7 @@ let rec _eval lxp ctx i: (value_type) =
         | Lambda ((_, n), lxp)      -> Closure(n, lxp, ctx)
         | Builtin ((_, str))        -> Vbuiltin(str)
 
-        (*  Return a value stored in env        *)
+        (* Return a value stored in env *)
         | Var((loc, name), idx) as e ->
           eval_var ctx e ((loc, name), idx)
 
@@ -101,13 +101,12 @@ let rec _eval lxp ctx i: (value_type) =
         | Case (loc, target, pat, dflt)
           -> (eval_case ctx i loc target pat dflt)
 
-        | _ -> print_string "debug catch-all eval: ";
-            elexp_print lxp; print_string "\n"; Vdummy
+        | Type -> Vcons((tloc, "Unit"), [])
 
 
 and get_predef_eval name ctx =
   let r = (get_rte_size ctx) - !builtin_size in
-  let v = mkSusp (get_predef name) (S.shift r) in
+  let v = mkSusp (get_predef_raw name) (S.shift r) in
     _eval (erase_type v) ctx 0
 
 and eval_var ctx lxp v =
@@ -250,7 +249,7 @@ and bind_impl loc depth args_val ctx =
     | Vcommand (cmd) -> cmd
     | _ -> builtin_error loc "bind first arguments must be a monad" in
 
-  (* bind return another Vcommand *)
+  (* bind returns another Vcommand *)
   Vcommand (fun () ->
     (* get callback *)
     let body, ctx = match cb with

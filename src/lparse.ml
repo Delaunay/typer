@@ -456,52 +456,60 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
                 Call(vf, new_args), ltp in
 
     let handle_macro_call (loc, name) =
-        (* look up for definition *)
-        let idx = try senv_lookup name ctx
+        (* check for builtin *)
+      match is_builtin_macro name with
+        | true ->
+          let pargs = List.map pexp_parse sargs in
+          let largs = _lexp_parse_all pargs ctx i in
+            (get_macro_impl loc name) loc largs ctx ltp
+
+        (* user defined macro *)
+        | false ->(
+          (* look up for definition *)
+          let idx = try senv_lookup name ctx
+              with Not_found ->
+                  lexp_fatal loc ("Could not find Variable: " ^ name) in
+
+          (* Get the macro *)
+          let lxp = try env_lookup_expr ctx ((loc, name), idx)
             with Not_found ->
-                lexp_fatal loc ("Could not find Variable: " ^ name) in
+              lexp_fatal loc (name ^ " was found but " ^ (string_of_int idx) ^
+                    " is not a correct index.") in
 
-        (* Get the macro *)
-        let lxp = try env_lookup_expr ctx ((loc, name), idx)
-          with Not_found ->
-            lexp_fatal loc (name ^ " was found but " ^ (string_of_int idx) ^
-                  " is not a correct index.") in
+          let lxp = match unsusp_all lxp with
+              | Call(Var((_, "Macro_"), _), [(_, fct)]) -> fct
+              | _ ->
+                print_string "\n";
+                print_string (lexp_to_string lxp); print_string "\n";
+                lexp_print lxp; print_string "\n";
+                lexp_fatal loc "Macro is ill formed" in
 
-        let lxp = match unsusp_all lxp with
-            | Call(Var((_, "Macro_"), _), [(_, fct)]) -> fct
-            | _ ->
-              print_string "\n";
-              print_string (lexp_to_string lxp); print_string "\n";
-              lexp_print lxp; print_string "\n";
-              lexp_fatal loc "Macro is ill formed" in
+          (* Build function to be called *)
+          let arg = olist2tlist_lexp sargs ctx in
 
-        (* Build function to be called *)
-        let arg = olist2tlist_lexp sargs ctx in
+          let lxp = Call(lxp, [(Aexplicit, arg)]) in
+          let elexp = EL.erase_type lxp in
+          let rctx = (from_lctx ctx 0) in
 
-        let lxp = Call(lxp, [(Aexplicit, arg)]) in
-        let elexp = EL.erase_type lxp in
-        let rctx = (from_lctx ctx 0) in
+          _global_eval_trace := [];
 
-        _global_eval_trace := [];
+          let vxp = try eval elexp rctx
+            with e ->
+              print_eval_trace ();
+              raise e in
 
-        let vxp = try eval elexp rctx
-          with e ->
-            print_eval_trace ();
-            raise e in
+            let sxp = match vxp with
+                | Vsexp(sxp) -> sxp
+                (* Those are sexp converted by the eval function *)
+                | Vint(i)    -> Integer(dloc, i)
+                | Vstring(s) -> String(dloc, s)
+                | Vfloat(f)  -> Float(dloc, f)
+                (* I have vdum here WHY *)
+                | v -> debug_msg (value_print v);
+                    lexp_fatal loc "Macro_ expects '(List Sexp) -> Sexp'" in
 
-          let sxp = match vxp with
-              | Vsexp(sxp) -> sxp
-              (* Those are sexp converted by the eval function *)
-              | Vint(i)    -> Integer(dloc, i)
-              | Vstring(s) -> String(dloc, s)
-              | Vfloat(f)  -> Float(dloc, f)
-              (* I have vdum here WHY *)
-              | v -> debug_msg (value_print v);
-                  lexp_fatal loc "Macro_ expects '(List Sexp) -> Sexp'" in
-
-
-        let pxp = pexp_parse sxp in
-            _lexp_p_infer pxp ctx (i + 1)  in
+          let pxp = pexp_parse sxp in
+              _lexp_p_infer pxp ctx (i + 1))  in
 
     (* determine function type *)
     match fun_name, ltp with
@@ -513,59 +521,8 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
             let new_args = List.map (fun g -> (Aexplicit, g)) largs in
                 Call(body, new_args), ltp
 
-        (* Context acessor *)
-        | Pvar(l, "decltype"), _ ->
-          let pargs = List.map pexp_parse sargs in
-          let largs = _lexp_parse_all pargs ctx i in
-          let (vi, vn) = match largs with
-            | [Var((_, vn), vi)] -> (vi, vn)
-            | _ -> lexp_fatal l "decltype expects one argument" in
-
-          let ltype = env_lookup_type ctx ((dloc, vn), vi) in
-            (* mkSusp prop (S.shift (var_i + 1)) *)
-            ltype, dltype
-
-        | Pvar(l, "declexpr"), _ ->
-          let pargs = List.map pexp_parse sargs in
-          let largs = _lexp_parse_all pargs ctx i in
-          let (vi, vn) = match largs with
-            | [Var((_, vn), vi)] -> (vi, vn)
-            | _ -> lexp_fatal l "declexpr expects one argument" in
-
-          let lxp = env_lookup_expr ctx ((dloc, vn), vi) in
-          let ltp = env_lookup_type ctx ((dloc, vn), vi) in
-            lxp, ltp
-
-        (* attributes are special case they does not exist after lexp_parsing
-         * in that respect they are quite similar to macros *)
-        | Pvar(l, "get-attribute"), _ ->
-          let pargs = List.map pexp_parse sargs in
-          let largs = _lexp_parse_all pargs ctx i in
-          let (vi, vn), (ai, an) = match largs with
-              | [Var((_, vn), vi); Var((_, an), ai)] -> (vi, vn), (ai, an)
-              | _ -> lexp_fatal l "get-attribute expects two arguments" in
-
-          let lxp = get_property ctx (vi, vn) (ai, an) in
-          let ltype = env_lookup_expr ctx ((dloc, an), ai) in
-            lxp, ltype
-
-        (*
-        | Pvar(l, "has-attribute"), _ ->  *)
-
-
-        | Pvar(l, "new-attribute"), _ ->
-          let pargs = List.map pexp_parse sargs in
-          let largs = _lexp_parse_all pargs ctx i in
-
-          let eltp = match largs with
-              | [eltp] -> eltp
-              | _ -> lexp_warning l "new-attribute expects one argument";
-                dltype in
-
-            eltp, ltp
-
         | (Pvar (l, n), Var((_, "Macro"), _)) ->
-            (* FIXME: check db_idx points too a Macro type *)
+            (* FIXME: check db_idx points to a Macro type *)
             handle_macro_call (l, n)
 
         (* Call to Vanilla or constructor *)
@@ -1032,8 +989,7 @@ let default_lctx =
       try
           List.iter (fun name ->
               let idx = senv_lookup name lctx in
-              let v = Var((dloc, name), idx) in (*
-              let value = (env_lookup_expr lctx v) in *)
+              let v = Var((dloc, name), idx) in
               set_predef name (Some v)) predef_name;
       (* -- DONE -- *)
           lctx

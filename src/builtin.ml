@@ -52,7 +52,10 @@ type predef_table = (lexp option ref) SMap.t
 let predef_name = [
     "cons";
     "nil";
-    "Unit"
+    "Unit";
+    "True";
+    "False";
+    "Bool";
 ]
 
 let builtin_size = ref 0
@@ -62,10 +65,16 @@ let predef_map : predef_table =
     List.fold_left (fun m name ->
         SMap.add name (ref None) m) SMap.empty predef_name
 
-let get_predef name =
+let get_predef_raw (name: string) : lexp =
     match !(SMap.find name predef_map) with
         | Some exp -> exp
         | None -> builtin_error dloc "Try to access an empty predefined"
+
+let get_predef name ctx =
+  let r = (get_size ctx) - !builtin_size in
+  let v = mkSusp (get_predef_raw name) (S.shift r) in
+    v
+
 
 let set_predef name lexp =
     SMap.find name predef_map := lexp
@@ -272,16 +281,6 @@ let write_impl loc depth args_val ctx =
     fprintf channel "%s" msg;
       Vdummy
 
-
-(*
- *  Should we have a function that
- *      -> returns a new context inside typer ? (So we need to add a ctx type too)
- *      -> returns current context ?
- *      -> pexp_eval expr
- *      -> lexp_eval expr
- *      -> ou seulement: 'eval expr ctx'
- *)
-
 let is_lbuiltin idx ctx =
     let bsize = 1 in
     let csize = get_size ctx in
@@ -290,3 +289,85 @@ let is_lbuiltin idx ctx =
         true
     else
         false
+
+(* --------------------------------------------------------------------------
+ *  Built-in Macro
+ * -------------------------------------------------------------------------- *)
+
+(* Those are function that are evaluated during lexp_parse *)
+
+let get_attribute_impl loc largs ctx ftype =
+
+  let (vi, vn), (ai, an) = match largs with
+      | [Var((_, vn), vi); Var((_, an), ai)] -> (vi, vn), (ai, an)
+      | _ -> builtin_error loc "get-attribute expects two arguments" in
+
+  let lxp = get_property ctx (vi, vn) (ai, an) in
+  let ltype = env_lookup_expr ctx ((loc, an), ai) in
+    lxp, ltype
+
+let new_attribute_impl loc largs ctx ftype =
+
+  let eltp = match largs with
+    | [eltp] -> eltp
+    | _ -> builtin_warning loc "new-attribute expects one argument"; type0 in
+
+    eltp, ftype
+
+let has_attribute_impl loc largs ctx ftype =
+
+  let (vi, vn), (ai, an) = match largs with
+      | [Var((_, vn), vi); Var((_, an), ai)] -> (vi, vn), (ai, an)
+      | _ -> builtin_error loc "has-attribute expects two arguments" in
+
+  let b = has_property ctx (vi, vn) (ai, an) in
+
+  let rvar = if b then get_predef "True" ctx else get_predef "False" ctx in
+    rvar, (get_predef "Bool" ctx)
+
+let declexpr_impl loc largs ctx ftype =
+
+  let (vi, vn) = match largs with
+    | [Var((_, vn), vi)] -> (vi, vn)
+    | _ -> builtin_error loc "declexpr expects one argument" in
+
+  let lxp = env_lookup_expr ctx ((loc, vn), vi) in
+  let ltp = env_lookup_type ctx ((loc, vn), vi) in
+    lxp, ftype
+
+
+let decltype_impl loc largs ctx ftype =
+
+  let (vi, vn) = match largs with
+    | [Var((_, vn), vi)] -> (vi, vn)
+    | _ -> builtin_error loc "decltype expects one argument" in
+
+  let ltype = env_lookup_type ctx ((loc, vn), vi) in
+    (* mkSusp prop (S.shift (var_i + 1)) *)
+    ltype, type0
+
+let builtin_macro = [
+  ("decltype",      decltype_impl);
+  ("declexpr",      declexpr_impl);
+  ("get-attribute", get_attribute_impl);
+  ("new-attribute", new_attribute_impl);
+  ("has-attribute", has_attribute_impl);
+]
+
+type macromap =
+  (location -> lexp list -> lexp_context -> lexp -> (lexp * lexp)) SMap.t
+
+let macro_impl_map : macromap =
+  List.fold_left (fun map (name, funct) ->
+    SMap.add name funct map) SMap.empty builtin_macro
+
+let get_macro_impl loc name =
+  try SMap.find name macro_impl_map
+    with Not_found -> builtin_error loc ("Builtin macro" ^ name ^ " not found")
+
+let is_builtin_macro name =
+  try SMap.find name macro_impl_map; true
+    with Not_found -> false
+
+
+

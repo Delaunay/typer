@@ -8,7 +8,7 @@ sudo: true
 before_script:
   - sudo apt-get -qq update
   - sudo apt-get install opam
-  - opam init
+  - opam init --auto-setup
   - opam config setup -a
   - opam config env
 

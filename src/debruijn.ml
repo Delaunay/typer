@@ -123,20 +123,6 @@ let _name_error loc estr str =
     debruijn_error loc ("DeBruijn index refers to wrong name. " ^
                       "Expected: \"" ^ estr ^ "\" got \"" ^ str ^ "\"")
 
-(*
-let env_set_var_info ctx (def: vref) (v: lexp option) (t: lexp) =
-    let ((dv_size, _), info_env, _) = ctx in
-    let ((loc, ename), dbi) = def in
-
-    try(let rf = (Myers.nth dbi info_env) in
-        let (_, (_, name), _, _) = !rf in
-
-        (* Check if names match *)
-        _name_error loc ename name;
-
-        rf := (0, (loc, ename), v, t))
-    with
-        Not_found -> debruijn_error loc "DeBruijn index out of bounds!" *)
 
 (* generic lookup *)
 let _env_lookup ctx (v: vref): env_elem  =
@@ -282,17 +268,5 @@ let dump_properties ctx =
       lexp_print lxp; print_string "\n") pmap) property_map;
 
   print_string (make_sep '-');
-
-
-
-
-
-
-
-
-
-
-
-
 
 
