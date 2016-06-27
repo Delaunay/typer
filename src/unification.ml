@@ -114,7 +114,9 @@ let rec unify (l: lexp) (r: lexp) (subst: substitution) : return_type =
   | (Susp _, _)      -> _unify_susp     l r subst
   | (Case _, _)      -> _unify_case     l r subst
   | (Inductive _, _) -> _unfiy_induct   l r subst
-  | (_, _)           -> None
+  | (Sort _, _)      -> _unify_sort     l r subst
+  | (SortLevel _, _) -> _unify_sortlvl  l r subst
+  (*| (_, _)           -> None*)
 
 (********************************* Type specific unify *******************************)
 
