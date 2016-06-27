@@ -3,16 +3,12 @@ language: ocaml
 env:
   - OCAML_VERSION=4.02
 
-addons:
-  apt:
-    packages:
-      - opam
+sudo: true
 
 before_script:
-  - opam config setup -a
-  - opam config env
-
-before_script:
+  - sudo apt-get -qq update
+  - sudo apt-get install opam
+  - opam init --auto-setup
   - opam config setup -a
   - opam config env
 

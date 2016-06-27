@@ -66,5 +66,33 @@ let _ = (add_test "MACROS" "macros base" (fun () ->
 )
 
 
+let _ = (add_test "MACROS" "macros decls" (fun () ->
+    reset_eval_trace ();
+
+    let dcode = "
+      decls-impl = lambda (x : List Sexp) ->
+        cons (node_ (symbol_ \"_=_\")
+          (cons (symbol_ \"a\") (cons (integer_ 1) nil)))
+       (cons (node_ (symbol_ \"_=_\")
+        (cons (symbol_ \"b\") (cons (integer_ 2) nil))) nil);
+
+      my-decls = Macro_ decls-impl;
+
+      my-decls Nat;" in
+
+    let rctx, lctx = eval_decl_str dcode lctx rctx in
+
+    let ecode = "a; b;" in
+
+    let ret = eval_expr_str ecode lctx rctx in
+
+        match ret with
+            | [Vint(a); Vint(b)] ->
+                if (a = 1 && b = 2) then success () else failure ()
+
+            | _ -> failure ())
+)
+
+
 (* run all tests *)
 let _ = run_all ()

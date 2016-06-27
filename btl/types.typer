@@ -27,6 +27,7 @@
 %*
 %*      Description:
 %*          Define builtin types and functions
+%*          This file MUST be correctly typed
 %*
 %* ---------------------------------------------------------------------------
 
@@ -34,12 +35,14 @@
 %       Base Types
 % -----------------------------------------------------
 
-Type   = Built-in "Type";
-Int    = Built-in "Int";
-Float  = Built-in "Float";
-String = Built-in "String";
-Sexp   = Built-in "Sexp";
-Unit   = Built-in "Unit";
+Type    = Built-in "Type";
+Int     = Built-in "Int";
+Float   = Built-in "Float";
+String  = Built-in "String";
+Sexp    = Built-in "Sexp";
+
+Unit    = Built-in "Unit";      % Nothing
+Context = Built-in "Context";   % Lexp Context
 
 % Basic operators
 _+_ = Built-in "_+_" (Int -> Int -> Int);
@@ -134,6 +137,11 @@ bind = Built-in "bind" (
 FileHandle = Built-in "FileHandle";
 
 % define operation on file handle
+run-io = Built-in "run-io" (
+  (a : Type) ≡>
+  (b : Type) ≡>
+    IO a -> (a -> IO b) -> (IO b) -> Unit);
+
 open  = Built-in "open"  (String -> String -> IO FileHandle);
 write = Built-in "write" (FileHandle -> String -> IO Unit);
 read  = Built-in "read"  (FileHandle -> Int -> IO String);
@@ -143,15 +151,20 @@ read  = Built-in "read"  (FileHandle -> Int -> IO String);
 % -----------------------------------------------------
 
 Attribute = Built-in "Attribute";
-new-attribute = Built-in "new-attribute"  (Type -> Attribute);
+new-attribute = Built-in "new-attribute" (Macro);
 
+add-attribute = Built-in "add-attribute" (Macro);
+attribute = Macro_ add-attribute;
 
+get-attribute = Built-in "get-attribute" Macro;
+has-attribute = Built-in "has-attribute" (Macro);
 
+% -----------------------------------------------------
+%       Context Accessors
+% -----------------------------------------------------
 
-
-
-
-
+decltype = Built-in "decltype" Macro;
+declexpr = Built-in "declexpr" Macro;
 
 
 

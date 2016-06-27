@@ -123,20 +123,6 @@ let _name_error loc estr str =
     debruijn_error loc ("DeBruijn index refers to wrong name. " ^
                       "Expected: \"" ^ estr ^ "\" got \"" ^ str ^ "\"")
 
-(*
-let env_set_var_info ctx (def: vref) (v: lexp option) (t: lexp) =
-    let ((dv_size, _), info_env, _) = ctx in
-    let ((loc, ename), dbi) = def in
-
-    try(let rf = (Myers.nth dbi info_env) in
-        let (_, (_, name), _, _) = !rf in
-
-        (* Check if names match *)
-        _name_error loc ename name;
-
-        rf := (0, (loc, ename), v, t))
-    with
-        Not_found -> debruijn_error loc "DeBruijn index out of bounds!" *)
 
 (* generic lookup *)
 let _env_lookup ctx (v: vref): env_elem  =
@@ -158,7 +144,7 @@ let _env_lookup ctx (v: vref): env_elem  =
 let env_lookup_type ctx (v : vref): lexp =
   let (_, idx) = v in
   let (_, _, _, ltp) = _env_lookup ctx v in
-    mkSusp ltp (S.shift (idx + 1))
+    mkSusp ltp (S.shift (idx + 0))
 
 let env_lookup_expr ctx (v : vref): lexp =
   let (_, idx) = v in
@@ -202,4 +188,85 @@ let replace_by ctx name by =
   (* add old declarations *)
   let nenv = List.fold_left (fun ctx elem -> cons elem ctx) nenv decls in
     (a, nenv, b)
+
+(* -------------------------------------------------------------------------- *)
+(*          PropertyMap                                                       *)
+(* -------------------------------------------------------------------------- *)
+
+
+let add_property ctx (var_i, var_n) (att_i, att_n) (prop: lexp)
+    : lexp_context =
+
+  let (a, b, property_map) = ctx in
+  let n = get_size ctx in
+
+  (* get_var properties  *)
+  let vmap = try PropertyMap.find (var_i, var_n) property_map
+    with Not_found -> PropertyMap.empty in
+
+  (* add property *)
+  let nvmap = PropertyMap.add (n - att_i, att_n) prop vmap in
+
+  (* update properties *)
+  let property_map = PropertyMap.add (n - var_i, var_n) nvmap property_map in
+
+    (a, b, property_map)
+
+let get_property ctx (var_i, var_n) (att_i, att_n): lexp =
+  let (a, b, property_map) = ctx in
+  let n = get_size ctx in
+
+  (* /!\ input index are reversed or not ? I think not so I shift them *)
+  let pmap = try PropertyMap.find (n - var_i, var_n) property_map
+    with Not_found ->
+      debruijn_error dummy_location ("Variable \"" ^ var_n ^ "\" does not have any properties") in
+
+  let prop = try PropertyMap.find (n - att_i, att_n) pmap
+    with Not_found ->
+      debruijn_error dummy_location ("Property \"" ^ att_n ^ "\" not found") in
+        mkSusp prop (S.shift (var_i + 1))
+
+
+let has_property ctx (var_i, var_n) (att_i, att_n): bool =
+  let (a, b, property_map) = ctx in
+  let n = get_size ctx in
+
+  try
+    let pmap = PropertyMap.find (n - var_i, var_n) property_map in
+    let prop = PropertyMap.find (n - att_i, att_n) pmap in
+      true
+  with Not_found -> false
+
+
+let dump_properties ctx =
+  let (a, b, property_map) = ctx in
+  print_string (make_title " Properties ");
+
+  make_rheader [
+        (Some ('l', 10), "V-NAME");
+        (Some ('l',  4), "RIDX");
+        (Some ('l', 10), "P-NAME");
+        (Some ('l',  4), "RIDX");
+        (Some ('l', 32), "LEXP")];
+
+  print_string (make_sep '-');
+
+  PropertyMap.iter (fun (var_i, var_n) pmap ->
+    print_string "    | ";
+    lalign_print_string var_n 10; print_string " | ";
+    ralign_print_int var_i 4; print_string " | ";
+    let first = ref true in
+
+    PropertyMap.iter (fun (att_i, att_n) lxp ->
+      (if (!first = false) then
+        print_string (make_line ' ' 20)
+      else
+        first := false);
+
+      lalign_print_string att_n 10; print_string " | ";
+      ralign_print_int att_i 4; print_string " : ";
+      lexp_print lxp; print_string "\n") pmap) property_map;
+
+  print_string (make_sep '-');
+
 

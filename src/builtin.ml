@@ -51,18 +51,30 @@ type predef_table = (lexp option ref) SMap.t
 
 let predef_name = [
     "cons";
-    "nil"
+    "nil";
+    "Unit";
+    "True";
+    "False";
+    "Bool";
 ]
+
+let builtin_size = ref 0
 
 let predef_map : predef_table =
     (* add predef name, expr will be populated when parsing *)
     List.fold_left (fun m name ->
         SMap.add name (ref None) m) SMap.empty predef_name
 
-let get_predef name =
+let get_predef_raw (name: string) : lexp =
     match !(SMap.find name predef_map) with
         | Some exp -> exp
         | None -> builtin_error dloc "Try to access an empty predefined"
+
+let get_predef name ctx =
+  let r = (get_size ctx) - !builtin_size in
+  let v = mkSusp (get_predef_raw name) (S.shift r) in
+    v
+
 
 let set_predef name lexp =
     SMap.find name predef_map := lexp
@@ -94,7 +106,7 @@ let type_float = Builtin((dloc, "Float"), type0)
 let type_string = Builtin((dloc, "String"), type0)
 
 (* Builtin of builtin * string * ltype *)
-let _generic_binary_iop name f loc (args_val: value_type list)
+let _generic_binary_iop name f loc (depth: int) (args_val: value_type list)
                                                     (ctx: runtime_env) =
 
    let l, r = match args_val with
@@ -114,11 +126,11 @@ let idiv_impl  = _generic_binary_iop "Integer::div"  (fun a b -> a / b)
 
 
 (* loc is given by the compiler *)
-let none_fun : (location -> value_type list -> runtime_env -> value_type)
+let none_fun : (location -> int -> value_type list -> runtime_env -> value_type)
     = (fun loc args_val ctx ->
     builtin_error loc "Requested Built-in was not implemented")
 
-let make_symbol loc args_val ctx  =
+let make_symbol loc depth args_val ctx  =
     (* symbol is a simple string *)
     let lxp = match args_val with
         | [r] -> r
@@ -158,10 +170,12 @@ let rec tlist2olist acc expr =
             tlist2olist (hd::acc) tl
         | Vcons((_, "nil"), []) -> List.rev acc
         | _ ->
+            print_string (value_name expr); print_string "\n";
             value_print expr;
+
             builtin_error dloc "List conversion failure'"
 
-let make_node loc args_val ctx    =
+let make_node loc depth args_val ctx    =
 
     let op, tlist = match args_val with
         | [Vsexp(op); lst] -> op, lst
@@ -185,7 +199,7 @@ let make_node loc args_val ctx    =
 
         Vsexp(Node(op, s))
 
-let make_string loc args_val ctx  =
+let make_string loc depth args_val ctx  =
     let lxp = match args_val with
         | [r] -> r
         | _ -> builtin_error loc ("string_ expects 1 argument") in
@@ -194,7 +208,7 @@ let make_string loc args_val ctx  =
             | Vstring(str) -> Vsexp(String(loc, str))
             | _ -> builtin_error loc ("string_ expects one string as argument")
 
-let make_integer loc args_val ctx =
+let make_integer loc depth args_val ctx =
     let lxp = match args_val with
         | [r] -> r
         | _ -> builtin_error loc ("integer_ expects 1 argument") in
@@ -203,24 +217,24 @@ let make_integer loc args_val ctx =
             | Vint(str) -> Vsexp(Integer(loc, str))
             | _ -> builtin_error loc ("integer_ expects one string as argument")
 
-let make_float loc args_val ctx   = Vdummy
-let make_block loc args_val ctx   = Vdummy
+let make_float loc depth args_val ctx   = Vdummy
+let make_block loc depth args_val ctx   = Vdummy
 
 let ttrue = Vcons((dloc, "True"), [])
 let tfalse = Vcons((dloc, "False"), [])
 let btyper b = if b then ttrue else tfalse
 
-let string_eq loc args_val ctx =
+let string_eq loc depth args_val ctx =
     match args_val with
         | [Vstring(s1); Vstring(s2)] -> btyper (s1 = s2)
         | _ -> builtin_error loc "string_eq expects 2 strings"
 
-let int_eq loc args_val ctx =
+let int_eq loc depth args_val ctx =
     match args_val with
         | [Vint(s1); Vint(s2)] -> btyper (s1 = s2)
         | _ -> builtin_error loc "int_eq expects 2 integer"
 
-let sexp_eq loc args_val ctx =
+let sexp_eq loc depth args_val ctx =
     match args_val with
         | [Vsexp(s1); Vsexp(s2)] -> (
             match s1, s2 with
@@ -232,53 +246,40 @@ let sexp_eq loc args_val ctx =
         | _ -> builtin_error loc "int_eq expects 2 sexp"
 
 
-let open_impl loc args_val ctx =
+let open_impl loc depth args_val ctx =
 
   let file, mode = match args_val with
     | [Vstring(file_name); Vstring(mode)] -> file_name, mode
     | _ -> builtin_error loc "open expects 2 strings" in
 
-  (* open file *) (* return a file handle *)
-  match mode with
-    | "r" -> Vin(open_in file)
-    | "w" -> Vout(open_out file)
-    | _ -> builtin_error loc "wrong open mode"
+   (* open file *) (* return a file handle *)
+   Vcommand(fun () ->
+      match mode with
+        | "r" -> Vin(open_in file)
+        | "w" -> Vout(open_out file)
+        | _ -> builtin_error loc "wrong open mode")
 
-
-let read_impl loc args_val ctx =
+let read_impl loc depth args_val ctx =
 
   let channel = match args_val with
     | [Vin(c); _] -> c
     | _ ->
       List.iter (fun v -> value_print v; print_string "\n") args_val;
-      builtin_error loc "read expects a in_channel" in
+      builtin_error loc "read expects an in_channel" in
 
   let line = input_line channel in
     Vstring(line)
 
-let write_impl loc args_val ctx =
+let write_impl loc depth args_val ctx =
 
   let channel, msg = match args_val with
     | [Vout(c); Vstring(msg)] -> c, msg
     | _ ->
       List.iter (fun v -> value_print v) args_val;
-      builtin_error loc "read expects a out_channel" in
+      builtin_error loc "read expects an out_channel" in
 
     fprintf channel "%s" msg;
       Vdummy
-
-let new_attribute loc args_val ctx =
-  builtin_warning loc "new-attributes to be implemented";
-    Vdummy
-
-(*
- *  Should we have a function that
- *      -> returns a new context inside typer ? (So we need to add a ctx type too)
- *      -> returns current context ?
- *      -> pexp_eval expr
- *      -> lexp_eval expr
- *      -> ou seulement: 'eval expr ctx'
- *)
 
 let is_lbuiltin idx ctx =
     let bsize = 1 in
@@ -288,3 +289,85 @@ let is_lbuiltin idx ctx =
         true
     else
         false
+
+(* --------------------------------------------------------------------------
+ *  Built-in Macro
+ * -------------------------------------------------------------------------- *)
+
+(* Those are function that are evaluated during lexp_parse *)
+
+let get_attribute_impl loc largs ctx ftype =
+
+  let (vi, vn), (ai, an) = match largs with
+      | [Var((_, vn), vi); Var((_, an), ai)] -> (vi, vn), (ai, an)
+      | _ -> builtin_error loc "get-attribute expects two arguments" in
+
+  let lxp = get_property ctx (vi, vn) (ai, an) in
+  let ltype = env_lookup_expr ctx ((loc, an), ai) in
+    lxp, ltype
+
+let new_attribute_impl loc largs ctx ftype =
+
+  let eltp = match largs with
+    | [eltp] -> eltp
+    | _ -> builtin_warning loc "new-attribute expects one argument"; type0 in
+
+    eltp, ftype
+
+let has_attribute_impl loc largs ctx ftype =
+
+  let (vi, vn), (ai, an) = match largs with
+      | [Var((_, vn), vi); Var((_, an), ai)] -> (vi, vn), (ai, an)
+      | _ -> builtin_error loc "has-attribute expects two arguments" in
+
+  let b = has_property ctx (vi, vn) (ai, an) in
+
+  let rvar = if b then get_predef "True" ctx else get_predef "False" ctx in
+    rvar, (get_predef "Bool" ctx)
+
+let declexpr_impl loc largs ctx ftype =
+
+  let (vi, vn) = match largs with
+    | [Var((_, vn), vi)] -> (vi, vn)
+    | _ -> builtin_error loc "declexpr expects one argument" in
+
+  let lxp = env_lookup_expr ctx ((loc, vn), vi) in
+  let ltp = env_lookup_type ctx ((loc, vn), vi) in
+    lxp, ftype
+
+
+let decltype_impl loc largs ctx ftype =
+
+  let (vi, vn) = match largs with
+    | [Var((_, vn), vi)] -> (vi, vn)
+    | _ -> builtin_error loc "decltype expects one argument" in
+
+  let ltype = env_lookup_type ctx ((loc, vn), vi) in
+    (* mkSusp prop (S.shift (var_i + 1)) *)
+    ltype, type0
+
+let builtin_macro = [
+  ("decltype",      decltype_impl);
+  ("declexpr",      declexpr_impl);
+  ("get-attribute", get_attribute_impl);
+  ("new-attribute", new_attribute_impl);
+  ("has-attribute", has_attribute_impl);
+]
+
+type macromap =
+  (location -> lexp list -> lexp_context -> lexp -> (lexp * lexp)) SMap.t
+
+let macro_impl_map : macromap =
+  List.fold_left (fun map (name, funct) ->
+    SMap.add name funct map) SMap.empty builtin_macro
+
+let get_macro_impl loc name =
+  try SMap.find name macro_impl_map
+    with Not_found -> builtin_error loc ("Builtin macro" ^ name ^ " not found")
+
+let is_builtin_macro name =
+  try SMap.find name macro_impl_map; true
+    with Not_found -> false
+
+
+

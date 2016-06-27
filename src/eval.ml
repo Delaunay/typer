@@ -61,6 +61,7 @@ let _eval_max_recursion_depth = ref 255
 let reset_eval_trace () = _global_eval_trace := []
 let _builtin_lookup = ref SMap.empty
 
+
 (* This is an internal definition
  * 'i' is the recursion depth used to print the call trace *)
 let rec _eval lxp ctx i: (value_type) =
@@ -83,7 +84,7 @@ let rec _eval lxp ctx i: (value_type) =
         | Lambda ((_, n), lxp)      -> Closure(n, lxp, ctx)
         | Builtin ((_, str))        -> Vbuiltin(str)
 
-        (*  Return a value stored in env        *)
+        (* Return a value stored in env *)
         | Var((loc, name), idx) as e ->
           eval_var ctx e ((loc, name), idx)
 
@@ -100,8 +101,13 @@ let rec _eval lxp ctx i: (value_type) =
         | Case (loc, target, pat, dflt)
           -> (eval_case ctx i loc target pat dflt)
 
-        | _ -> print_string "debug catch-all eval: ";
-            elexp_print lxp; print_string "\n"; Vstring("eval Not Implemented")
+        | Type -> Vcons((tloc, "Unit"), [])
+
+
+and get_predef_eval name ctx =
+  let r = (get_rte_size ctx) - !builtin_size in
+  let v = mkSusp (get_predef_raw name) (S.shift r) in
+    _eval (erase_type v) ctx 0
 
 and eval_var ctx lxp v =
     let ((loc, name), idx) = v in
@@ -111,38 +117,34 @@ and eval_var ctx lxp v =
 
 and eval_call ctx i lname eargs =
     let loc = elexp_location lname in
-    let args = List.map (fun e ->
-      (* elexp_print e; print_string "\n"; *)
-      _eval e ctx (i + 1)) eargs in
     let f = _eval lname ctx (i + 1) in
 
+    (* standard function *)
     let rec eval_call f args ctx =
-        match f, args with
-            | Vcons (n, []), _ ->
-              let e = Vcons(n, args) in
-                (* value_print e; print_string "\n"; *) e
+      match f, args with
+        | Vcons (n, []), _ ->
+          let e = Vcons(n, args) in
+            (* value_print e; print_string "\n"; *) e
 
-            (* we add an argument to the closure *)
-            | Closure (n, lxp, ctx), hd::tl ->
-                let nctx = add_rte_variable (Some n) hd ctx in
-                let ret = _eval lxp nctx (i + 1) in
-                    eval_call ret tl nctx
+        (* we add an argument to the closure *)
+        | Closure (n, lxp, ctx), hd::tl ->
+            let nctx = add_rte_variable (Some n) hd ctx in
+            let ret = _eval lxp nctx (i + 1) in
+                eval_call ret tl nctx
 
-            (* bind is lazily evaluated *)
-            | Vbuiltin ("bind"), _ ->
-                Vbind eargs
+        | Vbuiltin (str), args ->
+            (* lookup the built-in implementation and call it *)
+            (get_builtin_impl str loc) loc (i + 1) args ctx
 
-            | Vbuiltin (str), args ->
-                (* lookup the built-in implementation and call it *)
-                (get_builtin_impl str loc) loc args ctx
+        (* return result of eval *)
+        | _, [] -> f
 
-            (* return result of eval *)
-            | _, [] -> f
+        | _ -> debug_msg (value_print f);
+            eval_error loc "Cannot eval function" in
 
-            | _ -> debug_msg (value_print f);
-                eval_error loc "Cannot eval function" in
-
-        eval_call f args ctx
+    (* eval function here *)
+    let args = List.map (fun e -> _eval e ctx (i + 1)) eargs in
+      eval_call f args ctx
 
 and eval_case ctx i loc target pat dflt =
     (* Eval target *)
@@ -231,36 +233,62 @@ and typer_builtins_impl = [
     ("eval_"         , typer_eval);
     ("open"          , open_impl);
     ("bind"          , bind_impl);
+    ("run-io"        , run_io);
     ("read"          , read_impl);
     ("write"         , write_impl);
-    ("new-attribute" , new_attribute)
-
 ]
-and bind_impl loc args_val ctx =
+
+and bind_impl loc depth args_val ctx =
 
   let io, cb = match args_val with
     | [io; callback] -> io, callback
     | _ -> builtin_error loc "bind expects two arguments" in
 
+  (* build Vcommand from io function *)
+  let cmd = match io with
+    | Vcommand (cmd) -> cmd
+    | _ -> builtin_error loc "bind first arguments must be a monad" in
+
+  (* bind returns another Vcommand *)
+  Vcommand (fun () ->
     (* get callback *)
-  let body, ctx = match cb with
-    | Closure(_, body, ctx) -> body, ctx
-    | _ -> builtin_error loc "A Closure was expected" in
+    let body, ctx = match cb with
+      | Closure(_, body, ctx) -> body, ctx
+      | _ -> builtin_error loc "A Closure was expected" in
+
+    (* run given command *)
+    let underlying = cmd () in
 
     (* add evaluated IO to arg list *)
-  let nctx = add_rte_variable None io ctx in
+    let nctx = add_rte_variable None underlying ctx in
 
     (* eval callback *)
-    _eval body nctx 0
+    _eval body nctx depth)
 
-and typer_eval loc args ctx =
+and run_io loc depth args_val ctx =
+
+  let io, ltp = match args_val with
+    | [io; ltp] -> io, ltp
+    | _ -> builtin_error loc "run-io expects 2 arguments" in
+
+  let cmd = match io with
+    | Vcommand (cmd) -> cmd
+    | _ -> builtin_error loc "run-io expects a monad as first argument" in
+
+  (* run given command *)
+  let _ = cmd () in
+
+  (* return given type *)
+    ltp
+
+and typer_eval loc depth args ctx =
     let arg = match args with
         | [a] -> a
         | _ -> eval_error loc "eval_ expects a single argument" in
     (* I need to be able to lexp sexp but I don't have lexp ctx *)
     match arg with
         (* Nodes that can be evaluated *)
-        | Closure (_, body, ctx) -> _eval body ctx 1
+        | Closure (_, body, ctx) -> _eval body ctx depth
         (* Leaf *)
         | _ -> arg
 
@@ -279,7 +307,7 @@ and get_builtin_impl str loc =
 (* Sexp -> (Sexp -> List Sexp -> Sexp) -> (String -> Sexp) ->
     (String -> Sexp) -> (Int -> Sexp) -> (Float -> Sexp) -> (List Sexp -> Sexp)
         ->  Sexp *)
-and sexp_dispatch loc args ctx =
+and sexp_dispatch loc depth args ctx =
     let eval a b = _eval a b 1 in
     let sxp, nd, sym, str, it, flt, blk, rctx = match args with
         | [sxp; Closure(_, nd, rctx); Closure(_, sym, _);
@@ -373,45 +401,3 @@ let from_lctx (ctx: lexp_context) rm: runtime_env =
     done;
 
     !rctx
-
-    (* let ((n, _), env, _) = ctx in
-    let rctx = ref make_runtime_ctx in
-
-    let bsize = 0 in
-    let csize = n - 1 in
-
-    (* add all variables * )
-    for i = bsize to csize do
-        let name = match (Myers.nth (csize - i) env) with
-          | (_, Some (_, name), _, _) -> Some name
-          | _ -> None in
-
-        rctx := add_rte_variable name Vdummy (!rctx)
-    done; *)
-
-    let diff = csize - bsize in
-
-    (* process all of them *)
-    for i = 0 to diff do
-      try
-        let j = diff - i (* - 1 *) in
-        let name, exp = match Myers.nth (csize - i) env with
-          | (_, Some (_, name), LetDef exp, _) -> Some name, Some exp
-          | _ -> None, None in
-
-        let vxp = match exp with
-            | Some lxp ->
-                let lxp = (erase_type lxp) in
-                    (try (eval lxp !rctx)
-                        with e -> elexp_print lxp;
-                          print_string "\n"; raise e)
-
-            | None -> Vdummy in
-                rctx := add_rte_variable name vxp (!rctx)
-
-      with Not_found ->
-        print_int n; print_string " ";
-        print_int (csize - i); print_string "\n ";
-        raise Not_found
-    done;
-        !rctx *)
