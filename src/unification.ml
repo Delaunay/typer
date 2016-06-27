@@ -293,7 +293,7 @@ and _unify_sortlvl (sortlvl: lexp) (lxp: lexp) (subst: substitution) : return_ty
   match sortlvl, lxp with
   | (SortLevel s, SortLevel s2) -> (match s, s2 with
       | SLn i, SLn j when i = j -> Some (subst, [])
-      | SLsucc l1, SLsucc l2 -> unify l1 l2 subst
+      | SLsucc l1, SLsucc l2 -> unify l1 l2 subst (* Is SLsucc some kind of linked list ? *)
       | _, _ -> None)
   | _, _ -> None
 
@@ -304,7 +304,13 @@ and _unify_sort (sort_: lexp) (lxp: lexp) (subst: substitution) : return_type =
       | StypeOmega, StypeOmega -> Some (subst, [])
       | StypeLevel, StypeLevel -> Some (subst, [])
       | _, _ -> None)
-  | _, _ -> None
+  | Sort _, Imm _           -> None
+  | Sort _, Builtin _       -> None
+  | Sort _, Lambda _        -> None
+  | Sort _, Cons _          -> None
+  (*| Sort _, SortLevel       -> (* ?? *)*)
+  | Sort (_, Stype lxp2), _ -> unify lxp lxp2 subst
+  | _, _                    -> None
 
 (************************ Helper function **************************************)
 
@@ -378,12 +384,12 @@ and _unify_induct_sub_list l1 l2 subst =
   in test l1 l2 subst
 
 (***** general *****)
+
 (** take two list [(vdef * ltype * lexp), (vdef2 * ltype2 * lexp2)...]
     map them to [ltype, lexp, ltype2, lexp2, ...]
     and zip them to
     [(ltype * ltype), (lexp * lexp), (ltype2 * ltype2), (lexp2 * lexp2), ...]
 *)
-
 and _unify_inner (lxp_l: (lexp * lexp) list) (subst: substitution) : return_type =
   let merge ((s, c): (substitution * constraints))
       (lxp_list: (lexp * lexp) list) : return_type =
