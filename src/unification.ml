@@ -114,6 +114,24 @@ let rec unify (l: lexp) (r: lexp) (subst: substitution) : return_type =
   | (Inductive _, _) -> _unfiy_induct   l r subst
   | (_, _)           -> None
 
+and _unify_sortlvl (sortlvl: lexp) (lxp: lexp) (subst: substitution) : return_type =
+  match sortlvl, lxp with
+  | (SortLevel s, SortLevel s2) -> (match s, s2 with
+      | SLn i, SLn j when i = j -> Some (subst, [])
+      | SLsucc l1, SLsucc l2 -> unify l1 l2 subst
+      | _, _ -> None)
+  | _, _ -> None
+
+(* ???? *)
+and _unify_sort (sort_: lexp) (lxp: lexp) (subst: substitution) : return_type =
+  match sort_, lxp with
+  | (Sort (_, srt), Sort (_, srt2)) -> (match srt, srt2 with
+      | Stype lxp1, Stype lxp2 -> unify lxp1 lxp2 subst
+      | StypeOmega, StypeOmega -> Some (subst, [])
+      | StypeLevel, StypeLevel -> Some (subst, [])
+      | _, _ -> None)
+  | _, _ -> None
+
 (** Check arg_king in (arg_kind * vdef option) list in Case *)
 and is_same arglist arglist2 =
   match arglist, arglist2 with
