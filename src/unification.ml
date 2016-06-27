@@ -309,9 +309,11 @@ and _unify_sort (sort_: lexp) (lxp: lexp) (subst: substitution) : return_type =
       | _, _ -> None)
   | Sort _, Imm _           -> None
   | Sort _, Builtin _       -> None
+  | Sort _, Var _           -> Some (subst, [(sort_, lxp)])
+  | Sort _, Susp _          -> _unify_sort sort_ (unsusp_all lxp) subst
   | Sort _, Lambda _        -> None
   | Sort _, Cons _          -> None
-  (*| Sort _, SortLevel       -> (* ?? *)*)
+  (*| Sort _, SortLevel _     -> (* ?? *)*)
   | Sort (_, Stype lxp2), _ -> unify lxp lxp2 subst
   | _, _                    -> None
 
