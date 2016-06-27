@@ -116,7 +116,7 @@ let rec unify (l: lexp) (r: lexp) (subst: substitution) : return_type =
   | (Inductive _, _) -> _unfiy_induct   l r subst
   | (Sort _, _)      -> _unify_sort     l r subst
   | (SortLevel _, _) -> _unify_sortlvl  l r subst
-  (*| (_, _)           -> None*)
+(*| (_, _)           -> None*)
 
 (********************************* Type specific unify *******************************)
 
@@ -276,6 +276,7 @@ and _unify_case (case: lexp) (lxp: lexp) (subst: substitution) : return_type =
             | None -> None)
         | _, _ -> None)
   | (Case _, Var _) -> Some (subst, [(case, lxp)]) (* ??? *)
+  (*| (Case _, _)     -> Some (subst, [(case, lxp)]) (* ??? *)*)
   | (_, _) -> None
 
 (** Unify a Inductive and a lexp
@@ -285,9 +286,11 @@ and _unfiy_induct (induct: lexp) (lxp: lexp) (subst: substitution) : return_type
   match (induct, lxp) with
   | (Inductive (_, lbl1, farg1, m1), Inductive (_, lbl2, farg2, m2)) when lbl1 = lbl2 ->
     (match _unify_inner_induct_1 (List.combine farg1 farg2) subst with
-     | None -> None
-     | Some (s, c) -> _unify_induct_sub_list (SMap.bindings m1) (SMap.bindings m2) s)
-  | (_, _) -> None
+     | None        -> None
+     | Some (s, c) -> (match (_unify_induct_sub_list (SMap.bindings m1) (SMap.bindings m2) s) with
+         | Some (s', c') -> Some (s', c@c')
+         | None -> None))
+     | (_, _) -> None
 
 and _unify_sortlvl (sortlvl: lexp) (lxp: lexp) (subst: substitution) : return_type =
   match sortlvl, lxp with
