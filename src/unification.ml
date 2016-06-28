@@ -359,7 +359,7 @@ and _unify_inner_induct lst subst : return_type =
   List.fold_left (fun a e -> (match a with
       | Some (s, c) -> (match test e s with
           | Some (s1, c1) -> Some (s1, c1@c)
-          | None -> Some (s, c)) (*FIXME : should return None at the first failure ?*)
+          | None -> Some (s, c))
       | None -> test e subst)
     ) None lst
 

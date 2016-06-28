@@ -233,6 +233,14 @@ let generate_testable (_: lexp list) : ((lexp * lexp * result) list) =
               (Util.dummy_location, "L2"),
               Var((Util.dummy_location, "z"), 4),
               Imm (Integer (Util.dummy_location, 3))), Nothing )
+
+  ::(Let (Util.dummy_location,
+          [], (*TODO : better tests*)
+          Var ((Util.dummy_location, "x_let"), 9)) ,
+      Lambda ((Aexplicit),
+              (Util.dummy_location, "L2"),
+              Var((Util.dummy_location, "z"), 4),
+              Imm (Integer (Util.dummy_location, 3))), Constraint )
   ::[]
 
 let check (lxp1: lexp ) (lxp2: lexp ) (res: result) (subst: substitution ): bool =
