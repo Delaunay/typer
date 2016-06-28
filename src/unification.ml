@@ -294,7 +294,8 @@ and _unfiy_induct (induct: lexp) (lxp: lexp) (subst: substitution) : return_type
      | Some (s, c) -> (match (_unify_induct_sub_list (SMap.bindings m1) (SMap.bindings m2) s) with
          | Some (s', c') -> Some (s', c@c')
          | None -> None))
-     | (_, _) -> None
+  | (Inductive _, Var _) -> Some (subst, [(induct, lxp)])
+  | (_, _) -> None
 
 and _unify_sortlvl (sortlvl: lexp) (lxp: lexp) (subst: substitution) : return_type =
   match sortlvl, lxp with
@@ -311,14 +312,7 @@ and _unify_sort (sort_: lexp) (lxp: lexp) (subst: substitution) : return_type =
       | StypeOmega, StypeOmega -> Some (subst, [])
       | StypeLevel, StypeLevel -> Some (subst, [])
       | _, _ -> None)
-  | Sort _, Imm _           -> None
-  | Sort _, Builtin _       -> None
   | Sort _, Var _           -> Some (subst, [(sort_, lxp)])
-  | Sort _, Susp _          -> _unify_sort sort_ (unsusp_all lxp) subst
-  | Sort _, Lambda _        -> None
-  | Sort _, Cons _          -> None
-  (*| Sort _, SortLevel _     -> (* ?? *)*)
-  | Sort (_, Stype lxp2), _ -> unify lxp lxp2 subst
   | _, _                    -> None
 
 (************************ Helper function **************************************)
