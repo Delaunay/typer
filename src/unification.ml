@@ -102,6 +102,9 @@ let rec unify (l: lexp) (r: lexp) (subst: substitution) : return_type =
   match (l, r) with
   | (_, Metavar _)   -> _unify_metavar  r l subst
   | (_, Call _)      -> _unify_call     r l subst
+  | (_, Case _)      -> _unify_case     r l subst
+  | (_, Susp _)      -> _unify_susp     r l subst
+  | (_, Let _)       -> _unify_let      r l subst
   | (Imm _, _)       -> _unify_imm      l r subst
   | (Cons _, _)      -> _unify_cons     l r subst
   | (Builtin _, _)   -> _unify_builtin  l r subst
