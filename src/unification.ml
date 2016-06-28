@@ -333,11 +333,11 @@ and is_same arglist arglist2 =
 
 (** try to unify the SMap part of the case *)
 and _unify_inner_case l s =
-  let rec _unify_inner_case l s =
-    match l with
-    | ((key, (_, arglist, lxp)), (key2, (_, arglist2, lxp2)))::t when key = key2 ->
+  let rec _unify_inner_case list_ s =
+    match list_ with
+    | ((key, (_, arglist, lxp)), (key2, (_, arglist2, lxp2)))::tail when key = key2 ->
       (if is_same arglist arglist2 then ( match unify lxp lxp2 s with
-           | Some (s', c) -> (match _unify_inner_case l s' with
+           | Some (s', c) -> (match _unify_inner_case tail s' with
                | Some (s_, c_) -> Some (s_, c@c_)
                | None -> None)
            | None -> None)
