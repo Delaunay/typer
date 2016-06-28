@@ -71,7 +71,7 @@ let colored_string_of_lxp lxp lcol vcol =
   | Var ((_, name), idx)            -> (lcol "Var" ) ^ "(" ^ (vcol name ) ^ ", " ^ (vcol ("#" ^ (string_of_int idx))) ^ ")"
   | Arrow (_, _, a, _, b)           -> (lcol "Arrow(") ^ (vcol (string_of_lxp a)) ^ " => " ^ (vcol (string_of_lxp b)) ^ ")"
   | Lambda (_,(_, name), dcl, body) -> (lcol "Lambda") ^ "(" ^ (vcol name) ^ " : " ^ (vcol (string_of_lxp dcl))
-                                       ^ " => (" ^ (vcol (string_of_lxp body)) ^ ") )"
+                                       ^ " => (" ^ (vcol (string_of_lxp body)) ^ "))"
   | Metavar (value, (_, name))      -> (lcol "Metavar" ) ^ "(" ^ (vcol (string_of_int value)) ^ ", " ^ (vcol name) ^ ")"
   | Call (_)                        -> (lcol "Call(...)" )
   | Case _                          -> (lcol "Case") ^ "(...)"

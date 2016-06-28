@@ -265,25 +265,26 @@ and _unify_susp (susp_: lexp) (lxp: lexp) (subst: substitution) : return_type =
   | _ -> None
 
 (** Unify a Case with a lexp
- * Case, Var -> constraint (if the variable type and the type of the return value is equivalent, it should be unifiable)
  * Case, Case -> try to unify
- * Case, _ -> None
+ * Case, _ -> Constraint
 *)
 and _unify_case (case: lexp) (lxp: lexp) (subst: substitution) : return_type =
-  (* Maybe Constraint instead ?*)
   match case, lxp with
   | (Case (_, lxp, lt11, lt12, smap, lxpopt), Case (_, lxp2, lt21, lt22, smap2, lxopt2))
     -> ( match lxpopt, lxopt2 with
         | Some l1, Some l2 -> (match _unify_inner ((lxp, lxp2)::(lt11, lt21)::(lt12, lt22)::(l1, l2)::[]) subst with
-            | Some (s, c) -> _unify_inner_case (List.combine (SMap.bindings smap) (SMap.bindings smap2)) s (* TODO match on result *)
+            | Some (s, c) -> (match _unify_inner_case (List.combine (SMap.bindings smap) (SMap.bindings smap2)) s with
+                | Some (s', c') -> Some (s', c@c')
+                | None          -> None)
             | None -> None)
         | _, _ -> None)
-  | (Case _, Var _) -> Some (subst, [(case, lxp)]) (* ??? *)
-  (*| (Case _, _)     -> Some (subst, [(case, lxp)]) (* ??? *)*)
+  | (Case _, _)     -> Some (subst, [(case, lxp)])
   | (_, _) -> None
 
 (** Unify a Inductive and a lexp
- * Inductive, Inductive -> try t unify
+ * Inductive, Inductive -> try unify
+ * Inductive, Var -> constraint
+ * Inductive, Call/Metavar/Case/Let -> constraint
  * Inductive, _ -> None*)
 and _unfiy_induct (induct: lexp) (lxp: lexp) (subst: substitution) : return_type =
   match (induct, lxp) with
