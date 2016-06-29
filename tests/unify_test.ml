@@ -70,6 +70,7 @@ let str_case2 = "i = case 0
 | 0 => 12
 | 1 => 12
 | _ => 12"
+let str_let = "i = let a = 5 in a + 1"
 
 let generate_ltype_from_str str =
   List.hd ((fun (lst, _) ->
@@ -90,6 +91,7 @@ let input_int_4  = generate_lexp_from_str str_int_4
 let input_int_3  = generate_lexp_from_str str_int_3
 let input_case   = generate_lexp_from_str str_case
 let input_case2  = generate_lexp_from_str str_case2
+let input_let    = generate_lexp_from_str str_let
 
 let generate_testable (_: lexp list) : ((lexp * lexp * result) list) =
   ( Builtin ((Util.dummy_location, "Int=3"), Imm (Integer (Util.dummy_location, 3))),
@@ -129,12 +131,20 @@ let generate_testable (_: lexp list) : ((lexp * lexp * result) list) =
               Imm (Integer (Util.dummy_location, 3))), Nothing )
 
   ::(input_induct , input_induct , Equivalent)
+
   ::(input_int_4  , input_int_4  , Equivalent)
+
   ::(input_int_3  , input_int_4  , Nothing)
+
   ::(input_case   , input_int_4  , Constraint)
   ::(input_case   , input_induct , Constraint)
   ::(input_case   , input_case   , Equivalent)
   ::(input_case   , input_case2  , Nothing)
+
+  ::(input_let    , input_induct , Constraint)
+  ::(input_let    , input_int_4  , Constraint)
+  ::(input_let    , input_case   , Constraint)
+  ::(input_let    , input_let    , Equivalent)
 
   ::(Let (Util.dummy_location,
           [], (*TODO : better tests*)
