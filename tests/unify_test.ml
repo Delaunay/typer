@@ -17,6 +17,9 @@ open Str
 
 open Debug
 
+open Fmt_lexp
+open Debug_fun
+
 type result =
   | Constraint
   | Unification
@@ -26,27 +29,6 @@ type result =
 type unif_res = (result * (substitution * constraints) option * lexp * lexp)
 
 type triplet = string * string * string
-
-(* String & lexp formatting *)
-let rec string_of_lxp lxp =
-  match lxp with
-  | Imm (Integer (_, value))        -> "Integer(" ^ (string_of_int value) ^ ")"
-  | Imm (String (_, value))         -> "String(" ^ value ^ ")"
-  | Imm (Float (_, value))          -> "Float(" ^ (string_of_float value) ^ ")"
-  | Cons (((_,name),_),_)           -> "Cons(" ^  name ^ ")"
-  | Builtin ((_, name), _)          -> "Builtin(" ^ name ^ ")"
-  | Let (_)                         -> "Let(..)"
-  | Var ((_, name), idx)            -> "Var(" ^ name ^ ", #" ^(string_of_int idx) ^ ")"
-  | Arrow (_, _, a, _, b)           -> "Arrow(" ^ (string_of_lxp a) ^ " => " ^ (string_of_lxp b) ^ ")"
-  | Lambda (_,(_, name), dcl, body) -> "Lambda(" ^ name ^ " : " ^ (string_of_lxp dcl) ^ " => (" ^ (string_of_lxp body) ^ ") )"
-  | Metavar (value, (_, name))      -> "Metavar(" ^ (string_of_int value) ^ ", " ^ name ^ ")"
-  | Call (_)                        -> "Call(...)"
-  | Inductive _                     -> ("Inductive") ^ "(...)"
-  | Sort _                          -> ("Sort") ^ "(...)"
-  | SortLevel _                     -> ("SortLevel") ^ "(...)"
-  | Case _                          -> ("Case") ^ "(...)"
-  | Susp _                          -> "Susp(...)"
-  | _                               -> "???"
 
 let string_of_result r =
   match r with
@@ -62,11 +44,6 @@ let max_dim (lst: (string * string * string * string) list): (int * int * int *i
     (0, 0, 0, 0)
     lst
 
-let padding_right (str: string ) (dim: int ) (char_: char) : string =
-  let diff = (dim - String.length str) + 5
-  in let rpad = diff
-  in str ^ (String.make rpad char_)
-
 let fmt (lst: (lexp * lexp * result * result) list): string list =
   let str_lst = List.map
       (fun (l1, l2, r1, r2) -> ((string_of_lxp l1), (string_of_lxp l2), (string_of_result r1), (string_of_result r2)))
@@ -75,11 +52,11 @@ let fmt (lst: (lexp * lexp * result * result) list): string list =
   in List.map (fun (l1, l2, r1, r2) -> (padding_right l1 l ' ')
                                        ^ " , "
                                        ^ (padding_right l2 c1 ' ')
-                                       ^ " -> got :"
+                                       ^ " -> got : "
                                        ^ (padding_right r2 r ' ')
                                        ^ " expected : "
                                        ^ (padding_right r1 c2 ' ')
-                                       ) str_lst
+              ) str_lst
 
 (* Inputs for the test *)
 let str_induct = "Nat = inductive_ (dNat) (zero) (succ Nat)"
@@ -170,6 +147,7 @@ let generate_testable (_: lexp list) : ((lexp * lexp * result) list) =
 
 let test_input (lxp1: lexp) (lxp2: lexp) (subst: substitution): unif_res =
   (*do_debug (fun () -> print_string (fmt_unification_of lxp1 lxp2));*)
+  clear_indent ();
   let res = unify lxp1 lxp2 subst in
   match res with
   | Some (s, []) when s = empty_subst -> (Equivalent, res, lxp1, lxp2)

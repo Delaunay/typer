@@ -2,24 +2,27 @@
 open Lexp
 open Sexp
 
+open Debug_fun
+
 module VMap = Map.Make (struct type t = int let compare = compare end)
 
 type substitution = lexp VMap.t
 type constraints  = (lexp * lexp) list
+
 (* IMPROVEMENT For error handling : can carry location and name of type error *)
-(*type 'a expected =*)
-(*| Some of 'a*)
-(*| Error of Util.location * string (*location * type name*)*)
-(*| None*)
+(*type 'a result =*)
+  (*| Some of 'a*)
+  (*| Error of Util.location * string (*location * type name*)*)
+  (*| Nil*)
+
+(*let result_to_option (e: 'a result) : ('a option) =*)
+  (*match e with*)
+  (*| Some elt -> Some elt*)
+  (*| Error _  -> None*)
+  (*| Nil      -> None*)
 
 let global_last_metavar = ref 0
 let create_metavar = global_last_metavar := !global_last_metavar + 1; !global_last_metavar
-
-(*let expected_to_option (e: 'a expected) : ('a option) =*)
-(*match e with*)
-(*| Some elt -> Some elt*)
-(*| Error _  -> None*)
-(*| None     -> None*)
 
 (* For convenience *)
 type return_type = (substitution * constraints) option
@@ -78,6 +81,7 @@ let zip_fold list1 list2 f =
 *)
 
 let rec unify (l: lexp) (r: lexp) (subst: substitution) : return_type =
+  debug_print_unify "unify" l r "";
   match (l, r) with
   | (_, Metavar _)   -> _unify_metavar  r l subst
   | (_, Call _)      -> _unify_call     r l subst
@@ -153,15 +157,16 @@ and _unify_builtin (bltin: lexp) (lxp: lexp) (subst: substitution) : return_type
  * Let , lexp -> constraint
 *)
 and _unify_let (let_: lexp) (lxp: lexp) (subst: substitution) : return_type =
+  debug_print_unify "_unify_let" let_ lxp "";
   match (let_, lxp) with
   | (Let (_, m, lxp_), Let (_, m1, lxp2)) ->
-    let f = (fun (_, t, x) acc -> t::x::acc)
+    let f = (fun (_, lxp, lt) acc -> lxp::lt::acc)
     in let tail = zip_fold m m1 f
     in (match tail with
-        | [] -> None
+        | [] -> debug_print_unify "_unify_let" let_ lxp " -> No unification"; None
         | _ -> _unify_inner ((lxp_, lxp2)::(tail)) subst )
-  | (Let _,  _) -> Some (subst, [(let_, lxp)])
-  | _, _ -> None
+  | (Let _,  _) -> debug_print_unify "_unify_let" let_ lxp " -> Constraint"; Some (subst, [(let_, lxp)])
+  | _, _ -> debug_print_unify "_unify_let" let_ lxp " -> No unification"; None
 
 (** Unify a Var and a lexp, if possible
  * (Var, Var) -> unify if they have the same debruijn index FIXME : shift indexes
@@ -281,7 +286,7 @@ and _unify_case (case: lexp) (lxp: lexp) (subst: substitution) : return_type =
  * Inductive, Var -> constraint
  * Inductive, Call/Metavar/Case/Let -> constraint
  * Inductive, _ -> None
- *)
+*)
 and _unfiy_induct (induct: lexp) (lxp: lexp) (subst: substitution) : return_type =
   let transform (a, b, c) (d, e, f) = ((a, Some b, c), (d, Some e, f))
   in match (induct, lxp) with
@@ -348,7 +353,6 @@ and _unify_inner_case l s =
       | [] -> None
       | _ -> _unify_inner_case l s)
 
-
 (***** for Inductive *****)
 (** for _unify_induct : unify the formal arg*)
 and _unify_inner_induct lst subst : return_type =
@@ -393,3 +397,4 @@ and _unify_inner (lxp_l: (lexp * lexp) list) (subst: substitution) : return_type
       | Some (s, c) -> merge (s, c) tail
       | None -> None)
   | [] -> None
+
