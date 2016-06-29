@@ -27,11 +27,6 @@ type unif_res = (result * (substitution * constraints) option * lexp * lexp)
 
 type triplet = string * string * string
 
-let _debug = false
-
-let do_debug func =
-  if _debug then (func ()) else ()
-
 (* String & lexp formatting *)
 let rec string_of_lxp lxp =
   match lxp with
@@ -53,75 +48,6 @@ let rec string_of_lxp lxp =
   | Susp _                          -> "Susp(...)"
   | _                               -> "???"
 
-let _color = false
-let str_red str     = if _color then red     ^ str ^ reset else str
-let str_green str   = if _color then green   ^ str ^ reset else str
-let str_magenta str = if _color then magenta ^ str ^ reset else str
-let str_yellow str  = if _color then yellow  ^ str ^ reset else str
-let str_cyan str    = if _color then cyan    ^ str ^ reset else str
-
-let colored_string_of_lxp lxp lcol vcol =
-  match lxp with
-  | Imm (Integer (_, value))        -> (lcol "Integer") ^ "("  ^ (vcol (string_of_int value)) ^ ")"
-  | Imm (String (_, value))         -> (lcol "String") ^ "(" ^  (vcol value ) ^ ")"
-  | Imm (Float (_, value))          -> (lcol "Float" ) ^ "(" ^ (vcol (string_of_float value)) ^ ")"
-  | Cons (((_,name),_),_)           -> (lcol "Cons" ) ^ "(" ^ (vcol name) ^ ")"
-  | Builtin ((_, name), _)          -> (lcol "Builtin") ^ "(" ^ (vcol name) ^ ")"
-  | Let (_)                         -> (lcol "Let(..)")
-  | Var ((_, name), idx)            -> (lcol "Var" ) ^ "(" ^ (vcol name ) ^ ", " ^ (vcol ("#" ^ (string_of_int idx))) ^ ")"
-  | Arrow (_, _, a, _, b)           -> (lcol "Arrow(") ^ (vcol (string_of_lxp a)) ^ " => " ^ (vcol (string_of_lxp b)) ^ ")"
-  | Lambda (_,(_, name), dcl, body) -> (lcol "Lambda") ^ "(" ^ (vcol name) ^ " : " ^ (vcol (string_of_lxp dcl))
-                                       ^ " => (" ^ (vcol (string_of_lxp body)) ^ "))"
-  | Metavar (value, (_, name))      -> (lcol "Metavar" ) ^ "(" ^ (vcol (string_of_int value)) ^ ", " ^ (vcol name) ^ ")"
-  | Call (_)                        -> (lcol "Call(...)" )
-  | Case _                          -> (lcol "Case") ^ "(...)"
-  | Inductive _                     -> (lcol "Inductive") ^ "(...)"
-  | Sort _                          -> (lcol "Sort") ^ "(...)"
-  | SortLevel _                     -> (lcol "SortLevel") ^ "(...)"
-  | Susp _                          -> (lcol "Susp") ^ "(...)"
-  | _                               -> "???"
-
-let padding_right (str: string ) (dim: int ) (char_: char) : string =
-  let diff = (dim - String.length str) + 5
-  in let rpad = diff
-  in str ^ (String.make rpad char_)
-
-let padding_left (str: string ) (dim: int ) (char_: char) : string =
-  let diff = (dim - String.length str) + 5
-  in let lpad = diff
-  in (String.make lpad char_) ^ str
-
-let center (str: string ) (dim: int ) (char_: char) : string =
-  let diff = (dim - String.length str) + 5
-  in let lpad, rpad = ((diff / 2 ), ((diff / 2) + (diff mod 2)))
-  in (String.make lpad char_) ^ str ^ (String.make lpad char_)
-
-let get_max_dim (str_list : triplet list ) : (int * int * int) =
-  let max_ i s = max i (String.length s)
-  in (List.fold_left
-        (fun (al,ac,ar) (el, ec, er) -> ((max_ al el), (max_ ac ec), (max_ ar er)))
-        (0, 0, 0) str_list)
-
-let fmt_unification_result (l: unif_res): string =
-  match l with
-  | (Constraint, _, lxp1, lxp2) ->
-    "{ \"result\" : " ^ (str_yellow "\"Constraint\"") ^ ", \"lexp_left\" : \"" ^ (str_yellow (string_of_lxp lxp1)) ^ "\", \"lexp_right\" : \"" ^ (str_yellow (string_of_lxp lxp2)) ^ "\"}"
-  | (Unification, _, lxp1, lxp2) ->
-    "{ \"result\" : " ^ (str_yellow "\"Unification\"") ^ ", \"lexp_left\" : \"" ^ (str_yellow (string_of_lxp lxp1)) ^ "\", \"lexp_right\" : \"" ^ (str_yellow (string_of_lxp lxp2)) ^ "\"}"
-  | (Equivalent, _, lxp1, lxp2) ->
-    "{ \"result\" : " ^ (str_yellow "\"Equivalent\"") ^ ", \"lexp_left\" : \"" ^ (str_yellow (string_of_lxp lxp1)) ^ "\", \"lexp_right\" : \"" ^ (str_yellow (string_of_lxp lxp2)) ^ "\"}"
-  | (Nothing, _, lxp1, lxp2) ->
-    "{ \"result\" : " ^ (str_yellow "\"Nothing\"") ^ ", \"lexp_left\" : \"" ^ (str_yellow (string_of_lxp lxp1)) ^ "\", \"lexp_right\" : \"" ^ (str_yellow (string_of_lxp lxp2)) ^ "\"}"
-
-let fmt_all (r: unif_res list) =
-  List.map fmt_unification_result r
-
-let fmt_unification_of lxp1 lxp2 =
-  "Unifying " ^ (colored_string_of_lxp lxp1 str_yellow str_cyan)
-  ^ " -> "
-  ^ (colored_string_of_lxp lxp2 str_yellow str_cyan)
-  ^ "\n"
-
 let string_of_result r =
   match r with
   | Constraint  -> "Constraint"
@@ -129,77 +55,68 @@ let string_of_result r =
   | Equivalent  -> "Equivalent"
   | Nothing     -> "Nothing"
 
-let fmt_title l1 l2 r = string_of_lxp l1 ^ ", " ^ string_of_lxp l2 ^ " -> " ^ string_of_result r
+let max_dim (lst: (string * string * string * string) list): (int * int * int *int) =
+  let max i l = max i (String.length l)
+  in List.fold_left
+    (fun (la, ca1, ca2, ra) (l, c1, c2, r) -> ((max la l), (max ca1 c1), (max ca2 c2), (max ra r)))
+    (0, 0, 0, 0)
+    lst
+
+let padding_right (str: string ) (dim: int ) (char_: char) : string =
+  let diff = (dim - String.length str) + 5
+  in let rpad = diff
+  in str ^ (String.make rpad char_)
+
+let fmt (lst: (lexp * lexp * result * result) list): string list =
+  let str_lst = List.map
+      (fun (l1, l2, r1, r2) -> ((string_of_lxp l1), (string_of_lxp l2), (string_of_result r1), (string_of_result r2)))
+      lst
+  in let l, c1, c2, r = max_dim str_lst
+  in List.map (fun (l1, l2, r1, r2) -> (padding_right l1 l ' ')
+                                       ^ " , "
+                                       ^ (padding_right l2 c1 ' ')
+                                       ^ " -> got :"
+                                       ^ (padding_right r2 r ' ')
+                                       ^ " expected : "
+                                       ^ (padding_right r1 c2 ' ')
+                                       ) str_lst
 
 (* Inputs for the test *)
-let input_, _  = lexp_decl_str "
-        sqr = lambda (x : Int) -> x * x;
-        cube = lambda (x : Int) -> x * (sqr x);
+let str_induct = "Nat = inductive_ (dNat) (zero) (succ Nat)"
+let str_int_3  = "i = 3"
+let str_int_4  = "i = 4"
+let str_case   = "i = case 0
+| 1 => 2
+| 0 => 42
+| _ => 5"
+let str_case2 = "i = case 0
+| 0 => 12
+| 1 => 12
+| _ => 12"
 
-        mult = lambda (x : Int) -> lambda (y : Int) -> x * y;
+let generate_ltype_from_str str =
+  List.hd ((fun (lst, _) ->
+      (List.map
+         (fun (_, _, ltype) -> ltype))
+        (List.flatten lst))
+       (lexp_decl_str str default_lctx))
 
-        twice = (mult 2);
+let generate_lexp_from_str str =
+  List.hd ((fun (lst, _) ->
+      (List.map
+         (fun (_, lxp, _) -> lxp))
+        (List.flatten lst))
+       (lexp_decl_str str default_lctx))
 
-        let_fun = lambda (x : Int) ->
-            let a = (twice x); b = (mult 2 x); in
-                a + b;" default_lctx
-
-let input = List.flatten (List.map (fun (_, l, l2)-> l::l2::[]) (List.flatten input_))
-
-let man_input =
-  Imm (Integer (Util.dummy_location, 3))
-  ::Imm (Integer (Util.dummy_location, 4))
-  ::Builtin ((Util.dummy_location, "Int=3"), Imm (Integer (Util.dummy_location, 3)))
-  ::Var ((Util.dummy_location, "x"), 3)
-  ::Var ((Util.dummy_location, "y"), 4)
-  ::Metavar (0, (Util.dummy_location, "M"))
-  ::[]
-
-
-(* Test sample generation *)
-let rec range (begin_: int) (end_: int) : (int list) =
-  if begin_ >= end_
-  then []
-  else begin_::(range (begin_+1) end_)
-
-let generate_combination (r: int list) (input: lexp list) : ((lexp * lexp) list) =
-  let begin_ = List.hd r
-  in List.map (fun idx -> ((List.nth input begin_ ), (List.nth input idx)) ) r
-
-let generate_couples (input: lexp list) : ((lexp * lexp) list) =
-  let length = List.length input
-  in List.fold_left (fun acc elt -> (generate_combination (range elt length) input)@acc) [] (range 0 length)
-
-(* Testing the sample *)
-
-let test_input (lxp1: lexp) (lxp2: lexp) (subst: substitution): unif_res =
-  do_debug (fun () -> print_string (fmt_unification_of lxp1 lxp2));
-  let res = unify lxp1 lxp2 subst in
-  match res with
-  | Some (s, []) when s = empty_subst -> (Equivalent, res, lxp1, lxp2)
-  | Some (_, [])                      -> (Unification, res, lxp1, lxp2)
-  | Some _                            -> (Constraint, res, lxp1, lxp2)
-  | None                              -> (Nothing, res, lxp1, lxp2)
-
-let test_samples (samples: (lexp * lexp) list) (subst: substitution): (unif_res list) =
-  List.map (fun (l1, l2) -> test_input l1 l2 subst) samples
-
-(* Testing the inputs *)
-
-let tests (input: lexp list) sample_generator formatter : (string list) =
-  let samples = sample_generator input
-  in let res = test_samples samples empty_subst
-  in formatter res
+let input_induct = generate_lexp_from_str str_induct
+let input_int_4  = generate_lexp_from_str str_int_4
+let input_int_3  = generate_lexp_from_str str_int_3
+let input_case   = generate_lexp_from_str str_case
+let input_case2  = generate_lexp_from_str str_case2
 
 let generate_testable (_: lexp list) : ((lexp * lexp * result) list) =
-  ( Imm (Integer (Util.dummy_location, 3)) ,
-    Imm (Integer (Util.dummy_location, 3)) , Equivalent)
-
-  ::( Imm (Integer (Util.dummy_location, 4)) ,
-      Imm (Integer (Util.dummy_location, 3)) , Nothing )
-
-  ::( Builtin ((Util.dummy_location, "Int=3"), Imm (Integer (Util.dummy_location, 3))),
-      Imm (Integer (Util.dummy_location, 3)), Equivalent)
+  ( Builtin ((Util.dummy_location, "Int=3"), Imm (Integer (Util.dummy_location, 3))),
+    Imm (Integer (Util.dummy_location, 3)), Equivalent)
 
   ::( Var ((Util.dummy_location, "x"), 3),
       Var ((Util.dummy_location, "y"), 4), Nothing )
@@ -234,14 +151,31 @@ let generate_testable (_: lexp list) : ((lexp * lexp * result) list) =
               Var((Util.dummy_location, "z"), 4),
               Imm (Integer (Util.dummy_location, 3))), Nothing )
 
+  ::(input_induct , input_induct , Equivalent)
+  ::(input_int_4  , input_int_4  , Equivalent)
+  ::(input_int_3  , input_int_4  , Nothing)
+  ::(input_case   , input_int_4  , Constraint)
+  ::(input_case   , input_induct , Constraint)
+  ::(input_case   , input_case   , Equivalent)
+  ::(input_case   , input_case2  , Nothing)
+
   ::(Let (Util.dummy_location,
           [], (*TODO : better tests*)
           Var ((Util.dummy_location, "x_let"), 9)) ,
-      Lambda ((Aexplicit),
-              (Util.dummy_location, "L2"),
-              Var((Util.dummy_location, "z"), 4),
-              Imm (Integer (Util.dummy_location, 3))), Constraint )
+     Lambda ((Aexplicit),
+             (Util.dummy_location, "L2"),
+             Var((Util.dummy_location, "z"), 4),
+             Imm (Integer (Util.dummy_location, 3))), Constraint )
   ::[]
+
+let test_input (lxp1: lexp) (lxp2: lexp) (subst: substitution): unif_res =
+  (*do_debug (fun () -> print_string (fmt_unification_of lxp1 lxp2));*)
+  let res = unify lxp1 lxp2 subst in
+  match res with
+  | Some (s, []) when s = empty_subst -> (Equivalent, res, lxp1, lxp2)
+  | Some (_, [])                      -> (Unification, res, lxp1, lxp2)
+  | Some _                            -> (Constraint, res, lxp1, lxp2)
+  | None                              -> (Nothing, res, lxp1, lxp2)
 
 let check (lxp1: lexp ) (lxp2: lexp ) (res: result) (subst: substitution ): bool =
   let r, _, _, _ = test_input lxp1 lxp2 subst
@@ -254,19 +188,18 @@ let test_if (input: lexp list) sample_generator checker : bool =
     | [] -> true
   in test_if_ (sample_generator input) checker
 
-(*let print_as_json (input: lexp list) =*)
-  (*let h::t = tests input (generate_couples) (fmt_all)*)
-  (*in let s = "[\n" ^ (List.fold_right (fun e a -> a ^ e ^ ",\n") t "") ^ h ^ "\n]\n"*)
-  (*in print_string s*)
-
-(*let () = print_as_json (input@man_input)*)
+let unifications = List.map
+    (fun (l1, l2, res) ->
+       let r, _, _, _ = test_input l1 l2 empty_subst
+       in (l1, l2, res, r))
+    (generate_testable [])
 
 let _ = List.map
-    (fun (l1, l2, r) ->
+    (fun (str, (l1, l2, expected, res)) ->
        add_test "UNIFICATION"
-         (fmt_title l1 l2 r)
-         (fun () -> if test_if [] (fun _ -> [(l1, l2, r)]) check then success () else failure ()))
-    (generate_testable [])
+         (str)
+         (fun () -> if expected = res then success () else failure ()))
+    (List.combine (fmt unifications) unifications )
 
 let _ = run_all ()
 
