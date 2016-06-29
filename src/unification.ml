@@ -389,7 +389,7 @@ and _unify_inner (lxp_l: (lexp * lexp) list) (subst: substitution) : return_type
   let merge ((s, c): (substitution * constraints))
       (lxp_list: (lexp * lexp) list) : return_type =
     match _unify_inner lxp_list s with
-    | None -> None (* Some (s, c) *)
+    | None -> Some (s, c)
     | Some (s_,c_) -> Some (s_, c@c_)
   in
   match lxp_l with
