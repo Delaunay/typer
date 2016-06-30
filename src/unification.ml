@@ -43,20 +43,15 @@ let find_or_none (value: lexp) (map: substitution) : lexp option =
 let empty_subst = (VMap.empty)
 
 (* Zip while applying a function, returns empty list if l1 & l2 have different size*)
-let zip_map (l1: 'a list ) (l2: 'b list ) (f: ('a -> 'b -> 'c)): 'c list=
+let zip_map (l1: 'a list ) (l2: 'b list ) (f: ('a -> 'b -> 'c)): 'c list option =
   let rec zip_ ll1 ll2 f =
     match ll1, ll2 with
-    | (h1::t1, h2::t2) -> (match zip_ t1 t2 f with
-        | None -> None
-        | Some t -> Some ((f h1 h2)::t))
-    | ([], []) -> Some []
-    | ([], _) -> None
-    | (_, []) -> None
-  in match zip_ l1 l2 f with
-  | None -> []
-  | Some l -> l
+    | (h1::t1, h2::t2) -> (f h1 h2)::(zip_ t1 t2 f)
+    | ([], []) -> []
+    | _, _ -> []
+  in if List.length l1 = List.length l2 then Some (zip_ l1 l2 f) else None
 
-let zip (l1: 'a list) (l2: 'b list): (('a * 'b) list) = zip_map l1 l2 (fun x z -> (x, z))
+let zip (l1: 'a list) (l2: 'b list): (('a * 'b) list option) = zip_map l1 l2 (fun x z -> (x, z))
 
 let zip_fold list1 list2 f =
   let l1 = List.fold_right (f) list1 []
@@ -155,16 +150,15 @@ and _unify_builtin (bltin: lexp) (lxp: lexp) (subst: substitution) : return_type
  * Let , lexp -> constraint
 *)
 and _unify_let (let_: lexp) (lxp: lexp) (subst: substitution) : return_type =
-  debug_print_unify "_unify_let" let_ lxp "";
   match (let_, lxp) with
   | (Let (_, m, lxp_), Let (_, m1, lxp2)) ->
     let f = (fun (_, lxp, lt) acc -> lxp::lt::acc)
-    in let tail = zip_fold m m1 f
-    in (match tail with
-        | [] -> debug_print_unify "_unify_let" let_ lxp " -> No unification"; None
-        | _ -> _unify_inner ((lxp_, lxp2)::(tail)) subst )
-  | (Let _,  _) -> debug_print_unify "_unify_let" let_ lxp " -> Constraint"; Some (subst, [(let_, lxp)])
-  | _, _ -> debug_print_unify "_unify_let" let_ lxp " -> No unification"; None
+    in (match zip_fold m m1 f with
+        | Some [] -> Some (subst, []) (* ??? *)
+        | None -> None
+        | Some tail -> _unify_inner ((lxp_, lxp2)::(tail)) subst )
+  | (Let _,  _) -> Some (subst, [(let_, lxp)])
+  | _, _ -> None
 
 (** Unify a Var and a lexp, if possible
  * (Var, Var) -> unify if they have the same debruijn index FIXME : shift indexes
@@ -250,8 +244,9 @@ and _unify_call (call: lexp) (lxp: lexp) (subst: substitution) : return_type =
     let f = (fun (_, x) acc -> x::acc)
     in let tail = zip_fold lxp_list1 lxp_list2 f
     in (match tail with
-        | [] -> None
-        | _ -> _unify_inner ((lxp1, lxp2)::(tail)) subst)
+        | Some [] -> Some (subst, [])
+        | None -> None
+        | Some tail -> _unify_inner ((lxp1, lxp2)::(tail)) subst)
   | (Call _, _) -> Some ((subst, [(call, lxp)]))
   | (_, _)      -> None
 
@@ -287,13 +282,20 @@ and _unify_case (case: lexp) (lxp: lexp) (subst: substitution) : return_type =
 *)
 and _unfiy_induct (induct: lexp) (lxp: lexp) (subst: substitution) : return_type =
   let transform (a, b, c) (d, e, f) = ((a, Some b, c), (d, Some e, f))
-  in match (induct, lxp) with
+  and merge m1 m2 (s, c) : return_type = match (_unify_induct_sub_list (SMap.bindings m1) (SMap.bindings m2) s) with
+    | Some (s', c') -> Some (s', c@c')
+    | None -> None
+  in
+  let zip_unify lst subst m1 m2 : return_type = match _unify_inner_induct lst subst with
+    | None        -> None
+    | Some (s, c) -> merge m1 m2 (s, c)
+  in
+  match (induct, lxp) with
   | (Inductive (_, lbl1, farg1, m1), Inductive (_, lbl2, farg2, m2)) when lbl1 = lbl2 ->
-    (match _unify_inner_induct (zip_map farg1 farg2 transform) subst with
-     | None        -> None
-     | Some (s, c) -> (match (_unify_induct_sub_list (SMap.bindings m1) (SMap.bindings m2) s) with
-         | Some (s', c') -> Some (s', c@c')
-         | None -> None))
+    (match zip_map farg1 farg2 transform with
+     | Some [] -> Some (subst, [])
+     | Some lst -> zip_unify lst subst m1 m2
+     | None -> None)
   | (Inductive _, Var _) -> Some (subst, [(induct, lxp)])
   | (_, _) -> None
 
@@ -341,21 +343,22 @@ and _unify_inner_case l s =
     | ((key, (_, arglist, lxp)), (key2, (_, arglist2, lxp2)))::tail when key = key2 ->
       (if is_same arglist arglist2 then ( match unify lxp lxp2 s with
            | Some (s', c) -> (match _unify_inner_case tail s' with
-               | Some (s_, c_) -> Some (s_, c@c_)
-               | None -> None)
-           | None -> None)
+               | Some (s_, c_) -> Debug_fun.debug_print "_unify_inner_case -> unification success"; Some (s_, c@c_)
+               | None -> Debug_fun.debug_print "_unify_inner_case -> unification failed"; None)
+           | None -> Debug_fun.debug_print "_unify_inner_case -> unification failed"; None)
        else None)
-    | [] -> Some (s, [])
-    | _ -> None
+    | [] -> Debug_fun.debug_print "_unify_inner_lxp -> unification success"; Some (s, [])
+    | _ -> Debug_fun.debug_print "_unify_inner_case -> unification failed"; None
   in (match l with
-      | [] -> None
-      | _ -> _unify_inner_case l s)
+      | Some [] -> Some (s, [])
+      | None -> None
+      | Some l -> _unify_inner_case l s)
 
 (***** for Inductive *****)
 (** for _unify_induct : unify the formal arg*)
 and _unify_inner_induct lst subst : return_type =
-  let test ((a1, _, l1), (a2, _, l2)) subst : return_type = if a1 = a2
-    then unify l1 l2 subst
+  let test ((a1, _, l1), (a2, _, l2)) subst : return_type =
+    if a1 = a2 then unify l1 l2 subst
     else None
   in
   List.fold_left (fun a e -> (match a with
@@ -367,12 +370,21 @@ and _unify_inner_induct lst subst : return_type =
 
 (** unify the SMap of list in Inductive *)
 and _unify_induct_sub_list l1 l2 subst =
-  let test l1 l2 subst = match l1, l2 with
-    | (k1, v1)::t1, (k2, v2)::t2 when k1 = k2 -> (match _unify_inner_induct (zip v1 v2) subst with
-        | Some (s, c) -> (match (_unify_induct_sub_list t1 t2 s) with
-            | Some (s1, c1) -> Some (s1, c1@c)
-            | None -> Some (s, c))
-        | None -> (_unify_induct_sub_list t1 t2 subst))
+  let test l1 l2 subst =
+    let merge l1 l2 subst (s, c) = match (_unify_induct_sub_list l1 l2 subst) with
+      | Some (s1, c1) -> Some (s1, c1@c)
+      | None -> Some (s, c)
+    in
+    let unify_zip lst t1 t2 = match _unify_inner_induct lst subst with
+      | Some (s, c) -> merge l1 l2 subst (s, c)
+      | None -> (_unify_induct_sub_list t1 t2 subst)
+    in
+    match l1, l2 with
+    | (k1, v1)::t1, (k2, v2)::t2 when k1 = k2 ->
+      (match zip v1 v2 with
+       | Some [] -> Some (subst, [])
+       | Some lst -> unify_zip lst t1 t2
+       | None -> None)
     | _, _ -> None
   in test l1 l2 subst
 
