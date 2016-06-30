@@ -1,21 +1,28 @@
 
 open Fmt_lexp
 
-let _debug = false
+let _debug = true
 
-let indent = ref 0
+let logs = ref []
 
 let do_debug func =
   if _debug then (func ()) else ()
 
-let debug_print str =
-  do_debug (fun () -> print_string str; print_newline (); ())
+let debug_print str1 str2 =
+  logs := ((padding_left str1 20 ' ')^" : ", (str2^"\n"))::(!logs); ()
 
 let clear_indent () =
-  do_debug (fun () -> indent := 0; ())
-
-let unindent () =
-  do_debug (fun () -> indent := (max 0 (!indent - 1)); ())
+  let indent = ref 0
+  in
+  do_debug (fun () ->
+      List.iter (fun (s1, s2) ->
+          print_string s1;
+          print_string (String.make (!indent * 2) '-');
+          print_string s2;
+          indent := !indent + 1;
+        ) (!logs);
+      logs := [];
+      ())
 
 let debug_print_lexp lxp =
   let str = colored_string_of_lxp lxp str_yellow str_magenta
@@ -23,13 +30,12 @@ let debug_print_lexp lxp =
 
 let debug_print_unify fn lhs rhs str =
     let debug_print_unify fn lhs rhs str =
-      print_string (padding_left fn 10 ' ');
-      print_string " : ";
-      print_string (String.make (!indent * 4) '-');
-      debug_print_lexp lhs;
-      print_string " , ";
-      debug_print_lexp rhs;
-      print_string str;
-      indent := !indent + 1;
-      print_newline ();
+      let tmp = ((padding_left fn 20 ' ') ^ " : ",
+                  (colored_string_of_lxp lhs str_yellow str_magenta)
+                  ^ " , "
+                  ^ colored_string_of_lxp rhs str_yellow str_magenta
+                  ^ str ^ "\n")
+      in
+      logs := tmp::(!logs);
     in do_debug (fun () -> debug_print_unify fn lhs rhs str; ())
+
