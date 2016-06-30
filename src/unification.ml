@@ -252,10 +252,13 @@ and _unify_call (call: lexp) (lxp: lexp) (subst: substitution) : return_type =
       | None -> None
       | Some tail -> _unify_inner ((lxp1, lxp2)::(tail)) subst)
   in
-  match (call, lxp) with
-  | (Call (lxp1, lxp_list1), Call (lxp2, lxp_list2)) -> try_zip_fold lxp_list1 lxp_list2 lxp lxp2 subst
+  let tmp = match (call, lxp) with
+  | (Call (lxp_left, lxp_list1), Call (lxp_right, lxp_list2)) -> try_zip_fold lxp_list1 lxp_list2 lxp_left lxp_right subst
   | (Call _, _) -> Some ((subst, [(call, lxp)]))
   | (_, _)      -> None
+  in match tmp with
+  | None -> Debug_fun.debug_print_unify "_unify_call" call lxp " -> unification failed"; tmp
+  | Some _ -> Debug_fun.debug_print_unify "_unify_call" call lxp " -> unification success"; tmp
 
 (** Apply unsusp to the Susp and unify the result with the lexp
 *)
