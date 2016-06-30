@@ -48,7 +48,7 @@ let zip_map (l1: 'a list ) (l2: 'b list ) (f: ('a -> 'b -> 'c)): 'c list option 
     match ll1, ll2 with
     | (h1::t1, h2::t2) -> (f h1 h2)::(zip_ t1 t2 f)
     | ([], []) -> []
-    | _, _ -> []
+    | _, _ -> [] (* Should never happen since we check length before actually calling the recursion but without this case, the compiler complains*)
   in if List.length l1 = List.length l2 then Some (zip_ l1 l2 f) else None
 
 let zip (l1: 'a list) (l2: 'b list): (('a * 'b) list option) = zip_map l1 l2 (fun x z -> (x, z))
@@ -74,26 +74,26 @@ let zip_fold list1 list2 f =
 *)
 let rec unify (l: lexp) (r: lexp) (subst: substitution) : return_type =
   let tmp = match (l, r) with
-  | (_, Metavar _)   -> _unify_metavar  r l subst
-  | (_, Call _)      -> _unify_call     r l subst
-  | (_, Case _)      -> _unify_case     r l subst
-  | (_, Susp _)      -> _unify_susp     r l subst
-  | (_, Let _)       -> _unify_let      r l subst
-  | (Imm _, _)       -> _unify_imm      l r subst
-  | (Cons _, _)      -> _unify_cons     l r subst
-  | (Builtin _, _)   -> _unify_builtin  l r subst
-  | (Let _, _)       -> _unify_let      l r subst
-  | (Var _, _)       -> _unify_var      l r subst
-  | (Arrow _, _)     -> _unify_arrow    l r subst
-  | (Lambda _, _)    -> _unify_lambda   l r subst
-  | (Metavar _, _)   -> _unify_metavar  l r subst
-  | (Call _, _)      -> _unify_call     l r subst
-  | (Susp _, _)      -> _unify_susp     l r subst
-  | (Case _, _)      -> _unify_case     l r subst
-  | (Inductive _, _) -> _unfiy_induct   l r subst
-  | (Sort _, _)      -> _unify_sort     l r subst
-  | (SortLevel _, _) -> _unify_sortlvl  l r subst
-(*  | (_, _)           -> None*)
+    | (_, Metavar _)   -> _unify_metavar  r l subst
+    | (_, Call _)      -> _unify_call     r l subst
+    | (_, Case _)      -> _unify_case     r l subst
+    | (_, Susp _)      -> _unify_susp     r l subst
+    | (_, Let _)       -> _unify_let      r l subst
+    | (Imm _, _)       -> _unify_imm      l r subst
+    | (Cons _, _)      -> _unify_cons     l r subst
+    | (Builtin _, _)   -> _unify_builtin  l r subst
+    | (Let _, _)       -> _unify_let      l r subst
+    | (Var _, _)       -> _unify_var      l r subst
+    | (Arrow _, _)     -> _unify_arrow    l r subst
+    | (Lambda _, _)    -> _unify_lambda   l r subst
+    | (Metavar _, _)   -> _unify_metavar  l r subst
+    | (Call _, _)      -> _unify_call     l r subst
+    | (Susp _, _)      -> _unify_susp     l r subst
+    | (Case _, _)      -> _unify_case     l r subst
+    | (Inductive _, _) -> _unfiy_induct   l r subst
+    | (Sort _, _)      -> _unify_sort     l r subst
+    | (SortLevel _, _) -> _unify_sortlvl  l r subst
+    (*  | (_, _)           -> None*)
   in match tmp with
   | Some _ -> Debug_fun.debug_print_unify "unify" l r " -> unification success"; tmp
   | None -> Debug_fun.debug_print_unify "unify" l r " -> unification failed"; tmp
@@ -124,13 +124,14 @@ and _unify_imm (l: lexp) (r: lexp) (subst: substitution) : return_type =
  * Cons, Cons -> if Cons ~= Cons then OK else ERROR
  * Cons, _    -> ERROR
 *)
+(*FIXME which parameter of Cons is it's name ?*)
+(* symbol = (location * string)*)
+(*TODO in index comparison : shift indexes ?*)
 and _unify_cons (cons: lexp) (lxp: lexp) (subst: substitution) : return_type =
-  (* symbol = (location * string)*)
   match (cons, lxp) with
-  (*FIXME which parameter of Cons is it's name ?*)
   | (Cons ((_, idx),  (_, name)),
      Cons ((_, idx2), (_, name2))) when name = name2 ->
-    if idx = idx2 then Some (subst, []) (*TODO shift indexes ?*)
+    if idx = idx2 then Some (subst, [])
     else None
   | (_, _) -> None
 
@@ -151,27 +152,33 @@ and _unify_builtin (bltin: lexp) (lxp: lexp) (subst: substitution) : return_type
  * Let , lexp -> constraint
 *)
 and _unify_let (let_: lexp) (lxp: lexp) (subst: substitution) : return_type =
-  match (let_, lxp) with
-  | (Let (_, m, lxp_), Let (_, m1, lxp2)) ->
-    let f = (fun (_, lxp, lt) acc -> lxp::lt::acc)
-    in (match zip_fold m m1 f with
-        | Some [] -> Some (subst, []) (* ??? *)
-        | None -> None
-        | Some tail -> _unify_inner ((lxp_, lxp2)::(tail)) subst )
+  let concat = (fun (_, lxp, lt) acc -> lxp::lt::acc)
+  in
+  let try_zip_fold m m1 f lxp_ lxp2 subst = match zip_fold m m1 f with
+    | Some [] -> Some (subst, []) (* ??? *)
+    | None -> None
+    | Some tail -> _unify_inner ((lxp_, lxp2)::(tail)) subst
+  in
+  let tmp = match (let_, lxp) with
+  | (Let (_, m, lxp_), Let (_, m1, lxp2)) -> try_zip_fold m m1 concat lxp_ lxp2 subst
   | (Let _,  _) -> Some (subst, [(let_, lxp)])
   | _, _ -> None
+  in match tmp with
+  | Some _ -> Debug_fun.debug_print_unify "_unify_let" let_ lxp " -> unification success"; tmp
+  | None -> Debug_fun.debug_print_unify "_unify_let" let_ lxp " -> unification failed"; tmp
 
 (** Unify a Var and a lexp, if possible
  * (Var, Var) -> unify if they have the same debruijn index FIXME : shift indexes
  * (Var, Metavar) -> unify_metavar Metavar var subst
  * (Var _, _) -> unfiy lexp Var subst
 *)
+(*FIXME : check for the value of Var -> need context ?*)
 and _unify_var (var: lexp) (r: lexp) (subst: substitution) : return_type =
   match (var, r) with
   | (Var (_, idx1), Var (_, idx2))
     -> if idx1 = idx2 then Some ((subst, []))
     else None
-  | (Var _, Imm _) -> Some (subst, [(var, r)])(*FIXME : check for the value of Var -> need context ?*)
+  | (Var _, Imm _) -> Some (subst, [(var, r)])
   | (Var _, _)     -> unify r var subst (*returns to unify*)
   | (_, _)         -> None
 
@@ -188,12 +195,10 @@ and _unify_arrow (arrow: lexp) (lxp: lexp) (subst: substitution)
   | (Arrow (var_kind1, _, ltype1, _, lexp1), Arrow (var_kind2, _, ltype2, _, lexp2))
     -> if var_kind1 = var_kind2
     then _unify_inner ((ltype1, ltype2)::(lexp1, lexp2)::[]) subst
-    (* _unify_inner_arrow ltype1 lexp1 ltype2 lexp2 subst *)
     else None
   | (Arrow _, Imm _) -> None
-  | (Arrow _, Var _) -> Some (subst, [(arrow, lxp)]) (* FIXME Var can contain type ???*)
+  | (Arrow _, Var _) -> Some (subst, [(arrow, lxp)])
   | (Arrow _, _) -> unify lxp arrow subst
-  (*| (Arrow _, Call _) -> None*) (* Call can return type (?) *)
   | (_, _) -> None
 
 (** Unify a Lambda and a lexp if possible
@@ -209,7 +214,6 @@ and _unify_lambda (lambda: lexp) (lxp: lexp) (subst: substitution) : return_type
   | (Lambda (var_kind1, _, ltype1, lexp1), Lambda (var_kind2, _, ltype2, lexp2))
     -> if var_kind1 = var_kind2
     then _unify_inner ((ltype1, ltype2)::(lexp1, lexp2)::[]) subst
-    (*then _unify_inner_arrow ltype1 lexp1 ltype2 lexp2 subst*)
     else None
   | (Lambda _, Var _)   -> Some ((subst, [(lambda, lxp)]))
   | (Lambda _, Let _)   -> Some ((subst, [(lambda, lxp)]))
@@ -226,13 +230,15 @@ and _unify_lambda (lambda: lexp) (lxp: lexp) (subst: substitution) : return_type
  * metavar   , lexp               -> OK
 *)
 and _unify_metavar (meta: lexp) (lxp: lexp) (subst: substitution) : return_type =
+  let find_or_unify metavar value lxp s =
+    match find_or_none metavar s with
+    | None          -> Some ((associate value lxp s, []))
+    | Some (lxp_)   -> unify lxp_ lxp s
+  in
   match (meta, lxp) with
   | (Metavar (val1, _), Metavar (val2, _)) when val1 = val2 ->
     Some ((subst, []))
-  | (Metavar (v, _), _) -> (
-      match find_or_none meta subst with
-      | None          -> Some ((associate v lxp subst, []))
-      | Some (lxp_)   -> unify lxp_ lxp subst)
+  | (Metavar (v, _), _) -> find_or_unify meta v lxp subst
   | (_, _) -> None
 
 (** Unify a Call (call) and a lexp (lxp)
@@ -240,14 +246,14 @@ and _unify_metavar (meta: lexp) (lxp: lexp) (subst: substitution) : return_type 
  * Call      , lexp               -> CONSTRAINT
 *)
 and _unify_call (call: lexp) (lxp: lexp) (subst: substitution) : return_type =
+  let f = (fun (_, x) acc -> x::acc)
+  in let try_zip_fold lst1 lst2 lxp1 lxp2 subst = (match zip_fold lst1 lst2 f with
+      | Some [] -> Some (subst, [])
+      | None -> None
+      | Some tail -> _unify_inner ((lxp1, lxp2)::(tail)) subst)
+  in
   match (call, lxp) with
-  | (Call (lxp1, lxp_list1), Call (lxp2, lxp_list2)) ->
-    let f = (fun (_, x) acc -> x::acc)
-    in let tail = zip_fold lxp_list1 lxp_list2 f
-    in (match tail with
-        | Some [] -> Some (subst, [])
-        | None -> None
-        | Some tail -> _unify_inner ((lxp1, lxp2)::(tail)) subst)
+  | (Call (lxp1, lxp_list1), Call (lxp2, lxp_list2)) -> try_zip_fold lxp_list1 lxp_list2 lxp lxp2 subst
   | (Call _, _) -> Some ((subst, [(call, lxp)]))
   | (_, _)      -> None
 
@@ -263,17 +269,23 @@ and _unify_susp (susp_: lexp) (lxp: lexp) (subst: substitution) : return_type =
  * Case, _ -> Constraint
 *)
 and _unify_case (case: lexp) (lxp: lexp) (subst: substitution) : return_type =
+  let merge (_, c) r2 = match r2 with
+    | None -> None
+    | Some (s', c') -> Some (s', c@c')
+  in
+  let match_unify_inner lst sm1 sm2 s = match _unify_inner lst s with
+    | None -> None
+    | Some (s, c) -> merge (s, c) (_unify_inner_case (zip (SMap.bindings sm1) (SMap.bindings sm2)) s)
+  in
+  let match_lxp_opt lo1 lo2 tail sm1 sm2 s = match lo1, lo2 with
+    | Some lxp1, Some lxp2 -> match_unify_inner ((lxp1, lxp2)::tail) sm1 sm2 s
+    | _, _ -> None
+  in
   let tmp = match case, lxp with
-  | (Case (_, lxp, lt11, lt12, smap, lxpopt), Case (_, lxp2, lt21, lt22, smap2, lxopt2))
-    -> ( match lxpopt, lxopt2 with
-        | Some l1, Some l2 -> (match _unify_inner ((lxp, lxp2)::(lt11, lt21)::(lt12, lt22)::(l1, l2)::[]) subst with
-            | Some (s, c) -> (match _unify_inner_case (zip (SMap.bindings smap) (SMap.bindings smap2)) s with
-                | Some (s', c') -> Some (s', c@c')
-                | None          -> None)
-            | None -> None)
-        | _, _ -> None)
-  | (Case _, _)     -> Some (subst, [(case, lxp)])
-  | (_, _) -> None
+    | (Case (_, lxp, lt11, lt12, smap, lxpopt), Case (_, lxp2, lt21, lt22, smap2, lxopt2))
+      -> match_lxp_opt lxpopt lxopt2 ((lt11, lt21)::(lt12, lt22)::[]) smap smap2 subst
+    | (Case _, _)     -> Some (subst, [(case, lxp)])
+    | (_, _) -> None
   in match tmp with
   | Some _ -> Debug_fun.debug_print_unify "_unify_case" case lxp " -> unification success"; tmp
   | None -> Debug_fun.debug_print_unify "_unify_case" case lxp " -> unification failed"; tmp
@@ -337,8 +349,8 @@ and _unify_sort (sort_: lexp) (lxp: lexp) (subst: substitution) : return_type =
 and is_same arglist arglist2 =
   match arglist, arglist2 with
   | (akind, _)::t1, (akind2, _)::t2 when akind = akind2 -> is_same t1 t2
-  | [], [] -> Debug_fun.debug_print "is_same -> unification success"; true
-  | _, _ -> Debug_fun.debug_print "is_same -> unification failed"; false
+  | [], [] -> Debug_fun.debug_print "is_same" " unification success"; true
+  | _, _ -> Debug_fun.debug_print "is_same" " unification failed"; false
 
 (** try to unify the SMap part of the case *)
 and _unify_inner_case l s =
@@ -347,12 +359,12 @@ and _unify_inner_case l s =
     | ((key, (_, arglist, lxp)), (key2, (_, arglist2, lxp2)))::tail when key = key2 ->
       (if is_same arglist arglist2 then ( match unify lxp lxp2 s with
            | Some (s', c) -> (match _unify_inner_case tail s' with
-               | Some (s_, c_) -> Debug_fun.debug_print "_unify_inner_case -> unification success"; Some (s_, c@c_)
-               | None -> Debug_fun.debug_print "_unify_inner_case -> unification failed"; None)
-           | None -> Debug_fun.debug_print "_unify_inner_case -> unification failed"; None)
+               | Some (s_, c_) -> Debug_fun.debug_print "_unify_inner_case" "unification success"; Some (s_, c@c_)
+               | None -> Debug_fun.debug_print "_unify_inner_case" "unification failed"; None)
+           | None -> Debug_fun.debug_print "_unify_inner_case" "unification failed"; None)
        else None)
-    | [] -> Debug_fun.debug_print "_unify_inner_lxp -> unification success"; Some (s, [])
-    | _ -> Debug_fun.debug_print "_unify_inner_case -> unification failed"; None
+    | [] -> Debug_fun.debug_print "_unify_inner_lxp" "unification success"; Some (s, [])
+    | _ -> Debug_fun.debug_print "_unify_inner_case" "unification failed"; None
   in (match l with
       | Some [] -> Some (s, [])
       | None -> None
@@ -404,12 +416,12 @@ and _unify_inner (lxp_l: (lexp * lexp) list) (subst: substitution) : return_type
       (lxp_list: (lexp * lexp) list) : return_type =
     match _unify_inner lxp_list s with
     (*| None -> Some (s, c)*)
-    | None -> Debug_fun.debug_print "_unify_inner.merge -> unification failed"; None
-    | Some (s_,c_) -> Debug_fun.debug_print "_unify_inner.merge -> unification success"; Some (s_, c@c_)
+    | None -> Debug_fun.debug_print "_unify_inner.merge" "unification failed"; None
+    | Some (s_,c_) -> Debug_fun.debug_print "_unify_inner.merge" "unification success"; Some (s_, c@c_)
   in
   match lxp_l with
   | (lxp1, lxp2)::tail -> ( match unify lxp1 lxp2 subst with
       | Some (s, c) -> merge (s, c) tail
-      | None -> Debug_fun.debug_print "_unify_inner -> unification failed"; None)
-  | [] -> Debug_fun.debug_print "_unify_inner -> unification failed : list empty"; Some (subst, [])
+      | None -> Debug_fun.debug_print "_unify_inner" "unification failed"; None)
+  | [] -> Debug_fun.debug_print "_unify_inner" "unification success : list empty"; Some (subst, [])
 
