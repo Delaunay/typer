@@ -50,11 +50,11 @@ let fmt (lst: (lexp * lexp * result * result) list): string list =
       lst
   in let l, c1, c2, r = max_dim str_lst
   in List.map (fun (l1, l2, r1, r2) -> (padding_right l1 l ' ')
-                                       ^ " , "
+                                       ^ ","
                                        ^ (padding_right l2 c1 ' ')
-                                       ^ " -> got : "
+                                       ^ "-> got: "
                                        ^ (padding_right r2 r ' ')
-                                       ^ " expected : "
+                                       ^ "expected: "
                                        ^ (padding_right r1 c2 ' ')
               ) str_lst
 
@@ -111,58 +111,42 @@ let generate_testable (_: lexp list) : ((lexp * lexp * result) list) =
               Var((Util.dummy_location, "z"), 4),
               Imm (Integer (Util.dummy_location, 3))), Unification )
 
-  ::( Cons (((Util.dummy_location, "Cons"), 3), (Util.dummy_location, "Cons")) ,
-      Imm (Integer (Util.dummy_location, 3)) , Nothing )
+  ::(input_let     , input_induct  , Constraint)
+  ::(input_let     , input_int_4   , Constraint)
+  ::(input_let     , input_case    , Constraint)
+  ::(input_let     , input_let     , Equivalent)
+  ::(input_let2    , input_let     , Equivalent)
+  ::(input_let2    , input_let2    , Equivalent)
 
-  ::( Cons (((Util.dummy_location, "Cons"), 3), (Util.dummy_location, "Cons")) ,
-      Imm (Integer (Util.dummy_location, 3)), Nothing)
+  ::(input_lambda  , input_int_4   , Nothing)
+  ::(input_lambda  , input_induct  , Nothing)
+  ::(input_lambda  , input_case    , Constraint)
+  ::(input_lambda  , input_case2   , Constraint)
+  ::(input_lambda  , input_let     , Constraint)
+  ::(input_lambda  , input_induct  , Nothing)
+  ::(input_lambda  , input_lambda  , Equivalent)
 
-  ::( Cons (((Util.dummy_location, "Cons"), 3), (Util.dummy_location, "Cons")) ,
-      Var ((Util.dummy_location, "y"), 4), Nothing )
+  ::(input_lambda2 , input_int_4   , Nothing)
+  ::(input_lambda2 , input_induct  , Nothing)
+  ::(input_lambda2 , input_case    , Constraint)
+  ::(input_lambda2 , input_case2   , Constraint)
+  ::(input_lambda2 , input_let     , Constraint)
+  ::(input_lambda2 , input_induct  , Nothing)
+  ::(input_lambda2 , input_lambda  , Equivalent)
+  ::(input_lambda2 , input_lambda2 , Equivalent)
+  ::(input_lambda2 , input_lambda3 , Constraint)
+  ::(input_lambda3 , input_lambda3 , Equivalent)
 
-  ::( Cons (((Util.dummy_location, "Cons"), 3), (Util.dummy_location, "Cons")) ,
-      Metavar (0, (Util.dummy_location, "M")), Unification )
-
-  ::( Cons (((Util.dummy_location, "Cons"), 3), (Util.dummy_location, "Cons")) ,
-      Lambda ((Aexplicit),
-              (Util.dummy_location, "L2"),
-              Var((Util.dummy_location, "z"), 4),
-              Imm (Integer (Util.dummy_location, 3))), Nothing )
-
-  ::(input_induct , input_induct , Equivalent)
-
-  ::(input_int_4  , input_int_4  , Equivalent)
-
-  ::(input_int_3  , input_int_4  , Nothing)
-
-  ::(input_case   , input_int_4  , Constraint)
-  ::(input_case   , input_induct , Constraint)
-  ::(input_case   , input_case   , Equivalent)
-  ::(input_case   , input_case2  , Nothing)
-
-  ::(input_let    , input_induct , Constraint)
-  ::(input_let    , input_int_4  , Constraint)
-  ::(input_let    , input_case   , Constraint)
-  ::(input_let    , input_let    , Equivalent)
-
-  ::(Let (Util.dummy_location,
-          [], (*TODO : better tests*)
-          Var ((Util.dummy_location, "x_let"), 9)) ,
-     Lambda ((Aexplicit),
-             (Util.dummy_location, "L2"),
-             Var((Util.dummy_location, "z"), 4),
-             Imm (Integer (Util.dummy_location, 3))), Constraint )
   ::[]
 
 let test_input (lxp1: lexp) (lxp2: lexp) (subst: substitution): unif_res =
-  (*do_debug (fun () -> print_string (fmt_unification_of lxp1 lxp2));*)
-  clear_indent ();
   let res = unify lxp1 lxp2 subst in
-  match res with
+  let tmp = match res with
   | Some (s, []) when s = empty_subst -> (Equivalent, res, lxp1, lxp2)
   | Some (_, [])                      -> (Unification, res, lxp1, lxp2)
   | Some _                            -> (Constraint, res, lxp1, lxp2)
   | None                              -> (Nothing, res, lxp1, lxp2)
+  in clear_indent (); tmp
 
 let check (lxp1: lexp ) (lxp2: lexp ) (res: result) (subst: substitution ): bool =
   let r, _, _, _ = test_input lxp1 lxp2 subst
@@ -181,10 +165,12 @@ let unifications = List.map
        in (l1, l2, res, r))
     (generate_testable [])
 
+let idx = ref 0
 let _ = List.map
     (fun (str, (l1, l2, expected, res)) ->
+       idx := !idx + 1;
        add_test "UNIFICATION"
-         (str)
+         ((if !idx < 10 then "0" else "") ^ (string_of_int !idx) ^ " " ^ str )
          (fun () -> if expected = res then success () else failure ()))
     (List.combine (fmt unifications) unifications )
 

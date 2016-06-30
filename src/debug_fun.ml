@@ -1,7 +1,8 @@
 
 open Fmt_lexp
 
-let _debug = true
+(*let _debug = true*)
+let _debug = false
 
 let logs = ref []
 
@@ -22,6 +23,7 @@ let clear_indent () =
           indent := !indent + 1;
         ) (!logs);
       logs := [];
+      print_newline ();
       ())
 
 let debug_print_lexp lxp =

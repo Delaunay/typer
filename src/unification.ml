@@ -419,12 +419,19 @@ and _unify_inner (lxp_l: (lexp * lexp) list) (subst: substitution) : return_type
       (lxp_list: (lexp * lexp) list) : return_type =
     match _unify_inner lxp_list s with
     (*| None -> Some (s, c)*)
-    | None -> Debug_fun.debug_print "_unify_inner.merge" "unification failed"; None
-    | Some (s_,c_) -> Debug_fun.debug_print "_unify_inner.merge" "unification success"; Some (s_, c@c_)
+    | None -> None
+    | Some (s_,c_) -> Some (s_, c@c_)
   in
-  match lxp_l with
+  let tmp = match lxp_l with
   | (lxp1, lxp2)::tail -> ( match unify lxp1 lxp2 subst with
       | Some (s, c) -> merge (s, c) tail
-      | None -> Debug_fun.debug_print "_unify_inner" "unification failed"; None)
-  | [] -> Debug_fun.debug_print "_unify_inner" "unification success : list empty"; Some (subst, [])
+      | None -> None)
+  | [] -> Some (subst, [])
+  in match tmp with
+  | None -> ( match lxp_l with
+      | [] -> Debug_fun.debug_print "_unify_inner" " -> list empty"; tmp
+      | (l1, l2)::_ -> Debug_fun.debug_print_unify "_unify_inner" l1 l2 " -> unification failed"; tmp )
+  | Some _ -> ( match lxp_l with
+      | [] -> Debug_fun.debug_print "_unify_inner" " -> list empty"; tmp
+      | (l1, l2)::_ -> Debug_fun.debug_print_unify "_unify_inner" l1 l2 " -> unification success"; tmp )
 

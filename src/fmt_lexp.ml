@@ -21,7 +21,7 @@ let rec string_of_lxp lxp =
   | Let (_)                         -> "Let(..)"
   | Var ((_, name), idx)            -> "Var(" ^ name ^ ", #" ^(string_of_int idx) ^ ")"
   | Arrow (_, _, a, _, b)           -> "Arrow(" ^ (string_of_lxp a) ^ " => " ^ (string_of_lxp b) ^ ")"
-  | Lambda (_,(_, name), dcl, body) -> "Lambda(" ^ name ^ " : " ^ (string_of_lxp dcl) ^ " => (" ^ (string_of_lxp body) ^ ") )"
+  | Lambda (_,(_, name), dcl, body) -> "Lambda(" ^ name ^ ": " ^ (string_of_lxp dcl) ^ " => (" ^ (string_of_lxp body) ^ "))"
   | Metavar (value, (_, name))      -> "Metavar(" ^ (string_of_int value) ^ ", " ^ name ^ ")"
   | Call (_)                        -> "Call(...)"
   | Inductive _                     -> ("Inductive") ^ "(...)"
