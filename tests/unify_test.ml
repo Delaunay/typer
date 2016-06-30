@@ -70,6 +70,10 @@ let str_case2 = "i = case 0
 | 0 => 12
 | _ => 12"
 let str_let = "i = let a = 5 in a + 1"
+let str_let2 = "j = let b = 5 in b"
+let str_lambda = "sqr = lambda (x : Int) -> x * x;"
+let str_lambda2 = "sqr = lambda (x : Int) -> x * x;"
+let str_lambda3 = "sqr = lambda (x : Int) -> lambda (y : Int) -> x * y;"
 
 let generate_ltype_from_str str =
   List.hd ((fun (lst, _) ->
@@ -85,22 +89,25 @@ let generate_lexp_from_str str =
         (List.flatten lst))
        (lexp_decl_str str default_lctx))
 
-let input_induct = generate_lexp_from_str str_induct
-let input_int_4  = generate_lexp_from_str str_int_4
-let input_int_3  = generate_lexp_from_str str_int_3
-let input_case   = generate_lexp_from_str str_case
-let input_case2  = generate_lexp_from_str str_case2
-let input_let    = generate_lexp_from_str str_let
+let input_induct  = generate_lexp_from_str str_induct
+let input_int_4   = generate_lexp_from_str str_int_4
+let input_int_3   = generate_lexp_from_str str_int_3
+let input_case    = generate_lexp_from_str str_case
+let input_case2   = generate_lexp_from_str str_case2
+let input_let     = generate_lexp_from_str str_let
+let input_let2     = generate_lexp_from_str str_let
+let input_lambda  = generate_lexp_from_str str_lambda
+let input_lambda2 = generate_lexp_from_str str_lambda2
+let input_lambda3 = generate_lexp_from_str str_lambda3
 
 let generate_testable (_: lexp list) : ((lexp * lexp * result) list) =
-  ( Builtin ((Util.dummy_location, "Int=3"), Imm (Integer (Util.dummy_location, 3))),
-    Imm (Integer (Util.dummy_location, 3)), Equivalent)
-
-  ::( Var ((Util.dummy_location, "x"), 3),
-      Var ((Util.dummy_location, "y"), 4), Nothing )
-
-  ::( Var ((Util.dummy_location, "x"), 3),
-      Metavar (0, (Util.dummy_location, "M")), Unification )
+  (input_induct  , input_induct  , Equivalent)
+  ::(input_int_4   , input_int_4   , Equivalent)
+  ::(input_int_3   , input_int_4   , Nothing)
+  ::(input_case    , input_int_4   , Constraint)
+  ::(input_case    , input_induct  , Constraint)
+  ::(input_case    , input_case    , Equivalent)
+  ::(input_case    , input_case2   , Nothing)
 
   ::( Lambda ((Aexplicit),
               (Util.dummy_location, "L1"),
