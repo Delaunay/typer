@@ -2,8 +2,6 @@
 open Lexp
 open Sexp
 
-open Debug_fun
-
 module VMap = Map.Make (struct type t = int let compare = compare end)
 
 type substitution = lexp VMap.t
@@ -11,15 +9,15 @@ type constraints  = (lexp * lexp) list
 
 (* IMPROVEMENT For error handling : can carry location and name of type error *)
 (*type 'a result =*)
-  (*| Some of 'a*)
-  (*| Error of Util.location * string (*location * type name*)*)
-  (*| Nil*)
+(*| Some of 'a*)
+(*| Error of Util.location * string (*location * type name*)*)
+(*| Nil*)
 
 (*let result_to_option (e: 'a result) : ('a option) =*)
-  (*match e with*)
-  (*| Some elt -> Some elt*)
-  (*| Error _  -> None*)
-  (*| Nil      -> None*)
+(*match e with*)
+(*| Some elt -> Some elt*)
+(*| Error _  -> None*)
+(*| Nil      -> None*)
 
 let global_last_metavar = ref 0
 let create_metavar = global_last_metavar := !global_last_metavar + 1; !global_last_metavar
