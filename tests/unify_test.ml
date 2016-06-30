@@ -68,7 +68,6 @@ let str_case   = "i = case 0
 | _ => 5"
 let str_case2 = "i = case 0
 | 0 => 12
-| 1 => 12
 | _ => 12"
 let str_let = "i = let a = 5 in a + 1"
 
