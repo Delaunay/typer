@@ -357,13 +357,16 @@ and is_same arglist arglist2 =
 
 (** try to unify the SMap part of the case *)
 and _unify_inner_case l s =
+  let merge (_, c) res = match res with
+    | Some (s', c') -> Some (s', c@c')
+    | None -> None
+  in
   let rec _unify_inner_case list_ s =
     match list_ with
     | ((key, (_, arglist, lxp)), (key2, (_, arglist2, lxp2)))::tail when key = key2 ->
-      (if is_same arglist arglist2 then ( match unify lxp lxp2 s with
-           | Some (s', c) -> (match _unify_inner_case tail s' with
-               | Some (s_, c_) -> Debug_fun.debug_print "_unify_inner_case" "unification success"; Some (s_, c@c_)
-               | None -> Debug_fun.debug_print "_unify_inner_case" "unification failed"; None)
+      (if is_same arglist arglist2
+       then ( match unify lxp lxp2 s with
+           | Some (s', c) -> merge (s', c) (_unify_inner_case tail s')
            | None -> Debug_fun.debug_print "_unify_inner_case" "unification failed"; None)
        else None)
     | [] -> Debug_fun.debug_print "_unify_inner_lxp" "unification success"; Some (s, [])

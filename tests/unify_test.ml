@@ -95,28 +95,32 @@ let input_int_3   = generate_lexp_from_str str_int_3
 let input_case    = generate_lexp_from_str str_case
 let input_case2   = generate_lexp_from_str str_case2
 let input_let     = generate_lexp_from_str str_let
-let input_let2     = generate_lexp_from_str str_let
+let input_let2    = generate_lexp_from_str str_let
 let input_lambda  = generate_lexp_from_str str_lambda
 let input_lambda2 = generate_lexp_from_str str_lambda2
 let input_lambda3 = generate_lexp_from_str str_lambda3
+let input_arrow   = generate_ltype_from_str str_lambda
+let input_arrow2  = generate_ltype_from_str str_lambda2
+let input_arrow3  = generate_ltype_from_str str_lambda3
 
 let generate_testable (_: lexp list) : ((lexp * lexp * result) list) =
-  (input_induct  , input_induct  , Equivalent)
-  ::(input_int_4   , input_int_4   , Equivalent)
-  ::(input_int_3   , input_int_4   , Nothing)
-  ::(input_case    , input_int_4   , Constraint)
-  ::(input_case    , input_induct  , Constraint)
-  ::(input_case    , input_case    , Equivalent)
-  ::(input_case    , input_case2   , Nothing)
 
-  ::( Lambda ((Aexplicit),
+  ( Lambda ((Aexplicit),
               (Util.dummy_location, "L1"),
               Var((Util.dummy_location, "z"), 3),
               Imm (Integer (Util.dummy_location, 3))),
       Lambda ((Aexplicit),
               (Util.dummy_location, "L2"),
               Var((Util.dummy_location, "z"), 4),
-              Imm (Integer (Util.dummy_location, 3))), Unification )
+              Imm (Integer (Util.dummy_location, 3))), Unification ) (* Should unify with index shift *)
+
+  ::(input_induct  , input_induct  , Equivalent)
+  ::(input_int_4   , input_int_4   , Equivalent)
+  ::(input_int_3   , input_int_4   , Nothing)
+  ::(input_case    , input_int_4   , Constraint)
+  ::(input_case    , input_induct  , Constraint)
+  ::(input_case    , input_case    , Equivalent)
+  ::(input_case    , input_case2   , Nothing)
 
   ::(input_let     , input_induct  , Constraint)
   ::(input_let     , input_int_4   , Constraint)
@@ -143,6 +147,19 @@ let generate_testable (_: lexp list) : ((lexp * lexp * result) list) =
   ::(input_lambda2 , input_lambda2 , Equivalent)
   ::(input_lambda2 , input_lambda3 , Constraint)
   ::(input_lambda3 , input_lambda3 , Equivalent)
+
+  ::(input_arrow2  , input_int_4   , Nothing)
+  ::(input_arrow2  , input_induct  , Nothing)
+  ::(input_arrow2  , input_case    , Constraint)
+  ::(input_arrow2  , input_case2   , Constraint)
+  ::(input_arrow2  , input_let     , Constraint)
+  ::(input_arrow2  , input_induct  , Nothing)
+  ::(input_arrow2  , input_lambda  , Nothing)
+  ::(input_arrow2  , input_lambda2 , Nothing)
+  ::(input_arrow2  , input_arrow3  , Constraint) (* It's a constraint because we don't know yet the type *)
+  ::(input_arrow3  , input_arrow   , Constraint) (* of the var inside the arrow *)
+  ::(input_arrow2  , input_arrow   , Equivalent)
+  ::(input_arrow3  , input_arrow3  , Equivalent)
 
   ::[]
 
