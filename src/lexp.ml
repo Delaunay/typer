@@ -74,7 +74,7 @@ type ltype = lexp
              * ltype (* The type of the return value of all branches *)
              * (U.location * (arg_kind * vdef option) list * lexp) SMap.t
              * lexp option               (* Default.  *)
-    | Metavar of int * vdef (*idx * (name * location)*)
+    | Metavar of int * (lexp S.subst) * vdef (*idx * S.subst * (name * location)*)
  (*   (\* For logical metavars, there's no substitution.  *\)
   *   | Metavar of (U.location * string) * metakind * metavar ref
   * and metavar =

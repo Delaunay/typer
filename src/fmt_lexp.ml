@@ -22,7 +22,7 @@ let rec string_of_lxp lxp =
   | Var ((_, name), idx)            -> "Var(" ^ name ^ ", #" ^(string_of_int idx) ^ ")"
   | Arrow (_, _, a, _, b)           -> "Arrow(" ^ (string_of_lxp a) ^ " => " ^ (string_of_lxp b) ^ ")"
   | Lambda (_,(_, name), dcl, body) -> "Lambda(" ^ name ^ ": " ^ (string_of_lxp dcl) ^ " => (" ^ (string_of_lxp body) ^ "))"
-  | Metavar (value, (_, name))      -> "Metavar(" ^ (string_of_int value) ^ ", " ^ name ^ ")"
+  | Metavar (value, _, (_, name))      -> "Metavar(" ^ (string_of_int value) ^ ", " ^ name ^ ")"
   | Call (_)                        -> "Call(...)"
   | Inductive _                     -> ("Inductive") ^ "(...)"
   | Sort _                          -> ("Sort") ^ "(...)"
@@ -43,7 +43,7 @@ let colored_string_of_lxp lxp lcol vcol =
   | Arrow (_, _, a, _, b)           -> (lcol "Arrow(") ^ (vcol (string_of_lxp a)) ^ " => " ^ (vcol (string_of_lxp b)) ^ ")"
   | Lambda (_,(_, name), dcl, body) -> (lcol "Lambda") ^ "(" ^ (vcol name) ^ " : " ^ (vcol (string_of_lxp dcl))
                                        ^ " => (" ^ (vcol (string_of_lxp body)) ^ "))"
-  | Metavar (value, (_, name))      -> (lcol "Metavar" ) ^ "(" ^ (vcol (string_of_int value)) ^ ", " ^ (vcol name) ^ ")"
+  | Metavar (value, _, (_, name))      -> (lcol "Metavar" ) ^ "(" ^ (vcol (string_of_int value)) ^ ", " ^ (vcol name) ^ ")"
   | Call (_)                        -> (lcol "Call(...)" )
   | Case _                          -> (lcol "Case") ^ "(...)"
   | Inductive _                     -> (lcol "Inductive") ^ "(...)"

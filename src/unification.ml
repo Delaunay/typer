@@ -35,7 +35,7 @@ let associate (meta: int) (lxp: lexp) (subst: substitution)
 *)
 let find_or_none (value: lexp) (map: substitution) : lexp option =
   match value with
-  | Metavar (idx, _) -> (if VMap.mem idx map
+  | Metavar (idx, _, _) -> (if VMap.mem idx map
                          then Some (VMap.find idx map)
                          else None)
   | _ -> None
@@ -230,15 +230,20 @@ and _unify_lambda (lambda: lexp) (lxp: lexp) (subst: substitution) : return_type
  * metavar   , lexp               -> OK
 *)
 and _unify_metavar (meta: lexp) (lxp: lexp) (subst: substitution) : return_type =
+  let inverse subst = S.Identity;
+  in
   let find_or_unify metavar value lxp s =
     match find_or_none metavar s with
-    | None          -> Some ((associate value lxp s, []))
     | Some (lxp_)   -> unify lxp_ lxp s
+    (*| None          -> Some ((associate value lxp s, [])) (* Find inverse of Subst *)*)
+    | None          -> ( match metavar with
+        | Metavar (_, subst_, _) -> Some (associate value (unsusp lxp (inverse subst_)) s, [])
+        | _ -> None)
   in
   match (meta, lxp) with
-  | (Metavar (val1, _), Metavar (val2, _)) when val1 = val2 ->
+  | (Metavar (val1, s1, _), Metavar (val2, s2, _)) when val1 = val2 ->
     Some ((subst, []))
-  | (Metavar (v, _), _) -> find_or_unify meta v lxp subst
+  | (Metavar (v, s1, _), _) -> find_or_unify meta v lxp subst
   | (_, _) -> None
 
 (** Unify a Call (call) and a lexp (lxp)
@@ -326,7 +331,7 @@ and _unify_sortlvl (sortlvl: lexp) (lxp: lexp) (subst: substitution) : return_ty
   match sortlvl, lxp with
   | (SortLevel s, SortLevel s2) -> (match s, s2 with
       | SLn i, SLn j when i = j -> Some (subst, [])
-      | SLsucc l1, SLsucc l2 -> unify l1 l2 subst (* Is SLsucc some kind of linked list ? *)
+      | SLsucc l1, SLsucc l2 -> unify l1 l2 subst
       | _, _ -> None)
   | _, _ -> None
 
