@@ -112,7 +112,7 @@ let generate_testable (_: lexp list) : ((lexp * lexp * result) list) =
       Lambda ((Aexplicit),
               (Util.dummy_location, "L2"),
               Var((Util.dummy_location, "z"), 4),
-              Imm (Integer (Util.dummy_location, 3))), Unification ) (* Should unify with index shift *)
+              Imm (Integer (Util.dummy_location, 3))), Nothing )
 
   ::(input_induct  , input_induct  , Equivalent)
   ::(input_int_4   , input_int_4   , Equivalent)
