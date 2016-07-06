@@ -263,8 +263,8 @@ let rec lexp_location e =
   | Cons (_,(l,_)) -> l
   | Case (l,_,_,_,_,_) -> l
   | Susp (e, _) -> lexp_location e
-  (* | Susp (_, e) -> lexp_location e
-   * | Metavar ((l,_),_,_) -> l *)
+  (* | Susp (_, e) -> lexp_location e *)
+  | Metavar (_,_,(l,_)) -> l
 
 
 (********* Normalizing a term *********)
