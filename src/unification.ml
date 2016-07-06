@@ -230,14 +230,16 @@ and _unify_lambda (lambda: lexp) (lxp: lexp) (subst: substitution) : return_type
  * metavar   , lexp               -> OK
 *)
 and _unify_metavar (meta: lexp) (lxp: lexp) (subst: substitution) : return_type =
-  let inverse subst = S.Identity;
+  (** s:S.subst -> l:lexp -> s':S.subst where l[s][s'] = l *)
+  let rec inverse subst = Some S.Identity
   in
   let find_or_unify metavar value lxp s =
     match find_or_none metavar s with
     | Some (lxp_)   -> unify lxp_ lxp s
-    (*| None          -> Some ((associate value lxp s, [])) (* Find inverse of Subst *)*)
-    | None          -> ( match metavar with
-        | Metavar (_, subst_, _) -> Some (associate value (unsusp lxp (inverse subst_)) s, [])
+    | None          -> (match metavar with
+        | Metavar (_, subst_, _) -> (match inverse subst_ with
+            | Some s' -> Some (associate value (unsusp lxp s') s, [])
+            | None -> None)
         | _ -> None)
   in
   match (meta, lxp) with

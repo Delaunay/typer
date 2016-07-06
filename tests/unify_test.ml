@@ -160,6 +160,7 @@ let generate_testable (_: lexp list) : ((lexp * lexp * result) list) =
   ::(input_arrow3  , input_arrow   , Constraint) (* of the var inside the arrow *)
   ::(input_arrow2  , input_arrow   , Equivalent)
   ::(input_arrow3  , input_arrow3  , Equivalent)
+  ::(Metavar (0, S.Identity, (Util.dummy_location, "M")), Var ((Util.dummy_location, "x"), 3), Unification)
 
   ::[]
 
