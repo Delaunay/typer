@@ -25,11 +25,22 @@ let rec string_of_lxp lxp =
   | Metavar (value, _, (_, name))      -> "Metavar(" ^ (string_of_int value) ^ ", " ^ name ^ ")"
   | Call (_)                        -> "Call(...)"
   | Inductive _                     -> ("Inductive") ^ "(...)"
-  | Sort _                          -> ("Sort") ^ "(...)"
-  | SortLevel _                     -> ("SortLevel") ^ "(...)"
+  | Sort (_, s)                     -> ("Sort") ^ "(" ^ string_of_sort s ^ ")"
+  | SortLevel l                     -> ("SortLevel") ^ "(" ^ string_of_sort_level l ^ ")"
   | Case _                          -> ("Case") ^ "(...)"
   | Susp _                          -> "Susp(...)"
   | _                               -> "Unidentified Lexp"
+
+and string_of_sort_level lvl =
+  match lvl with
+  | SLn i    -> "SLn(" ^ string_of_int i ^ ")"
+  | SLsucc l -> "SLsucc(" ^ string_of_lxp l^ ")"
+
+and string_of_sort sort =
+  match sort with
+    | Stype lxp -> "Stype(" ^ string_of_lxp lxp ^ ")"
+    | StypeOmega -> "StypeOmega"
+    | StypeLevel -> "StypeLevel"
 
 let colored_string_of_lxp lxp lcol vcol =
   match lxp with
