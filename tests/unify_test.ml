@@ -50,7 +50,7 @@ let fmt (lst: (lexp * lexp * result * result) list): string list =
       lst
   in let l, c1, c2, r = max_dim str_lst
   in List.map (fun (l1, l2, r1, r2) -> (padding_right l1 l ' ')
-                                       ^ ","
+                                       ^ ", "
                                        ^ (padding_right l2 c1 ' ')
                                        ^ "-> got: "
                                        ^ (padding_right r2 r ' ')
@@ -74,6 +74,8 @@ let str_let2 = "j = let b = 5 in b"
 let str_lambda = "sqr = lambda (x : Int) -> x * x;"
 let str_lambda2 = "sqr = lambda (x : Int) -> x * x;"
 let str_lambda3 = "sqr = lambda (x : Int) -> lambda (y : Int) -> x * y;"
+let str_type = "i = let j = decltype(Type) in decltype(j);"
+let str_type2 = "j = let i = Int -> Int in decltype(i);"
 
 let generate_ltype_from_str str =
   List.hd ((fun (lst, _) ->
@@ -102,6 +104,8 @@ let input_lambda3 = generate_lexp_from_str str_lambda3
 let input_arrow   = generate_ltype_from_str str_lambda
 let input_arrow2  = generate_ltype_from_str str_lambda2
 let input_arrow3  = generate_ltype_from_str str_lambda3
+let input_type    = generate_ltype_from_str str_type
+let input_type_t  = generate_ltype_from_str str_type2
 
 let generate_testable (_: lexp list) : ((lexp * lexp * result) list) =
 
@@ -160,6 +164,9 @@ let generate_testable (_: lexp list) : ((lexp * lexp * result) list) =
   ::(input_arrow3  , input_arrow   , Constraint) (* of the var inside the arrow *)
   ::(input_arrow2  , input_arrow   , Equivalent)
   ::(input_arrow3  , input_arrow3  , Equivalent)
+
+  ::(input_type    , input_type_t  , Equivalent)
+
   ::(Metavar (0, S.Identity, (Util.dummy_location, "M")), Var ((Util.dummy_location, "x"), 3), Unification)
 
   ::[]
