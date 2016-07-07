@@ -247,7 +247,7 @@ and _unify_metavar (meta: lexp) (lxp: lexp) (subst: substitution) : return_type 
     | Some (lxp_)   -> unify lxp_ lxp s
     | None          -> (match metavar with
         | Metavar (_, subst_, _) -> (match inverse subst_ with
-            | Some s' -> Some (associate value (Susp (lxp, s')) s, [])
+            | Some s' -> Some (associate value (mkSusp lxp s') s, [])
             | None -> None)
         | _ -> None)
   in
