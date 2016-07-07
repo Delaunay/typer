@@ -322,7 +322,7 @@ let rec unsusp e s =            (* Push a suspension one level down.  *)
             match default with
             | None -> default
             | Some e -> Some (mkSusp e s))
-  | Metavar (idx, s', vdef_) -> Metavar(idx, s, vdef_)
+  | Metavar (idx, s', vdef_) -> Metavar(idx, (S.compose (mkSusp) s s'), vdef_)
 
 let unsusp_all e =
   match e with
