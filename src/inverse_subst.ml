@@ -115,16 +115,23 @@ let rec genCons s i =
 (* With the exemple of the article :
 * should return (1,1)::(2, X)::(3,2)::(4,3)::(5, Z)::[]
 *)
-let rec fill l size acc=
-  match l with
+let fill l size acc =
+  let rec fill_before l =
+    match l with
+    | [] -> []
+    | (idx, val_)::tail -> (if idx > 0 then (genDummyVar 0 idx)@l
+                             else l)
+  and fill_after l size acc =
+    match l with
   | (idx1, val1)::(idx2, val2)::tail ->
     if (idx2 - idx1) > 1
-    then fill tail size (acc@[(idx1, val1)]@(genDummyVar (idx1 + 1) idx2)@[(idx2, val2)])
-    else fill tail size (acc@(idx1, val1)::(idx2, val2)::[])
+    then fill_after tail size (acc@[(idx1, val1)]@(genDummyVar (idx1 + 1) idx2)@[(idx2, val2)])
+    else fill_after tail size (acc@(idx1, val1)::(idx2, val2)::[])
   | (idx1, val1)::[] -> if (idx1 + 1) < size
     then acc@((idx1, val1)::(genDummyVar (idx1 + 1) size))
     else acc@[(idx1, val1)]
   | [] -> acc
+  in fill_after (fill_before l) size acc
 
 (** Take a "flattened" substitution and returns the inverse of the Cons
 *)
