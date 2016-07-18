@@ -77,3 +77,12 @@ let center (str: string ) (dim: int ) (char_: char) : string =
   let diff = (dim - String.length str) + 5
   in let lpad, rpad = ((diff / 2 ), ((diff / 2) + (diff mod 2)))
   in (String.make lpad char_) ^ str ^ (String.make lpad char_)
+
+
+let rec string_of_subst s =
+  match s with
+  | S.Cons (Var(_, idx), s2) -> "a" ^ string_of_int idx ^ " · (" ^ string_of_subst s2 ^ ")"
+  | S.Cons (l, s2)           -> string_of_lxp l ^ " · (" ^ string_of_subst s2 ^ ")"
+  | S.Shift (s2, shift)      -> "(" ^ string_of_subst s2 ^ ") ↑^" ^ string_of_int shift
+  | S.Identity               -> "Id"
+

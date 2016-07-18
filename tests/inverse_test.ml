@@ -24,10 +24,10 @@ let mkShift2 shift subst =
   S.Shift (subst, shift)
 
 let input =
-  (S.Cons (mkVar 3,
+  (S.Cons (mkVar 0,
            mkShift2 3 (S.Cons (mkVar 2,
-                               (mkShift2 2 (S.Cons (mkVar 1,
-                                                    mkShift2 1 S.Identity)
+                               (mkShift2 2 (S.Cons (mkVar 3,
+                                                    mkShift2 0 S.Identity)
                                            )
                                )
                               )
@@ -37,21 +37,30 @@ let input =
   (S.Cons (mkVar 0, S.Shift(S.Identity, 3)))::
   []
 
-let rec string_of_subst s =
-  match s with
-  | S.Cons (Var(_, idx), s2) -> "a" ^ string_of_int idx ^ " · " ^ string_of_subst s2
-  | S.Cons (l, s2)           -> string_of_lxp l ^ " · " ^ string_of_subst s2
-  | S.Shift (s2, shift)      -> string_of_subst s2 ^ " · ↑^" ^ string_of_int shift
-  | S.Identity               -> "Id"
-
 let lxp = mkVar 3
 
-let _ = List.map (fun s ->
+(* let _ = List.iter (fun i -> *)
+    (* match (flatten i) with *)
+    (* | Some (i') -> *)
+      (* print_string (str_red (string_of_subst i)); *)
+      (* print_string " -- flatten --> "; *)
+      (* print_string (str_magenta (string_of_subst i')); *)
+      (* print_newline () *)
+    (* | None -> print_string "None"; print_newline ()) *)
+    (* input *)
+
+let inputs = List.map (fun s ->
     match inverse s with
     | Some(s') -> (let lxp_inv = mkSusp lxp s'
-                   in add_test "INVERSE" (((string_of_subst s) ^ " -> " ^ (string_of_subst s')))
-                     (fun () -> if lxp = lxp_inv then success () else failure ()))
-    | None -> add_test "INVERSE" ((string_of_subst s) ^ " -> Non inversable") (fun () -> failure ()))
+                   in let ret = (match unify lxp lxp_inv empty_subst with
+                       | Some (_) -> true
+                       | _ -> false)
+                   in let str = (string_of_subst s) ^ " -> " ^ (string_of_subst s')
+                   in (ret, str))
+    | None -> (false, ((string_of_subst s) ^ " -> Non inversable")))
     input
+
+let _ = List.map (fun (res, str) -> add_test "INVERSE" str (fun () -> if res then success () else failure ()))
+    inputs
 
 let _ = run_all ()
