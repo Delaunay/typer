@@ -2,6 +2,11 @@
 open Lexp
 module S = Subst
 
+(* FIXME : fail when the inversion have to create the first variable
+   i.e. : a1 · ↑3 -> a-1 · a0 · ↑^1 (expected result)
+                  -> a-1 · a0 · ↑^1 (current result)
+ *)
+
 (** Tranformation *)
 
 (** a_0 . ↑x1 (a_2 . ↑x2 ... ) . ↑xn . id*)

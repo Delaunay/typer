@@ -34,7 +34,7 @@ let input =
                       )
           )
   )::
-  (S.Cons (mkVar 0, S.Shift(S.Identity, 3)))::
+  (S.Cons (mkVar 1, S.Shift(S.Identity, 3)))::
   []
 
 let lxp = mkVar 3
