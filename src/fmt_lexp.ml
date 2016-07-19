@@ -81,8 +81,8 @@ let center (str: string ) (dim: int ) (char_: char) : string =
 
 let rec string_of_subst s =
   match s with
-  | S.Cons (Var(_, idx), s2) -> "a" ^ string_of_int idx ^ " · (" ^ string_of_subst s2 ^ ")"
-  | S.Cons (l, s2)           -> string_of_lxp l ^ " · (" ^ string_of_subst s2 ^ ")"
+  | S.Cons (Var(_, idx), s2) -> "a" ^ string_of_int idx ^ " · " ^ string_of_subst s2
+  | S.Cons (l, s2)           -> string_of_lxp l ^ " · " ^ string_of_subst s2
   | S.Shift (s2, shift)      -> "(" ^ string_of_subst s2 ^ ") ↑^" ^ string_of_int shift
   | S.Identity               -> "Id"
 

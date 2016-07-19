@@ -5,10 +5,10 @@ module S = Subst
 (* FIXME : fail when the inversion have to create the first variable
    i.e. : a1 · ↑3 -> a-1 · a0 · ↑^1 (expected result)
                   -> a-1 · a0 · ↑^1 (current result)
- *)
+*)
 
 (** Provide inverse function for computing the inverse of a substitution
- *)
+*)
 
 (* Transformation *)
 
