@@ -24,10 +24,72 @@ let mkShift2 shift subst =
   S.Shift (subst, shift)
 
 let input =
-  (S.Cons (mkVar 0,
+  (S.Cons (mkVar 0, (* Seems to work*)
            mkShift2 3 (S.Cons (mkVar 2,
                                (mkShift2 2 (S.Cons (mkVar 3,
                                                     mkShift2 0 S.Identity)
+                                           )
+                               )
+                              )
+                      )
+          )
+  )::
+  (S.Cons (mkVar 1, (* Seems to work *)
+           mkShift2 3 (S.Cons (mkVar 2,
+                               (mkShift2 2 (S.Cons (mkVar 3,
+                                                    mkShift2 0 S.Identity)
+                                           )
+                               )
+                              )
+                      )
+          )
+  )::
+  (S.Cons (mkVar 4,  (* Go completly wrong -> indices not in order -> should fail ?*)
+           mkShift2 3 (S.Cons (mkVar 2,
+                               (mkShift2 2 (S.Cons (mkVar 3,
+                                                    mkShift2 0 S.Identity)
+                                           )
+                               )
+                              )
+                      )
+          )
+  )::
+  (S.Cons (mkVar 1,  (* Seems to work *)
+           mkShift2 3 (S.Cons (mkVar 2,
+                               (mkShift2 2 (S.Cons (mkVar 4,
+                                                    mkShift2 0 S.Identity)
+                                           )
+                               )
+                              )
+                      )
+          )
+  )::
+  (S.Cons (mkVar 0,  (* Seems to work *)
+           mkShift2 3 (S.Cons (mkVar 2,
+                               (mkShift2 2 (S.Cons (mkVar 4,
+                                                    mkShift2 0 S.Identity)
+                                           )
+                               )
+                              )
+                      )
+          )
+  )::
+  (S.Cons (mkVar 0,  (* Seems to work *)
+           mkShift2 3 (S.Cons (mkVar 1,
+                               (mkShift2 2 (S.Cons (mkVar 4,
+                                                    mkShift2 0 S.Identity)
+                                           )
+                               )
+                              )
+                      )
+          )
+  )::
+  (S.Cons (mkVar 0,  (* Seems to work *)
+           mkShift2 3 (S.Cons (mkVar 1,
+                               (mkShift2 2 (S.Cons (mkVar 4,
+                                                    mkShift2 1 (S.Cons (mkVar 5,
+                                                                        mkShift2 0 S.Identity))
+                                                   )
                                            )
                                )
                               )
@@ -38,16 +100,6 @@ let input =
   []
 
 let lxp = mkVar 3
-
-(* let _ = List.iter (fun i -> *)
-    (* match (flatten i) with *)
-    (* | Some (i') -> *)
-      (* print_string (str_red (string_of_subst i)); *)
-      (* print_string " -- flatten --> "; *)
-      (* print_string (str_magenta (string_of_subst i')); *)
-      (* print_newline () *)
-    (* | None -> print_string "None"; print_newline ()) *)
-    (* input *)
 
 let inputs = List.map (fun s ->
     match inverse s with
