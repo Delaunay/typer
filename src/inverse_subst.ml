@@ -20,11 +20,11 @@ let mkSubstNode var offset = S.Cons (var, S.Shift(S.Identity, offset))
 
 (** Transform a subst into a more linear 'intermdiate representation':
 
- - a1.↑^\{x1\}(a2.↑^\{x2\}(a3.↑^\{x3\}id)) -> a1.(↑^\{x1\}a2).(↑^\{x2\}a3).↑^\{x3\}id
+    - a1.↑^\{x1\}(a2.↑^\{x2\}(a3.↑^\{x3\}id)) -> a1.(↑^\{x1\}a2).(↑^\{x2\}a3).↑^\{x3\}id
 
- or in ocaml-ish representation :
+    or in ocaml-ish representation :
 
- - S.Cons(var, S.Shift(..., offset))  -> S.Cons(var, S.Shift(S.Identity, offset))::...::Identity
+    - S.Cons(var, S.Shift(..., offset))  -> S.Cons(var, S.Shift(S.Identity, offset))::...::Identity
 *)
 let toIr (s: lexp S.subst) : inter_subst =
   let rec toIr s last_offset =
@@ -37,11 +37,11 @@ let toIr (s: lexp S.subst) : inter_subst =
 
 (** Transform an 'intermediate representation' into a sequence of cons followed by a shift
 
- - a1.(↑^\{x1\}a2).(↑^\{x2\}a3).↑^\{x3\}id -> a1.a2.a3 ↑^\{x1+x2+x3\}
+    - a1.(↑^\{x1\}a2).(↑^\{x2\}a3).↑^\{x3\}id -> a1.a2.a3 ↑^\{x1+x2+x3\}
 
- or in ocaml-ish representation :
+    or in ocaml-ish representation :
 
- - S.Cons(var, S.Shift(S.Identity, offset))::...::Identity -> S.Shift(S.Cons(var, S.Cons(...)), x1+x2+x3...)
+    - S.Cons(var, S.Shift(S.Identity, offset))::...::Identity -> S.Shift(S.Cons(var, S.Cons(...)), x1+x2+x3...)
 *)
 let flattenIr (s: inter_subst) =
   let rec flattenCons s =
@@ -58,11 +58,11 @@ let flattenIr (s: inter_subst) =
 
 (** Flatten a "tree"-like substitution:
 
- - a1.↑^\{x1\}(a2.↑^\{x2\}(a3.↑^\{x3\}id)) -> a1.(↑^\{x1\}a2).(↑^\{x2\}a3).↑^\{x3\}id -> a1.a2.a3 ↑^\{x1+x2+x3\}
+    - a1.↑^\{x1\}(a2.↑^\{x2\}(a3.↑^\{x3\}id)) -> a1.(↑^\{x1\}a2).(↑^\{x2\}a3).↑^\{x3\}id -> a1.a2.a3 ↑^\{x1+x2+x3\}
 
- or in ocaml-ish representation :
+    or in ocaml-ish representation :
 
- - S.Cons(var, S.Shift(..., offset)) -> S.Shift(S.Cons(var, S.Cons(...)), x1+x2+x3...)
+    - S.Cons(var, S.Shift(..., offset)) -> S.Shift(S.Cons(var, S.Cons(...)), x1+x2+x3...)
 *)
 let flatten (s: lexp S.subst) = flattenIr (toIr s)
 
@@ -85,7 +85,7 @@ let rec sizeOf s =
   | S.Identity     -> 0
 
 (** Returns the nth of a susbstitution,
- returns S.Identity if i > number_of_element(s)
+    returns S.Identity if i > number_of_element(s)
 *)
 let rec nthOf s i =
   match s, i with
@@ -117,7 +117,7 @@ let rec generate_s l =
   | []           -> S.Identity
 
 (* With the exemple of the article :
- should return (1,1)::(3,2)::(4,3)::[]
+   should return (1,1)::(3,2)::(4,3)::[]
 *)
 let rec genCons s i =
   match s with
