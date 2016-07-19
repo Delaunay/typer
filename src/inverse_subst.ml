@@ -7,18 +7,24 @@ module S = Subst
                   -> a-1 · a0 · ↑^1 (current result)
  *)
 
-(** Tranformation *)
+(** Provide inverse function for computing the inverse of a substitution
+ *)
 
-(** a_0 . ↑x1 (a_2 . ↑x2 ... ) . ↑xn . id*)
+(* Transformation *)
+
+(** a_0 . ↑^x1 (a_2 . ↑x2 ... ) . ↑^xn . id*)
 type inter_subst = lexp S.subst list (* Intermediate between "tree"-like substitution and fully flattened subsitution *)
 
 (** Helper function that create a Cons(_, Shift(_)) *)
 let mkSubstNode var offset = S.Cons (var, S.Shift(S.Identity, offset))
 
 (** Transform a subst into a more linear 'intermdiate representation':
- * a1.↑^{x1}(a2.↑^{x2}(a3.↑^{x3}id)) -> a1.(↑^{x1}a2).(↑^{x2}a3).↑^{x3}id
- * or in ocaml-ish representation :
- * S.Cons(var, S.Shift(..., offset))  -> S.Cons(var, S.Shift(S.Identity, offset))::...::Identity
+
+ - a1.↑^\{x1\}(a2.↑^\{x2\}(a3.↑^\{x3\}id)) -> a1.(↑^\{x1\}a2).(↑^\{x2\}a3).↑^\{x3\}id
+
+ or in ocaml-ish representation :
+
+ - S.Cons(var, S.Shift(..., offset))  -> S.Cons(var, S.Shift(S.Identity, offset))::...::Identity
 *)
 let toIr (s: lexp S.subst) : inter_subst =
   let rec toIr s last_offset =
@@ -30,9 +36,12 @@ let toIr (s: lexp S.subst) : inter_subst =
   in toIr s 0
 
 (** Transform an 'intermediate representation' into a sequence of cons followed by a shift
- * a1.(↑^{x1}a2).(↑^{x2}a3).↑^{x3}id -> a1.a2.a3 ↑^{x1+x2+x3}
- * or in ocaml-ish representation :
- * S.Cons(var, S.Shift(S.Identity, offset))::...::Identity -> S.Shift(S.Cons(var, S.Cons(...)), x1+x2+x3...)
+
+ - a1.(↑^\{x1\}a2).(↑^\{x2\}a3).↑^\{x3\}id -> a1.a2.a3 ↑^\{x1+x2+x3\}
+
+ or in ocaml-ish representation :
+
+ - S.Cons(var, S.Shift(S.Identity, offset))::...::Identity -> S.Shift(S.Cons(var, S.Cons(...)), x1+x2+x3...)
 *)
 let flattenIr (s: inter_subst) =
   let rec flattenCons s =
@@ -48,14 +57,17 @@ let flattenIr (s: inter_subst) =
   | None               -> None
 
 (** Flatten a "tree"-like substitution:
- * a1.↑^{x1}(a2.↑^{x2}(a3.↑^{x3}id)) -> a1.(↑^{x1}a2).(↑^{x2}a3).↑^{x3}id -> a1.a2.a3 ↑^{x1+x2+x3}
- * or in ocaml-ish representation :
- * S.Cons(var, S.Shift(..., offset)) -> S.Shift(S.Cons(var, S.Cons(...)), x1+x2+x3...)
+
+ - a1.↑^\{x1\}(a2.↑^\{x2\}(a3.↑^\{x3\}id)) -> a1.(↑^\{x1\}a2).(↑^\{x2\}a3).↑^\{x3\}id -> a1.a2.a3 ↑^\{x1+x2+x3\}
+
+ or in ocaml-ish representation :
+
+ - S.Cons(var, S.Shift(..., offset)) -> S.Shift(S.Cons(var, S.Cons(...)), x1+x2+x3...)
 *)
 let flatten (s: lexp S.subst) = flattenIr (toIr s)
 
 
-(** Inverse *)
+(* Inverse *)
 
 (** Returns the value of the shift of a S.Shift
 *)
@@ -72,8 +84,8 @@ let rec sizeOf s =
   | S.Shift(s1, _) -> sizeOf s1
   | S.Identity     -> 0
 
-(** Returns the nth of a susbstitution
- * returns S.Identity if i > number_of_element(s)
+(** Returns the nth of a susbstitution,
+ returns S.Identity if i > number_of_element(s)
 *)
 let rec nthOf s i =
   match s, i with
@@ -93,7 +105,7 @@ let rec genDummyVar beg_ end_ =
   then (beg_, -1)::(genDummyVar (beg_ + 1) end_)
   else []
 
-(**Returns a dummy variable with the db_index idx
+(** Returns a dummy variable with the db_index idx
 *)
 let mkVar idx = Var((U.dummy_location, ""), idx) (* not sure how to fill vdef *)
 
@@ -105,7 +117,7 @@ let rec generate_s l =
   | []           -> S.Identity
 
 (* With the exemple of the article :
-* should return (1,1)::(3,2)::(4,3)::[]
+ should return (1,1)::(3,2)::(4,3)::[]
 *)
 let rec genCons s i =
   match s with
@@ -113,7 +125,7 @@ let rec genCons s i =
   | S.Identity -> []
 
 (* With the exemple of the article :
-* should return (1,1)::(2, X)::(3,2)::(4,3)::(5, Z)::[]
+ should return (1,1)::(2, X)::(3,2)::(4,3)::(5, Z)::[]
 *)
 let fill l size acc =
   let rec fill_before l =

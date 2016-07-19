@@ -8,6 +8,8 @@ module VMap = Map.Make (struct type t = int let compare = compare end)
 type substitution = lexp VMap.t
 type constraints  = (lexp * lexp) list
 
+(** Provide unify function for unifying two Lambda-Expression *)
+
 (* IMPROVEMENT For error handling : can carry location and name of type error *)
 (*type 'a result =*)
 (*| Some of 'a*)
@@ -32,7 +34,7 @@ let associate (meta: int) (lxp: lexp) (subst: substitution)
   (VMap.add meta lxp subst)
 
 (** If key is in map returns the value associated
- * else returns None
+ else returns <code>None</code>
 *)
 let find_or_none (value: lexp) (map: substitution) : lexp option =
   match value with
@@ -43,7 +45,7 @@ let find_or_none (value: lexp) (map: substitution) : lexp option =
 
 let empty_subst = (VMap.empty)
 
-(* Zip while applying a function, returns empty list if l1 & l2 have different size*)
+(** Zip while applying a function, returns <code>None</code> list if l1 & l2 have different size*)
 let zip_map (l1: 'a list ) (l2: 'b list ) (f: ('a -> 'b -> 'c)): 'c list option =
   let rec zip_ ll1 ll2 f =
     match ll1, ll2 with
@@ -52,26 +54,31 @@ let zip_map (l1: 'a list ) (l2: 'b list ) (f: ('a -> 'b -> 'c)): 'c list option 
     | _, _ -> [] (* Should never happen since we check length before actually calling the recursion but without this case, the compiler complains*)
   in if List.length l1 = List.length l2 then Some (zip_ l1 l2 f) else None
 
+(** Custom zip (<i>List.combine</i>), return a list of couple if the two list have the same size,
+return <code>None</code> if not*)
 let zip (l1: 'a list) (l2: 'b list): (('a * 'b) list option) = zip_map l1 l2 (fun x z -> (x, z))
 
+(** Fold the two lists, and zip the result *)
 let zip_fold list1 list2 f =
   let l1 = List.fold_right (f) list1 []
   and l2 = List.fold_right (f) list2 []
   in zip l1 l2
 
 (**
- * lexp is equivalent to _ in ocaml
- * (Let , lexp) == (lexp , Let)
- * UNIFY      -> recursive call or dispatching
- * OK         -> add a substituion to the list of substitution
- * CONSTRAINT -> returns a constraint
+ lexp is equivalent to _ in ocaml
+ (Let , lexp) == (lexp , Let)
+ UNIFY      -> recursive call or dispatching
+ OK         -> add a substituion to the list of substitution
+ CONSTRAINT -> returns a constraint
 *)
 
 (****************************** Top level unify *************************************)
 
 (** Dispatch to the right unifyer.
- * If (_unify_X X Y) don't handle the case (X, Y), it call (unify Y X)
- * The metavar unifyer is the end rule, it can't call unify with it's parameter (changing their order)
+
+ If (<code>_unify_X X Y</code>) don't handle the case <b>(X, Y)</b>, it call (<code>unify Y X</code>)
+
+ The metavar unifyer is the end rule, it can't call unify with it's parameter (changing their order)
 *)
 let rec unify (l: lexp) (r: lexp) (subst: substitution) : return_type =
   let tmp = match (l, r) with
@@ -94,7 +101,6 @@ let rec unify (l: lexp) (r: lexp) (subst: substitution) : return_type =
     | (Inductive _, _) -> _unfiy_induct   l r subst
     | (Sort _, _)      -> _unify_sort     l r subst
     | (SortLevel _, _) -> _unify_sortlvl  l r subst
-    (*  | (_, _)           -> None*)
   in match tmp with
   | Some _ -> Debug_fun.debug_print_unify "unify" l r " -> unification success"; tmp
   | None -> Debug_fun.debug_print_unify "unify" l r " -> unification failed"; tmp
@@ -102,9 +108,9 @@ let rec unify (l: lexp) (r: lexp) (subst: substitution) : return_type =
 (********************************* Type specific unify *******************************)
 
 (** Unify two Imm if they match <=> Same type and same value
- * Add one of the Imm (the first arguement) to the substitution
- * Imm, Imm  ->  if Imm =/= Imm then ERROR else OK
- * Imm, lexp -> unify lexp Imm
+ - Add one of the Imm (the first arguement) to the substitution
+ - Imm, Imm  ->  if Imm =/= Imm then ERROR else OK
+ - Imm, lexp -> unify lexp Imm
 *)
 and _unify_imm (l: lexp) (r: lexp) (subst: substitution) : return_type =
   match (l, r) with
@@ -122,8 +128,8 @@ and _unify_imm (l: lexp) (r: lexp) (subst: substitution) : return_type =
   | (_, _) -> None
 
 (** Unify a Cons and a lexp
- * Cons, Cons -> if Cons ~= Cons then OK else ERROR
- * Cons, _    -> ERROR
+ - Cons, Cons -> if Cons ~= Cons then OK else ERROR
+ - Cons, _    -> ERROR
 *)
 (*FIXME which parameter of Cons is it's name ?*)
 (* symbol = (location * string)*)
@@ -137,8 +143,8 @@ and _unify_cons (cons: lexp) (lxp: lexp) (subst: substitution) : return_type =
   | (_, _) -> None
 
 (** Unify a builtin (bltin) and a lexp (lxp) if it is possible
- * If the two arguments are builtin, unify based on name
- * If it's a Builtin and an other lexp, unify lexp part of Builtin with the lexp
+ - If the two arguments are builtin, unify based on name
+ - If it's a Builtin and an other lexp, unify lexp part of Builtin with the lexp
 *)
 and _unify_builtin (bltin: lexp) (lxp: lexp) (subst: substitution) : return_type =
   match (bltin, lxp) with
@@ -149,8 +155,8 @@ and _unify_builtin (bltin: lexp) (lxp: lexp) (subst: substitution) : return_type
   | (_, _) -> None
 
 (** Unify a Let (let_) and a lexp (lxp), if possible
- * Let , Let -> check the 'inside' of the let
- * Let , lexp -> constraint
+ - Let , Let -> check the 'inside' of the let
+ - Let , lexp -> constraint
 *)
 and _unify_let (let_: lexp) (lxp: lexp) (subst: substitution) : return_type =
   let concat = (fun (_, lxp, lt) acc -> lxp::lt::acc)
@@ -169,9 +175,9 @@ and _unify_let (let_: lexp) (lxp: lexp) (subst: substitution) : return_type =
   | None -> Debug_fun.debug_print_unify "_unify_let" let_ lxp " -> unification failed"; tmp
 
 (** Unify a Var and a lexp, if possible
- * (Var, Var) -> unify if they have the same debruijn index FIXME : shift indexes
- * (Var, Metavar) -> unify_metavar Metavar var subst
- * (Var _, _) -> unfiy lexp Var subst
+ - (Var, Var) -> unify if they have the same debruijn index FIXME : shift indexes
+ - (Var, Metavar) -> unify_metavar Metavar var subst
+ - (Var _, _) -> unfiy lexp Var subst
 *)
 (*FIXME : check for the value of Var -> need context ?*)
 and _unify_var (var: lexp) (r: lexp) (subst: substitution) : return_type =
@@ -184,11 +190,11 @@ and _unify_var (var: lexp) (r: lexp) (subst: substitution) : return_type =
   | (_, _)         -> None
 
 (** Unify a Arrow and a lexp if possible
- * (Arrow, Arrow) -> if var_kind = var_kind
+ - (Arrow, Arrow) -> if var_kind = var_kind
                      then unify ltype & lexp (Arrow (var_kind, _, ltype, lexp))
                      else None
- * (Arrow, Var) -> Constraint
- * (_, _) -> None
+ - (Arrow, Var) -> Constraint
+ - (_, _) -> None
 *)
 and _unify_arrow (arrow: lexp) (lxp: lexp) (subst: substitution)
   : return_type =
@@ -203,12 +209,12 @@ and _unify_arrow (arrow: lexp) (lxp: lexp) (subst: substitution)
   | (_, _) -> None
 
 (** Unify a Lambda and a lexp if possible
- * Lamda     , Lambda             -> if var_kind = var_kind
+ - Lamda     , Lambda             -> if var_kind = var_kind
                                      then UNIFY ltype & lxp else ERROR
- * Lambda    , Var                -> CONSTRAINT
- * Lambda    , Call               -> Constraint
- * Lambda    , Let                -> Constraint
- * Lambda    , lexp               -> unify lexp lambda subst
+ - Lambda    , Var                -> CONSTRAINT
+ - Lambda    , Call               -> Constraint
+ - Lambda    , Let                -> Constraint
+ - Lambda    , lexp               -> unify lexp lambda subst
 *)
 and _unify_lambda (lambda: lexp) (lxp: lexp) (subst: substitution) : return_type =
   match (lambda, lxp) with
@@ -225,10 +231,10 @@ and _unify_lambda (lambda: lexp) (lxp: lexp) (subst: substitution) : return_type
   | (_, _)              -> None
 
 (** Unify a Metavar and a lexp if possible
- * lexp      , {metavar <-> none} -> UNIFY
- * lexp      , {metavar <-> lexp} -> UNFIFY lexp subst[metavar]
- * metavar   , metavar            -> if Metavar = Metavar then OK else ERROR
- * metavar   , lexp               -> OK
+ - lexp      , {metavar <-> none} -> UNIFY
+ - lexp      , {metavar <-> lexp} -> UNFIFY lexp subst[metavar]
+ - metavar   , metavar            -> if Metavar = Metavar then OK else ERROR
+ - metavar   , lexp               -> OK
 *)
 and _unify_metavar (meta: lexp) (lxp: lexp) (subst: substitution) : return_type =
   let find_or_unify metavar value lxp s =
@@ -247,8 +253,8 @@ and _unify_metavar (meta: lexp) (lxp: lexp) (subst: substitution) : return_type 
   | (_, _) -> None
 
 (** Unify a Call (call) and a lexp (lxp)
- * Call      , Call               -> UNIFY
- * Call      , lexp               -> CONSTRAINT
+ - Call      , Call               -> UNIFY
+ - Call      , lexp               -> CONSTRAINT
 *)
 and _unify_call (call: lexp) (lxp: lexp) (subst: substitution) : return_type =
   let f = (fun (_, x) acc -> x::acc)
@@ -273,8 +279,8 @@ and _unify_susp (susp_: lexp) (lxp: lexp) (subst: substitution) : return_type =
   | _ -> None
 
 (** Unify a Case with a lexp
- * Case, Case -> try to unify
- * Case, _ -> Constraint
+ - Case, Case -> try to unify
+ - Case, _ -> Constraint
 *)
 and _unify_case (case: lexp) (lxp: lexp) (subst: substitution) : return_type =
   let merge (_, c) r2 = match r2 with
@@ -299,10 +305,10 @@ and _unify_case (case: lexp) (lxp: lexp) (subst: substitution) : return_type =
   | None -> Debug_fun.debug_print_unify "_unify_case" case lxp " -> unification failed"; tmp
 
 (** Unify a Inductive and a lexp
- * Inductive, Inductive -> try unify
- * Inductive, Var -> constraint
- * Inductive, Call/Metavar/Case/Let -> constraint
- * Inductive, _ -> None
+ - Inductive, Inductive -> try unify
+ - Inductive, Var -> constraint
+ - Inductive, Call/Metavar/Case/Let -> constraint
+ - Inductive, _ -> None
 *)
 and _unfiy_induct (induct: lexp) (lxp: lexp) (subst: substitution) : return_type =
   let transform (a, b, c) (d, e, f) = ((a, Some b, c), (d, Some e, f))
@@ -324,8 +330,8 @@ and _unfiy_induct (induct: lexp) (lxp: lexp) (subst: substitution) : return_type
   | (_, _) -> None
 
 (** Unify a SortLevel with a lexp
- * SortLevel, SortLevel -> if SortLevel ~= SortLevel then OK else ERROR
- * SortLevel, _         -> ERROR
+ - SortLevel, SortLevel -> if SortLevel ~= SortLevel then OK else ERROR
+ - SortLevel, _         -> ERROR
 *)
 and _unify_sortlvl (sortlvl: lexp) (lxp: lexp) (subst: substitution) : return_type =
   match sortlvl, lxp with
@@ -336,9 +342,9 @@ and _unify_sortlvl (sortlvl: lexp) (lxp: lexp) (subst: substitution) : return_ty
   | _, _ -> None
 
 (** Unify a Sort and a lexp
- * Sort, Sort -> if Sort ~= Sort then OK else ERROR
- * Sort, Var  -> Constraint
- * Sort, lexp -> ERROR
+ - Sort, Sort -> if Sort ~= Sort then OK else ERROR
+ - Sort, Var  -> Constraint
+ - Sort, lexp -> ERROR
 *)
 and _unify_sort (sort_: lexp) (lxp: lexp) (subst: substitution) : return_type =
   match sort_, lxp with
