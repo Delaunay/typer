@@ -2,11 +2,6 @@
 open Lexp
 module S = Subst
 
-(* FIXME : fail when the inversion have to create the first variable
-   i.e. : a1 · ↑3 -> a-1 · a0 · ↑^1 (expected result)
-                  -> a-1 · a0 · ↑^1 (current result)
-*)
-
 (** Provide inverse function for computing the inverse of a substitution
 *)
 
@@ -41,7 +36,7 @@ let toIr (s: lexp S.subst) : inter_subst =
 
     or in ocaml-ish representation :
 
-    - S.Cons(var, S.Shift(S.Identity, offset))::...::Identity -> S.Shift(S.Cons(var, S.Cons(...)), x1+x2+x3...)
+    - <code>S.Cons(var, S.Shift(S.Identity, offset))::...::Identity -> S.Shift(S.Cons(var, S.Cons(...)), x1+x2+x3...)</code>
 *)
 let flattenIr (s: inter_subst) =
   let rec flattenCons s =
@@ -62,7 +57,7 @@ let flattenIr (s: inter_subst) =
 
     or in ocaml-ish representation :
 
-    - S.Cons(var, S.Shift(..., offset)) -> S.Shift(S.Cons(var, S.Cons(...)), x1+x2+x3...)
+    - <code>S.Cons(var, S.Shift(..., offset)) -> S.Shift(S.Cons(var, S.Cons(...)), x1+x2+x3...)</code>
 *)
 let flatten (s: lexp S.subst) = flattenIr (toIr s)
 
@@ -100,9 +95,9 @@ let rec nthOf s i =
 let idxOf (_, idx) = idx
 
 (** Returns a list of couple (X, -1) where X go from beg_ to end_*)
-let rec genDummyVar beg_ end_ =
+let rec genDummyVar beg_ end_ idx =
   if beg_ < end_
-  then (beg_, -1)::(genDummyVar (beg_ + 1) end_)
+  then (beg_, idx)::(genDummyVar (beg_ + 1) end_ idx)
   else []
 
 (** Returns a dummy variable with the db_index idx
@@ -117,7 +112,7 @@ let rec generate_s l =
   | []           -> S.Identity
 
 (* With the exemple of the article :
-   should return (1,1)::(3,2)::(4,3)::[]
+   should return <code>(1,1)::(3,2)::(4,3)::[]</code>
 *)
 let rec genCons s i =
   match s with
@@ -125,9 +120,11 @@ let rec genCons s i =
   | S.Identity -> []
 
 (* With the exemple of the article :
-   should return (1,1)::(2, X)::(3,2)::(4,3)::(5, Z)::[]
+   should return <code>(1,1)::(2, X)::(3,2)::(4,3)::(5, Z)::[]</code>
 *)
 let fill l size acc =
+  let genDummyVar beg_ end_ = genDummyVar beg_ end_ (size + 1)
+  in
   let rec fill_before l =
     match l with
     | [] -> []
@@ -151,7 +148,9 @@ let fill l size acc =
 *)
 let generateCons s _size shift = generate_s (fill (genCons s 0) shift [])
 
-(** s:S.subst -> l:lexp -> s':S.subst where l[s][s'] = l *)
+(** <code>s:S.subst -> l:lexp -> s':S.subst</code> where <code>l[s][s'] = l</code>
+    Return undefined result for bad input
+*)
 let rec inverse (subst: lexp S.subst ) : lexp S.subst option =
   match flatten subst with
   | Some(S.Shift(flattened, shift)) ->
