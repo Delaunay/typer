@@ -29,33 +29,96 @@ let rec mkTestSubst lst =
                                   mkShift2 shift (mkTestSubst tail))
   | [] -> S.Identity
 
+(* FIXME : tests fail but yield a seemingly good result *)
+(* FIXME : is a_0 ... a_p ↑^n when p > n an error case ? *)
+(* TODO  : Generate random input *)
 let input =
   (mkTestSubst ((0, 3)::(2, 2)::(3, 0)::[])):: (* Seems to work *)
   (mkTestSubst ((1, 3)::(2, 2)::(3, 0)::[])):: (* Seems to work *)
   (mkTestSubst ((4, 2)::(2, 2)::(3, 0)::[])):: (* Go completly wrong -> indices not in order -> should fail ?*)
+  (mkTestSubst ((1, 2)::(5, 2)::(3, 0)::[])):: (* Go completly wrong -> indices not in order -> should fail ?*)
   (mkTestSubst ((1, 3)::(2, 2)::(4, 0)::[])):: (* Seems to work *)
   (mkTestSubst ((0, 3)::(2, 2)::(4, 0)::[])):: (* Seems to work *)
   (mkTestSubst ((0, 3)::(1, 2)::(4, 0)::[])):: (* Seems to work *)
   (mkTestSubst ((0, 3)::(1, 2)::(4, 1)::(5, 0)::[]))::
-  (mkTestSubst ((0, 3)::(1, 2)::(4, 1)::(5, 0)::[]))::
+  (mkTestSubst ((0, 3)::(1, 2)::(4, 1)::(9, 0)::[])):: (* Erroneous result -> normal ?*)
   (S.Cons (mkVar 1, S.Shift(S.Identity, 3)))::
   []
 
+let generateRandInput n m =
+  Random.self_init ();
+  let rec generateList n m =
+      let rec generateRandInput n i =
+        if n > i
+        then (if Random.bool ()
+              then ( let r = Random.int n in
+                (i, (min (r + i) n))::(generateRandInput n (i + 1)) )
+               else generateRandInput n (i + 1))
+        else []
+      in if m >= 0
+      then (mkTestSubst (generateRandInput n 0))::(generateList n (m - 1))
+      else []
+  in generateList n m
+
 let lxp = mkVar 3
 
-let inputs = List.map (fun s ->
+let test input = List.map (fun s ->
     match inverse s, flatten s with
-    | Some(s'), Some(sf) -> (let lxp_inv = mkSusp lxp s'
-                   in let ret = (match unify lxp lxp_inv empty_subst with
-                       | Some (_) -> true
-                       | _ -> false)
-                   in let str = (string_of_subst sf) ^ (String.make (50 - String.length (string_of_subst sf)) ' ')
-                                                     ^  " -> " ^ (string_of_subst s')
-                   in (ret, str))
-    | _ -> (false, ((string_of_subst s) ^ " -> Non inversable")))
+    | Some(s'), Some(sf) -> (let comp = scompose sf s' in
+                             let ret = (match comp with
+                                 | S.Identity -> true
+                                 | _ -> false)
+                             in let str = (
+                                 (string_of_subst s),
+                                 (string_of_subst sf),
+                                 (string_of_subst s'),
+                                 (string_of_subst comp))
+                             in (ret, str))
+    | _ -> (false, (string_of_subst s, string_of_subst S.Identity,string_of_subst S.Identity, string_of_subst S.Identity)))
     input
 
+
+let inputs = test input
+
+let get_dim lst =
+  let max i s = max i (String.length s)
+  in
+  List.fold_left
+    (fun (acs, acsf, acs', acc) (s, sf, s', comp) -> ((max acs s), (max acsf sf), (max acs' s'), (max acc comp)))
+    (0,0,0,0)
+    lst
+
+let fmt_res lst =
+  let str = List.map (fun (_, s) -> s) lst
+  and res = List.map (fun (r, _) -> r) lst
+  in
+  let (ds, dsf, ds', dcomp) = get_dim str
+  in let str' = List.map (fun (s, sf, s', com) -> "[ " ^
+      (padding_right s ds ' ') ^ " -> " ^
+      (padding_right (sf ^ " ]") dsf ' ') ^ " ∘ " ^
+      (padding_right s' ds' ' ') ^ " = " ^
+      (padding_right com dcomp ' ')
+    ) str
+  in match zip res str' with
+  | None -> []
+  | Some (s) -> s
+
+let fmt_res2 lst =
+  let str = List.map (fun (_, s) -> s) lst
+  and res = List.map (fun (r, _) -> r) lst
+  in let str' = List.map (fun (s, sf, s', com) ->
+      sf ^ " ∘ " ^ s'
+    ) str
+  in match zip res str' with
+  | None -> []
+  | Some (s) -> s
+
+let fmt_inputs = fmt_res inputs
+
 let _ = List.map (fun (res, str) -> add_test "INVERSE" str (fun () -> if res then success () else failure ()))
-    inputs
+    fmt_inputs
+
+let _ = List.map (fun (res, str) -> add_test "INVERSE (RAND)" str (fun () -> if res then success () else failure ()))
+    (fmt_res2 (test (generateRandInput 5 15)))
 
 let _ = run_all ()
