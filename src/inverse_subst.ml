@@ -1,5 +1,6 @@
 
 open Lexp
+open Util
 module S = Subst
 
 (** Provide inverse function for computing the inverse of a substitution
@@ -8,10 +9,13 @@ module S = Subst
 (* Transformation *)
 
 (** a_0 . ↑^x1 (a_2 . ↑x2 ... ) . ↑^xn . id*)
-type inter_subst = lexp S.subst list (* Intermediate between "tree"-like substitution and fully flattened subsitution *)
+(* type inter_subst = lexp S.subst list (* Intermediate between "tree"-like substitution and fully flattened subsitution *) *)
+type inter_subst = lexp list (* Intermediate between "tree"-like substitution and fully flattened subsitution *)
 
 (** Helper function that create a Cons(_, Shift(_)) *)
-let mkSubstNode var offset = S.Cons (var, S.Shift(S.Identity, offset))
+(* let mkSubstNode var offset = S.Cons (var, S.Shift(S.Identity, offset)) *)
+
+let dummy_var = Var((dummy_location, ""), -1)
 
 (** Transform a subst into a more linear 'intermdiate representation':
 
@@ -24,9 +28,10 @@ let mkSubstNode var offset = S.Cons (var, S.Shift(S.Identity, offset))
 let toIr (s: lexp S.subst) : inter_subst =
   let rec toIr s last_offset =
     match s with
-    | S.Cons(Var _ as v, S.Shift (s_1, offset)) ->
-      (mkSubstNode v last_offset)::(toIr s_1 offset)
-    | S.Identity -> [S.Shift (S.Identity, last_offset )]
+    | S.Shift (s_1, offset) -> toIr s_1 (last_offset + offset)
+    | S.Cons(Var _ as v, s_1) -> Susp(v, (S.mkShift S.Identity last_offset))::(toIr s_1 last_offset)
+    | S.Identity -> [Susp(dummy_var, (S.mkShift S.Identity last_offset ))]
+    | _ -> assert false
     (* Assuming that a Shift always follow Cons, the case Shift should never arise *)
   in toIr s 0
 
@@ -38,15 +43,14 @@ let toIr (s: lexp S.subst) : inter_subst =
 
     - <code>S.Cons(var, S.Shift(S.Identity, offset))::...::Identity -> S.Shift(S.Cons(var, S.Cons(...)), x1+x2+x3...)</code>
 *)
-let flattenIr (s: inter_subst) =
+let flattenIr (s: inter_subst): lexp S.subst option =
   let rec flattenCons s =
     match s with
-    | S.Cons(Var _ as v, S.Shift(S.Identity, offset))::tail ->
-      (match flattenCons tail with
-       | Some (o, s1) -> Some (o + offset, S.Cons(v, s1))
-       | None         -> None)
-    | (S.Shift(S.Identity, o))::[] -> Some (o, S.Identity)
-    | []             -> None
+    | Susp (dv, S.Shift (S.Identity, o))::[] -> Some (o, S.Identity)
+    | susp::tail -> (match flattenCons tail with
+        | Some (o, s1) -> Some (o, (S.Cons (unsusp_all susp, s1)))
+        | None -> None)
+    | _ -> None
   in match flattenCons s with
   | Some(offset, cons) -> Some(S.Shift(cons, offset))
   | None               -> None
@@ -118,6 +122,7 @@ let rec genCons s i =
   match s with
   | S.Cons(Var(v), s1) -> ((idxOf v), i)::(genCons s1 (i + 1)) (* e_{idx_of v} = i *)
   | S.Identity -> []
+  | _ -> assert false
 
 (* With the exemple of the article :
    should return <code>(1,1)::(2, X)::(3,2)::(4,3)::(5, Z)::[]</code>
@@ -151,10 +156,10 @@ let generateCons s _size shift = generate_s (fill (genCons s 0) shift [])
 (** <code>s:S.subst -> l:lexp -> s':S.subst</code> where <code>l[s][s'] = l</code>
     Return undefined result for bad input
 *)
-let rec inverse (subst: lexp S.subst ) : lexp S.subst option =
-  match flatten subst with
-  | Some(S.Shift(flattened, shift)) ->
-    let size = sizeOf flattened
-    in Some(S.Shift((generateCons flattened size shift), size))
-  | None            -> None
+let rec inverse (subst: lexp S.subst ) : lexp S.subst option = Some(subst)
+  (* match flatten subst with *)
+  (* | Some(S.Shift(flattened, shift)) -> *)
+    (* let size = sizeOf flattened *)
+    (* in Some(S.Shift((generateCons flattened size shift), size)) *)
+  (* | None            -> None *)
 

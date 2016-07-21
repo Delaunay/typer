@@ -11,7 +11,7 @@ type constraints  = (lexp * lexp) list
 (** Provide unify function for unifying two Lambda-Expression *)
 
 (* IMPROVEMENT For error handling : can carry location and name of type error *)
-(*type 'a result =*)
+(*type 'a result =*) (* use std result type*)
 (*| Some of 'a*)
 (*| Error of Util.location * string (*location * type name*)*)
 (*| Nil*)
