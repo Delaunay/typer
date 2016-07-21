@@ -11,7 +11,14 @@ let str_magenta str = if _color then magenta ^ str ^ reset else str
 let str_yellow str  = if _color then yellow  ^ str ^ reset else str
 let str_cyan str    = if _color then cyan    ^ str ^ reset else str
 
-let rec string_of_lxp lxp =
+let rec string_of_subst s =
+  match s with
+  | S.Cons (Var(_, idx), s2) -> "a" ^ string_of_int idx ^ " · " ^ string_of_subst s2
+  | S.Cons (l, s2)           -> string_of_lxp l ^ " · " ^ string_of_subst s2
+  | S.Shift (s2, shift)      -> "(" ^ string_of_subst s2 ^ ") ↑^" ^ string_of_int shift
+  | S.Identity               -> "Id"
+
+and string_of_lxp lxp =
   match lxp with
   | Imm (Integer (_, value))        -> "Integer(" ^ (string_of_int value) ^ ")"
   | Imm (String (_, value))         -> "String(" ^ value ^ ")"
@@ -28,7 +35,7 @@ let rec string_of_lxp lxp =
   | Sort (_, s)                     -> ("Sort") ^ "(" ^ string_of_sort s ^ ")"
   | SortLevel l                     -> ("SortLevel") ^ "(" ^ string_of_sort_level l ^ ")"
   | Case _                          -> ("Case") ^ "(...)"
-  | Susp _                          -> "Susp(...)"
+  | Susp (v, s)                     -> "Susp(" ^ (string_of_lxp v) ^ ", " ^ (string_of_subst s) ^ ")"
   | _                               -> "Unidentified Lexp"
 
 and string_of_sort_level lvl =
@@ -64,25 +71,18 @@ let colored_string_of_lxp lxp lcol vcol =
   | _                               -> (lcol "Unidentified Lexp")
 
 let padding_right (str: string ) (dim: int ) (char_: char) : string =
-  let diff = (dim - String.length str) + 5
+  let diff = (dim - String.length str)
   in let rpad = diff
   in str ^ (String.make rpad char_)
 
 let padding_left (str: string ) (dim: int ) (char_: char) : string =
-  let diff = (dim - String.length str) + 5
+  let diff = (dim - String.length str)
   in let lpad = diff
   in (String.make lpad char_) ^ str
 
 let center (str: string ) (dim: int ) (char_: char) : string =
-  let diff = (dim - String.length str) + 5
+  let diff = (dim - String.length str)
   in let lpad, rpad = ((diff / 2 ), ((diff / 2) + (diff mod 2)))
   in (String.make lpad char_) ^ str ^ (String.make lpad char_)
 
-
-let rec string_of_subst s =
-  match s with
-  | S.Cons (Var(_, idx), s2) -> "a" ^ string_of_int idx ^ " · " ^ string_of_subst s2
-  | S.Cons (l, s2)           -> string_of_lxp l ^ " · " ^ string_of_subst s2
-  | S.Shift (s2, shift)      -> "(" ^ string_of_subst s2 ^ ") ↑^" ^ string_of_int shift
-  | S.Identity               -> "Id"
 
