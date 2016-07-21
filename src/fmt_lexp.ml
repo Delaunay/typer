@@ -18,6 +18,12 @@ let rec string_of_subst s =
   | S.Shift (s2, shift)      -> "(" ^ string_of_subst s2 ^ ") ↑^" ^ string_of_int shift
   | S.Identity               -> "Id"
 
+and ocaml_string_of_subst s =
+  match s with
+  | S.Cons (l, s2) -> "Cons(" ^ string_of_lxp l ^ ", "  ^ ocaml_string_of_subst s2 ^ ")"
+  | S.Shift (s2, shift)      -> "Shift(" ^ ocaml_string_of_subst s2 ^ ", " ^ string_of_int shift ^ ")"
+  | S.Identity               -> "Identity"
+
 and string_of_lxp lxp =
   match lxp with
   | Imm (Integer (_, value))        -> "Integer(" ^ (string_of_int value) ^ ")"
@@ -72,16 +78,16 @@ let colored_string_of_lxp lxp lcol vcol =
 
 let padding_right (str: string ) (dim: int ) (char_: char) : string =
   let diff = (dim - String.length str)
-  in let rpad = diff
+  in let rpad = max diff 0
   in str ^ (String.make rpad char_)
 
 let padding_left (str: string ) (dim: int ) (char_: char) : string =
   let diff = (dim - String.length str)
-  in let lpad = diff
+  in let lpad = max diff 0
   in (String.make lpad char_) ^ str
 
 let center (str: string ) (dim: int ) (char_: char) : string =
-  let diff = (dim - String.length str)
+  let diff = max (dim - String.length str) 0
   in let lpad, rpad = ((diff / 2 ), ((diff / 2) + (diff mod 2)))
   in (String.make lpad char_) ^ str ^ (String.make lpad char_)
 

@@ -156,10 +156,10 @@ let generateCons s _size shift = generate_s (fill (genCons s 0) shift [])
 (** <code>s:S.subst -> l:lexp -> s':S.subst</code> where <code>l[s][s'] = l</code>
     Return undefined result for bad input
 *)
-let rec inverse (subst: lexp S.subst ) : lexp S.subst option = Some(subst)
-(* match flatten subst with *)
-(* | Some(S.Shift(flattened, shift)) -> *)
-(* let size = sizeOf flattened *)
-(* in Some(S.Shift((generateCons flattened size shift), size)) *)
-(* | None            -> None *)
+let rec inverse (subst: lexp S.subst ) : lexp S.subst option =
+  match flatten subst with
+  | Some(S.Shift(flattened, shift)) ->
+    let size = sizeOf flattened
+    in Some(S.Shift((generateCons flattened size shift), size))
+  | None            -> None
 

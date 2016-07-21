@@ -29,20 +29,17 @@ let rec mkTestSubst lst =
                                   mkShift2 shift (mkTestSubst tail))
   | [] -> S.Identity
 
-(* FIXME : tests fail but yield a seemingly good result *)
-(* FIXME : is a_0 ... a_p ↑^n when p > n an error case ? *)
-(* TODO  : Generate random input *)
 let input =
   (mkTestSubst ((0, 3)::(2, 2)::(3, 5)::[])):: (* Seems to work *)
   (mkTestSubst ((1, 3)::(2, 2)::(3, 5)::[])):: (* Seems to work *)
   (mkTestSubst ((1, 3)::(2, 2)::(4, 5)::[])):: (* Seems to work *)
   (mkTestSubst ((0, 3)::(2, 2)::(4, 5)::[])):: (* Seems to work *)
   (mkTestSubst ((0, 3)::(1, 2)::(4, 5)::[])):: (* Seems to work *)
-  (mkTestSubst ((0, 3)::(1, 2)::(4, 1)::(5, 0)::[]))::
+  (mkTestSubst ((0, 3)::(1, 2)::(4, 1)::(5, 5)::[]))::
   (S.Cons (mkVar 1, S.Shift(S.Identity, 3)))::
-  (mkTestSubst ((4, 2)::(2, 2)::(3, 0)::[])):: (* Go completly wrong -> indices not in order -> should fail ?*)
-  (mkTestSubst ((1, 2)::(5, 2)::(3, 0)::[])):: (* Go completly wrong -> indices not in order -> should fail ?*)
-  (mkTestSubst ((0, 3)::(1, 2)::(4, 1)::(9, 0)::[])):: (* Erroneous result -> normal ?*)
+  (mkTestSubst ((4, 2)::(2, 2)::(3, 5)::[])):: (* Go completly wrong -> indices not in order -> should fail ?*)
+  (mkTestSubst ((1, 2)::(5, 2)::(3, 5)::[])):: (* Go completly wrong -> indices not in order -> should fail ?*)
+  (mkTestSubst ((0, 3)::(1, 2)::(4, 1)::(9, 5)::[])):: (* Erroneous result -> normal ?*)
   []
 
 let generateRandInput n m =
@@ -83,21 +80,6 @@ let generate_tests (name: string)
         (fun () -> if res then success () else failure ()))
     (test input_gen fmt tester)
 
-(* let test_inverse input = List.map (fun s -> *)
-(* match inverse s, flatten s with *)
-(* | Some(s'), Some(sf) -> (let comp = scompose sf s' in *)
-(* let ret = (match comp with *)
-(* | S.Identity -> true *)
-(* | _ -> false) *)
-(* in let str = ( *)
-(* (string_of_subst s), *)
-(* (string_of_subst sf), *)
-(* (string_of_subst s'), *)
-(* (string_of_subst comp)) *)
-(* in (ret, str)) *)
-(* | _ -> (false, (string_of_subst s, string_of_subst S.Identity,string_of_subst S.Identity, string_of_subst S.Identity))) *)
-(* input *)
-
 
 (* let inputs = test_inverse input *)
 
@@ -109,31 +91,18 @@ let get_dim lst =
     (0,0,0,0)
     lst
 
-let fmt_res lst =
-  let str = List.map (fun (_, s) -> s) lst
-  and res = List.map (fun (r, _) -> r) lst
-  in
+let fmt_res str =
   let (ds, dsf, ds', dcomp) = get_dim str
-  in let str' = List.map (fun (s, sf, s', com) -> "[ " ^
-                                                  (padding_right s ds ' ') ^ " -> " ^
-                                                  (padding_right (sf ^ " ]") dsf ' ') ^ " ∘ " ^
-                                                  (padding_right s' ds' ' ') ^ " = " ^
-                                                  (padding_right com dcomp ' ')
-                         ) str
-  in match zip res str' with
-  | None -> []
-  | Some (s) -> s
+  in List.map (fun (s, sf, s', com) -> "[ " ^
+                                       (padding_right s ds ' ') ^ " -> " ^
+                                       (padding_right (sf ^ " ]") dsf ' ') ^ " ∘ " ^
+                                       (padding_right s' ds' ' ') ^ " = " ^
+                                       (padding_right com dcomp ' ')
+              ) str
 
-let fmt_res2 lst =
-  let str = List.map (fun (_, s) -> s) lst
-  and res = List.map (fun (r, _) -> r) lst
-  in let (_, dsf, _, _) = get_dim str
-  in let str' = List.map (fun (s, sf, s', com) ->
-      (padding_right sf dsf ' ') ^ " ∘ " ^ s'
-    ) str
-  in match zip res str' with
-  | None -> []
-  | Some (s) -> s
+(* let string_of_subst = ocaml_string_of_subst *)
+(* let fmt_res str = *)
+(* List.map (fun (_, sf, s', com) -> sf  ^ " ∘ " ^ s'  ^ " = " ^ com ) str *)
 
 let get_dim lst =
   let max i s = max i (String.length s)
@@ -143,10 +112,25 @@ let get_dim lst =
     (0,0,0,0)
     lst
 
-let _ = generate_tests "Transformation"
+let _ = generate_tests "INVERSION"
+    (fun () -> input)
+    fmt_res
+    (fun s -> ( match inverse s, flatten s with
+         | Some (s'), Some (sf) -> (let comp = scompose sf s' in
+                                    let ret = (match comp with
+                                        | S.Identity -> true
+                                        | _          -> false)
+                                    in let str = ((string_of_subst s), (string_of_subst sf), (string_of_subst s'), (string_of_subst comp))
+                                    in (str, ret))
+         | _ -> ((string_of_subst s, string_of_subst S.Identity, string_of_subst S.Identity, string_of_subst S.Identity),
+                 false ))
+    )
+
+let _ = generate_tests "TRANSFORMATION"
     (fun () -> input)
     (fun subst ->
-       let subst = List.map (fun (s,fs) -> (string_of_subst s, string_of_subst fs)) subst
+       let string_of_subst = ocaml_string_of_subst
+       in let subst = List.map (fun (s,fs) -> (string_of_subst s, string_of_subst fs)) subst
        in let get_dim lst =
             let max i s = max i (String.length s)
             in List.fold_left (fun (acs, acsf) (s, sf) -> ((max acs s), (max acsf sf))) (0,0) lst
@@ -155,13 +139,5 @@ let _ = generate_tests "Transformation"
     (fun subst -> match flatten subst with
        |Some s -> ((subst, (s)), true)
        | None -> ((subst, subst), false))
-
-(* let fmt_inputs = fmt_res inputs *)
-
-(* let _ = List.map (fun (res, str) -> add_test "INVERSE" str (fun () -> if res then success () else failure ())) *)
-(* fmt_inputs *)
-
-(* let _ = List.map (fun (res, str) -> add_test "INVERSE (RAND)" str (fun () -> if res then success () else failure ())) *)
-(* (fmt_res2 (test (generateRandInput 5 15))) *)
 
 let _ = run_all ()

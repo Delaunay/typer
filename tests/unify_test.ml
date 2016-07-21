@@ -52,9 +52,9 @@ let fmt (lst: (lexp * lexp * result * result) list): string list =
   in List.map (fun (l1, l2, r1, r2) -> (padding_right l1 l ' ')
                                        ^ ", "
                                        ^ (padding_right l2 c1 ' ')
-                                       ^ "-> got: "
+                                       ^ " -> got: "
                                        ^ (padding_right r2 r ' ')
-                                       ^ "expected: "
+                                       ^ " expected: "
                                        ^ (padding_right r1 c2 ' ')
               ) str_lst
 
