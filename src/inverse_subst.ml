@@ -33,7 +33,14 @@ let toIr (s: lexp S.subst) : inter_subst =
     | S.Identity -> [Susp(dummy_var, (S.mkShift S.Identity last_offset ))]
     | _ -> assert false
     (* Assuming that a Shift always follow Cons, the case Shift should never arise *)
-  in toIr s 0
+  in let res = toIr s 0
+  in Debug_fun.do_debug ( fun () ->
+      List.iter (fun i ->
+          print_string (Fmt_lexp.string_of_lxp i); print_string "::";
+          match i with
+          | Susp _ -> assert true
+          | _ -> assert false) res;
+      print_newline(); print_newline(); ); res
 
 (** Transform an 'intermediate representation' into a sequence of cons followed by a shift
 
@@ -46,12 +53,18 @@ let toIr (s: lexp S.subst) : inter_subst =
 let flattenIr (s: inter_subst): lexp S.subst option =
   let rec flattenCons s =
     match s with
-    | Susp (dv, S.Shift (S.Identity, o))::[] -> Some (o, S.Identity)
+    | Susp (_, S.Shift (S.Identity, o))::[] -> Some (o, S.Identity)
+    | Susp (_, S.Identity)::[] -> Some (0, S.Identity)
     | susp::tail -> (match flattenCons tail with
         | Some (o, s1) -> Some (o, (S.Cons (unsusp_all susp, s1)))
         | None -> None)
     | _ -> None
-  in match flattenCons s with
+  in Debug_fun.do_debug ( fun () ->
+      List.iter (fun i ->
+          match i with
+          | Susp _ -> assert true
+          | _ -> assert false) s);
+  match flattenCons s with
   | Some(offset, cons) -> Some(S.Shift(cons, offset))
   | None               -> None
 
