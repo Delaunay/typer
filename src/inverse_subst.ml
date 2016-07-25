@@ -15,7 +15,7 @@ type inter_subst = lexp list (* Intermediate between "tree"-like substitution an
 (** Helper function that create a Cons(_, Shift(_)) *)
 (* let mkSubstNode var offset = S.Cons (var, S.Shift(S.Identity, offset)) *)
 
-let dummy_var = Var((dummy_location, ""), -1)
+let dummy_var = Var((dummy_location, "DummyVar"), -1)
 
 (** Transform a subst into a more linear 'intermdiate representation':
 
@@ -98,7 +98,7 @@ let rec nthOf s i =
 *)
 let idxOf (_, idx) = idx
 
-(** Returns a list of couple (X, -1) where X go from beg_ to end_*)
+(** Returns a list of couple (X, idx) where X go from beg_ to end_*)
 let rec genDummyVar beg_ end_ idx =
   if beg_ < end_
   then (beg_, idx)::(genDummyVar (beg_ + 1) end_ idx)

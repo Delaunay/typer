@@ -37,6 +37,8 @@ let input =
   (mkTestSubst ((0, 3)::(1, 2)::(4, 5)::[])):: (* Seems to work *)
   (mkTestSubst ((0, 3)::(1, 2)::(4, 1)::(5, 5)::[]))::
   (S.Cons (mkVar 1, S.Shift(S.Identity, 3)))::
+  (S.Cons (mkVar 1, S.Cons (mkVar 3, S.Identity)))::
+  (S.Shift (S.Cons (mkVar 1, S.Identity), 5))::
   (mkTestSubst ((4, 2)::(2, 2)::(3, 5)::[])):: (* Go completly wrong -> indices not in order -> should fail ?*)
   (mkTestSubst ((1, 2)::(5, 2)::(3, 5)::[])):: (* Go completly wrong -> indices not in order -> should fail ?*)
   (mkTestSubst ((0, 3)::(1, 2)::(4, 1)::(9, 5)::[])):: (* Erroneous result -> normal ?*)
@@ -80,8 +82,6 @@ let generate_tests (name: string)
         (fun () -> if res then success () else failure ()))
     (test input_gen fmt tester)
 
-
-(* let inputs = test_inverse input *)
 
 let get_dim lst =
   let max i s = max i (String.length s)
@@ -129,7 +129,8 @@ let _ = generate_tests "INVERSION"
 let _ = generate_tests "TRANSFORMATION"
     (fun () -> input)
     (fun subst ->
-       let string_of_subst = ocaml_string_of_subst
+       let padding_right s d c = "\n" ^ s ^ "\n"
+       in let string_of_subst = pp_ocaml_string_of_subst
        in let subst = List.map (fun (s,fs) -> (string_of_subst s, string_of_subst fs)) subst
        in let get_dim lst =
             let max i s = max i (String.length s)
@@ -138,6 +139,6 @@ let _ = generate_tests "TRANSFORMATION"
        in List.map (fun (s,sf) -> (padding_right s ds ' ') ^ " -> " ^ (padding_right sf dsf ' ')) subst)
     (fun subst -> match flatten subst with
        |Some s -> ((subst, (s)), true)
-       | None -> ((subst, subst), false))
+       | None -> ((subst, S.Identity), false))
 
 let _ = run_all ()

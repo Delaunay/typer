@@ -24,6 +24,16 @@ and ocaml_string_of_subst s =
   | S.Shift (s2, shift)      -> "Shift(" ^ ocaml_string_of_subst s2 ^ ", " ^ string_of_int shift ^ ")"
   | S.Identity               -> "Identity"
 
+and pp_ocaml_string_of_subst s =
+  let rec pp_ocaml_string_of_subst s i =
+    match s with
+    | S.Cons (l, s2) -> "Cons("  ^ string_of_lxp l ^ ",\n"
+                        ^ (String.make (4 * i) ' ') ^ pp_ocaml_string_of_subst s2 (i + 1) ^ ")"
+    | S.Shift (s2, shift)      -> "Shift(" ^ string_of_int shift ^ ",\n"
+                                  ^ (String.make (4 * i) ' ') ^ pp_ocaml_string_of_subst s2 (i + 1)^ ")"
+    | S.Identity               -> "Identity"
+  in pp_ocaml_string_of_subst s 1
+
 and string_of_lxp lxp =
   match lxp with
   | Imm (Integer (_, value))        -> "Integer(" ^ (string_of_int value) ^ ")"
@@ -51,9 +61,9 @@ and string_of_sort_level lvl =
 
 and string_of_sort sort =
   match sort with
-    | Stype lxp -> "Stype(" ^ string_of_lxp lxp ^ ")"
-    | StypeOmega -> "StypeOmega"
-    | StypeLevel -> "StypeLevel"
+  | Stype lxp -> "Stype(" ^ string_of_lxp lxp ^ ")"
+  | StypeOmega -> "StypeOmega"
+  | StypeLevel -> "StypeLevel"
 
 let colored_string_of_lxp lxp lcol vcol =
   match lxp with
