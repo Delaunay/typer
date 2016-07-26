@@ -98,7 +98,7 @@ let fmt_res str =
                                        (padding_right s ds ' ') ^ " -> " ^
                                        (padding_right (sf ^ " ]") dsf ' ') ^ " ∘ " ^
                                        (padding_right s' ds' ' ') ^ " = " ^
-                                       (padding_right com dcomp ' ')
+                                       (com)
               ) str
 
 (* let string_of_subst = ocaml_string_of_subst *)
