@@ -78,7 +78,23 @@ let flattenIr (s: inter_subst): lexp S.subst option =
 
     - <code>S.Cons(var, S.Shift(..., offset)) -> S.Shift(S.Cons(var, S.Cons(...)), x1+x2+x3...)</code>
 *)
-let flatten (s: lexp S.subst) = flattenIr (toIr s)
+let flatten (s: lexp S.subst) =
+  let rec check sf =
+    match sf with
+    | S.Identity -> Some 0
+    | S.Shift(sf, o) -> (match check sf with
+        | None -> None
+        | Some o2 -> Some (o + o2))
+    | S.Cons (Var(_, idx), sf) -> (match check sf with
+      | None -> None
+      | Some o -> if idx >= o then None else Some o)
+    | _ -> assert false
+  in
+  match flattenIr (toIr s) with
+  | None -> None
+  | Some (sf2) as sf -> match check sf2 with
+    | Some _ -> sf
+    | None ->  None
 
 
 (* Inverse *)
