@@ -92,11 +92,11 @@ let shiftOf s =
 
 (** Returns the number of element in a sequence of S.Cons
 *)
-let rec sizeOf s =
-  match s with
-  | S.Cons(_, s1)  -> 1 + sizeOf s1
-  | S.Shift(s1, _) -> sizeOf s1
-  | S.Identity     -> 0
+let rec sizeOf s = List.length s
+(* match s with *)
+(* | S.Cons(_, s1)  -> 1 + sizeOf s1 *)
+(* | S.Shift(s1, _) -> sizeOf s1 *)
+(* | S.Identity     -> 0 *)
 
 (** Returns the nth of a susbstitution,
     returns S.Identity if i > number_of_element(s)

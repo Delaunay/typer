@@ -123,7 +123,11 @@ let _ = generate_tests "INVERSION"
                                         | _          -> false)
                                     in let str = ((string_of_subst s), (string_of_subst sf), (string_of_subst s'), (string_of_subst comp))
                                     in (str, ret))
-         | _ -> ((string_of_subst s, string_of_subst S.Identity, string_of_subst S.Identity, string_of_subst S.Identity),
+         | Some (s'), None -> ((string_of_subst s, "None", string_of_subst s', "None"),
+                 false )
+         | None, Some(sf) -> ((string_of_subst s, string_of_subst sf, "None", "None"),
+                 false )
+         | _ -> ((string_of_subst s, "None", "None", "None"),
                  false ))
     )
 
