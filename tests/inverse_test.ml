@@ -30,17 +30,18 @@ let rec mkTestSubst lst =
   | [] -> S.Identity
 
 let input =
-  (mkTestSubst ((0, 3)::(2, 2)::(3, 5)::[])):: (* Seems to work *)
-  (mkTestSubst ((1, 3)::(2, 2)::(3, 5)::[])):: (* Seems to work *)
-  (mkTestSubst ((1, 3)::(2, 2)::(4, 5)::[])):: (* Seems to work *)
-  (mkTestSubst ((0, 3)::(2, 2)::(4, 5)::[])):: (* Seems to work *)
-  (mkTestSubst ((0, 3)::(1, 2)::(4, 5)::[])):: (* Seems to work *)
+  (mkTestSubst ((0, 3)::(2, 2)::(3, 5)::[]))::
+  (mkTestSubst ((1, 3)::(2, 2)::(3, 5)::[]))::
+  (mkTestSubst ((1, 3)::(2, 2)::(4, 5)::[]))::
+  (mkTestSubst ((0, 3)::(2, 2)::(4, 5)::[]))::
+  (mkTestSubst ((0, 3)::(1, 2)::(4, 5)::[]))::
   (mkTestSubst ((0, 3)::(1, 2)::(4, 1)::(5, 5)::[]))::
   (S.Cons (mkVar 1, S.Shift(S.Identity, 3)))::
   (S.Cons (mkVar 1, S.Cons (mkVar 3, S.Identity)))::
+  (S.Shift (S.Shift (S.Identity, 3), 4))::
   (S.Shift (S.Cons (mkVar 1, S.Identity), 5))::
-  (mkTestSubst ((4, 2)::(2, 2)::(3, 5)::[])):: (* Go completly wrong -> indices not in order -> should fail ?*)
-  (mkTestSubst ((1, 2)::(5, 2)::(3, 5)::[])):: (* Go completly wrong -> indices not in order -> should fail ?*)
+  (mkTestSubst ((4, 0)::(2, 2)::(3, 5)::[]))::
+  (mkTestSubst ((1, 2)::(5, 2)::(3, 5)::[]))::
   (mkTestSubst ((0, 3)::(1, 2)::(4, 1)::(9, 5)::[])):: (* Erroneous result -> normal ?*)
   []
 

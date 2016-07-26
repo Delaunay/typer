@@ -32,7 +32,6 @@ let toIr (s: lexp S.subst) : inter_subst =
     | S.Cons(Var _ as v, s_1) -> Susp(v, (S.mkShift S.Identity last_offset))::(toIr s_1 last_offset)
     | S.Identity -> [Susp(dummy_var, (S.mkShift S.Identity last_offset ))]
     | _ -> assert false
-    (* Assuming that a Shift always follow Cons, the case Shift should never arise *)
   in let res = toIr s 0
   in Debug_fun.do_debug ( fun () ->
       List.iter (fun i ->
@@ -119,7 +118,7 @@ let rec genDummyVar beg_ end_ idx =
 
 (** Returns a dummy variable with the db_index idx
 *)
-let mkVar idx = Var((U.dummy_location, ""), idx) (* not sure how to fill vdef *)
+let mkVar idx = Var((U.dummy_location, ""), idx)
 
 (** Map a list of tuple to a sequence of S.Cons
 *)
@@ -164,7 +163,10 @@ let fill l size acc =
 
 (** Take a "flattened" substitution and returns the inverse of the Cons
 *)
-let generateCons s _size shift = generate_s (fill (genCons s 0) shift [])
+let generateCons s _size shift =
+  let sort = List.sort (fun (ei1, _) (ei2, _) -> compare ei1 ei2)
+  in
+  generate_s (fill (sort (genCons s 0)) shift [])
 
 (** <code>s:S.subst -> l:lexp -> s':S.subst</code> where <code>l[s][s'] = l</code>
     Return undefined result for bad input
@@ -175,4 +177,5 @@ let rec inverse (subst: lexp S.subst ) : lexp S.subst option =
     let size = sizeOf flattened
     in Some(S.Shift((generateCons flattened size shift), size))
   | None            -> None
+  | _ -> assert false
 
