@@ -135,19 +135,23 @@ let get_dim lst =
 let _ = generate_tests "INVERSION"
     (fun () -> input)
     fmt_res
-    (fun s -> ( match inverse s, flatten s with
+    (fun (s, b) -> ( match inverse s, flatten s with
          | Some (s'), Some (sf) -> (let comp = scompose sf s' in
-                                    let ret = (match comp with
-                                        | S.Identity -> true
-                                        | _          -> false)
+                                    let ret = (match (is_identity comp), b with
+                                        | true, Ok -> true (*if we are here, the result of the composition should be Id*)
+                                        | false, Ok -> false
+                                        | _, _ -> false)
                                     in let str = ((string_of_subst s), (string_of_subst sf), (string_of_subst s'), (string_of_subst comp))
                                     in (str, ret))
-         | Some (s'), None -> ((string_of_subst s, "None", string_of_subst s', "None"),
-                 false )
-         | None, Some(sf) -> ((string_of_subst s, string_of_subst sf, "None", "None"),
-                 false )
-         | _ -> ((string_of_subst s, "None", "None", "None"),
-                 false ))
+         | Some (s'), None -> ((string_of_subst s, "None", string_of_subst s', "None"),(match b with
+             | TransfoFail -> true
+             | _ -> false))
+         | None, Some(sf) -> ((string_of_subst s, string_of_subst sf, "None", "None"), (match b with
+             | InverseFail -> true
+             | _ -> false))
+         | _ -> ((string_of_subst s, "None", "None", "None"), (match b with
+             | Ok -> false
+             | _ -> true)))
     )
 
 let _ = generate_tests "TRANSFORMATION"
@@ -161,8 +165,11 @@ let _ = generate_tests "TRANSFORMATION"
             in List.fold_left (fun (acs, acsf) (s, sf) -> ((max acs s), (max acsf sf))) (0,0) lst
        in let (ds, dsf) = get_dim subst
        in List.map (fun (s,sf) -> (padding_right s ds ' ') ^ " -> " ^ (padding_right sf dsf ' ')) subst)
-    (fun subst -> match flatten subst with
-       |Some s -> ((subst, (s)), true)
-       | None -> ((subst, S.Identity), false))
+    (fun (subst, b) -> match flatten subst, b with
+       | Some(s), Ok -> ((subst, (s)), true)
+       | Some(s), InverseFail -> ((subst, (s)), true)
+       | None, TransfoFail -> ((subst, S.Identity), true)
+       | Some (s), _ -> ((subst, s), false)
+       | None, _ -> ((subst, S.Identity), false))
 
 let _ = run_all ()
