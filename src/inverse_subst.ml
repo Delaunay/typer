@@ -72,8 +72,8 @@ let flatten (s: lexp S.subst): lexp S.subst option =
         | None -> None
         | Some o2 -> Some (o + o2))
     | S.Cons (Var(_, idx), sf) -> (match check sf with
-      | None -> None
-      | Some o -> if idx >= o then None else Some o)
+        | None -> None
+        | Some o -> if idx >= o then None else Some o)
     | _ -> assert false
   in
   match flattenIr (toIr s) with
@@ -112,7 +112,7 @@ let mkVar (idx: int): lexp = Var((U.dummy_location, ""), idx)
     @param size  size of the list to return
     @param acc   recursion accumulator
 *)
-let fill (l: (int * int) list) (size: int) (acc: (int * int) list): (int * int) list =
+let fill (l: (int * int) list) (size: int) (acc: (int * int) list): (int * int) list option =
   let genDummyVar beg_ end_ = genDummyVar beg_ end_ (size + 1)
   in
   let rec fill_before (l: (int * int) list): (int * int) list =
@@ -120,8 +120,9 @@ let fill (l: (int * int) list) (size: int) (acc: (int * int) list): (int * int) 
     | [] -> []
     | (idx, val_)::tail -> (if idx > 0 then (genDummyVar 0 idx)@l
                             else l)
-  and fill_after (l: (int * int) list) (size: int) (acc: (int * int) list): (int * int) list =
+  and fill_after (l: (int * int) list) (size: int) (acc: (int * int) list): (int * int) list option =
     match l with
+    | (idx1, val1)::(idx2, val2)::tail when (idx1 = idx2) -> None
     | (idx1, val1)::(idx2, val2)::tail ->
       let tail = (idx2, val2)::tail in
       let accu = if (idx2 - idx1) > 1
@@ -129,9 +130,9 @@ let fill (l: (int * int) list) (size: int) (acc: (int * int) list): (int * int) 
         else (acc@(idx1, val1)::[])
       in fill_after tail size accu
     | (idx1, val1)::[] -> if (idx1 + 1) < size
-      then acc@((idx1, val1)::(genDummyVar (idx1 + 1) size))
-      else acc@[(idx1, val1)]
-    | [] -> acc
+      then Some (acc@((idx1, val1)::(genDummyVar (idx1 + 1) size)))
+      else Some (acc@[(idx1, val1)])
+    | [] -> Some acc
   in fill_after (fill_before l) size acc
 
 (** Transform a L-exp to a list of (e_i, i) where e_i is the position of the debuijn index i
@@ -171,6 +172,7 @@ let rec inverse (subst: lexp S.subst ) : lexp S.subst option =
   | Some (s) ->
     let cons_lst, shift_val = to_list s
     in let size = sizeOf cons_lst
-    in let cons_lst = fill (sort cons_lst) shift_val []
-    in to_cons cons_lst size
+    in match fill (sort cons_lst) shift_val [] with
+    | None -> None
+    | Some cons_lst -> to_cons cons_lst size
 
