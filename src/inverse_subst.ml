@@ -12,8 +12,9 @@ type inter_subst = lexp list (* Intermediate between "tree"-like substitution an
 
 let dummy_var = Var((dummy_location, "DummyVar"), -1)
 
-(** Make a Shift with Identity as "inner" substitution
- Returns Identity if the Shift offset is lower or equal to 0*)
+(** Make a Shift with Identity as "inner" substitution.
+    Returns Identity if the Shift offset is lower or equal to 0
+*)
 let mkFinalShift (value: int): lexp S.subst =
   if value > 0
   then S.Shift (S.Identity, value)
@@ -102,8 +103,14 @@ let rec genDummyVar (beg_: int) (end_: int) (idx: int): (int * int) list =
 *)
 let mkVar (idx: int): lexp = Var((U.dummy_location, ""), idx)
 
-(* With the exemple of the article :
-   should return <code>(1,1)::(2, X)::(3,2)::(4,3)::(5, Z)::[]</code>
+(** Fill the gap between e_i in the list of couple (e_i, i) by adding
+    dummy variables.
+    With the exemple of the article :
+    should return <code>(1,1)::(2, X)::(3,2)::(4,3)::(5, Z)::[]</code>
+
+    @param l     list of (e_i, i) couples with gap between e_i
+    @param size  size of the list to return
+    @param acc   recursion accumulator
 *)
 let fill (l: (int * int) list) (size: int) (acc: (int * int) list): (int * int) list =
   let genDummyVar beg_ end_ = genDummyVar beg_ end_ (size + 1)
@@ -127,6 +134,9 @@ let fill (l: (int * int) list) (size: int) (acc: (int * int) list): (int * int) 
     | [] -> acc
   in fill_after (fill_before l) size acc
 
+(** Transform a L-exp to a list of (e_i, i) where e_i is the position of the debuijn index i
+    in the debuijn index sequence
+*)
 let to_list (s: lexp S.subst) : (((int * int) list) * int) =
   let rec as_list (s: lexp S.subst) (i: int) : (((int * int) list) * int) =
     match s with
@@ -136,6 +146,12 @@ let to_list (s: lexp S.subst) : (((int * int) list) * int) =
     | _ -> assert false;
   in as_list s 0
 
+(** Transform a (e_i, i) list to a substitution by transforming the list into Cons and
+    adding a Shift.
+
+    @param lst    list of couple (ei_, i) to transform
+    @param shift  value of the shift
+*)
 let rec to_cons (lst: (int * int) list) (shift: int) : lexp S.subst option =
   match lst with
   | (_, i)::tail -> (match (to_cons tail shift) with
@@ -143,8 +159,9 @@ let rec to_cons (lst: (int * int) list) (shift: int) : lexp S.subst option =
       | None -> None)
   | []           -> Some (mkFinalShift shift)
 
-(** <code>s:S.subst -> l:lexp -> s':S.subst</code> where <code>l[s][s'] = l</code>
-    Return undefined result for bad input
+(** Compute the inverse, if there is one, of the substitution.
+
+    <code>s:S.subst, l:lexp, s':S.subst</code> where <code>l[s][s'] = l</code> and <code> inverse s = s' </code>
 *)
 let rec inverse (subst: lexp S.subst ) : lexp S.subst option =
   let sort = List.sort (fun (ei1, _) (ei2, _) -> compare ei1 ei2)
