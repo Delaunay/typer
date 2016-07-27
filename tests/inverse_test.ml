@@ -64,20 +64,22 @@ let is_identity s =
   | S.Identity             -> true
   | _                      -> is_identity s 0
 
-let generateRandInput n m =
+let generateRandInput shiftMax numberOfTest =
   Random.self_init ();
-  let rec generateList n m =
-    let rec generateRandInput n i =
-      if n > i
+  let rec generateList shiftMax numberOfTest =
+    let rec generateRandInput shiftMax idx acc =
+      if idx < shiftMax
       then (if Random.bool ()
-            then ( let r = Random.int n in
-                   (i, (min (r + i) n))::(generateRandInput n (i + 1)) )
-            else generateRandInput n (i + 1))
+            then ( let r = Random.int shiftMax in
+                   let shift = (min (r + idx + 1) (shiftMax))
+                   in let shift = shift + (max 0 ((idx + shift) - acc))
+                   in (idx, shift)::(generateRandInput shiftMax (idx + 1) (shift + acc)) )
+            else generateRandInput shiftMax (idx + 1) acc)
       else []
-    in if m >= 0
-    then (mkTestSubst (generateRandInput n 0))::(generateList n (m - 1))
+    in if numberOfTest >= 0
+    then (mkTestSubst (generateRandInput shiftMax 0 0))::(generateList shiftMax (numberOfTest - 1))
     else []
-  in generateList n m
+  in generateList shiftMax numberOfTest
 
 let lxp = mkVar 3
 
@@ -153,6 +155,20 @@ let _ = generate_tests "INVERSION"
              | Ok -> false
              | _ -> true)))
     )
+
+(* TODO find a better way to check test*)
+let _ = generate_tests "INVERSION-RAND"
+    (fun () -> generateRandInput 5 10)
+    fmt_res
+    (fun (s) -> ( match inverse s, flatten s with
+         | Some (s'), Some (sf) -> (let comp = scompose sf s' in
+                                    let ret = (is_identity comp)
+                                    in let str = ((string_of_subst s), (string_of_subst sf), (string_of_subst s'), (string_of_subst comp))
+                                    in (str, ret))
+         | Some (s'), None -> ((string_of_subst s, "None", string_of_subst s', "None"),false)
+         | None, Some(sf) -> ((string_of_subst s, string_of_subst sf, "None", "None"), false)
+         | _ -> ((string_of_subst s, "None", "None", "None"), false)
+    ))
 
 let _ = generate_tests "TRANSFORMATION"
     (fun () -> input)
