@@ -8,16 +8,13 @@ module S = Subst
 
 (* Transformation *)
 
-(** a_0 . ↑^x1 (a_2 . ↑x2 ... ) . ↑^xn . id*)
-(* type inter_subst = lexp S.subst list (* Intermediate between "tree"-like substitution and fully flattened subsitution *) *)
 type inter_subst = lexp list (* Intermediate between "tree"-like substitution and fully flattened subsitution *)
-
-(** Helper function that create a Cons(_, Shift(_)) *)
-(* let mkSubstNode var offset = S.Cons (var, S.Shift(S.Identity, offset)) *)
 
 let dummy_var = Var((dummy_location, "DummyVar"), -1)
 
-let mkFinalShift value =
+(** Make a Shift with Identity as "inner" substitution
+ Returns Identity if the Shift offset is lower or equal to 0*)
+let mkFinalShift (value: int): lexp S.subst =
   if value > 0
   then S.Shift (S.Identity, value)
   else S.Identity
@@ -37,22 +34,15 @@ let toIr (s: lexp S.subst) : inter_subst =
     | S.Cons(Var _ as v, s_1) -> Susp(v, (S.mkShift S.Identity last_offset))::(toIr s_1 last_offset)
     | S.Identity -> [Susp(dummy_var, (S.mkShift S.Identity last_offset ))]
     | _ -> assert false
-  in let res = toIr s 0
-  in Debug_fun.do_debug ( fun () ->
-      List.iter (fun i ->
-          print_string (Fmt_lexp.string_of_lxp i); print_string "::";
-          match i with
-          | Susp _ -> assert true
-          | _ -> assert false) res;
-      print_newline(); print_newline(); ); res
+  in toIr s 0
 
 (** Transform an 'intermediate representation' into a sequence of cons followed by a shift
 
-    - a1.(↑^\{x1\}a2).(↑^\{x2\}a3).↑^\{x3\}id -> a1.a2.a3 ↑^\{x1+x2+x3\}
+    - a1.(↑^\{x1\}a2).(↑^\{x2\}a3).↑^\{x3\}id -> a1.a2.a3.(id ↑^\{x1+x2+x3\})
 
     or in ocaml-ish representation :
 
-    - <code>S.Cons(var, S.Shift(S.Identity, offset))::...::Identity -> S.Shift(S.Cons(var, S.Cons(...)), x1+x2+x3...)</code>
+    - <code>S.Cons(var, S.Shift(S.Identity, offset))::...::Identity -> S.Cons(var, S.Cons(...S.Shift(S.Identity, x1+x2+x3...)))</code>
 *)
 let flattenIr (s: inter_subst): lexp S.subst option =
   let rec flattenCons s offset =
@@ -63,12 +53,7 @@ let flattenIr (s: inter_subst): lexp S.subst option =
         | Some (s1) -> Some (S.Cons (unsusp_all susp, s1))
         | None -> None)
     | _ -> None
-  in Debug_fun.do_debug ( fun () ->
-      List.iter (fun i ->
-          match i with
-          | Susp _ -> assert true
-          | _ -> assert false) s);
-  flattenCons s 0
+  in flattenCons s 0
 
 (** Flatten a "tree"-like substitution:
 
@@ -76,10 +61,10 @@ let flattenIr (s: inter_subst): lexp S.subst option =
 
     or in ocaml-ish representation :
 
-    - <code>S.Cons(var, S.Shift(..., offset)) -> S.Shift(S.Cons(var, S.Cons(...)), x1+x2+x3...)</code>
+    - <code>S.Cons(var, S.Shift(S.Identity, offset))::...::Identity -> S.Cons(var, S.Cons(...S.Shift(S.Identity, x1+x2+x3...)))</code>
 *)
-let flatten (s: lexp S.subst) =
-  let rec check sf =
+let flatten (s: lexp S.subst): lexp S.subst option =
+  let rec check (sf: lexp S.subst): int option =
     match sf with
     | S.Identity -> Some 0
     | S.Shift(sf, o) -> (match check sf with
@@ -99,74 +84,36 @@ let flatten (s: lexp S.subst) =
 
 (* Inverse *)
 
-(** Returns the value of the shift of a S.Shift
-*)
-let shiftOf s =
-  match s with
-  | S.Shift (_, o) -> o
-  | _              -> 0
-
 (** Returns the number of element in a sequence of S.Cons
 *)
-let rec sizeOf s = List.length s
-(* match s with *)
-(* | S.Cons(_, s1)  -> 1 + sizeOf s1 *)
-(* | S.Shift(s1, _) -> sizeOf s1 *)
-(* | S.Identity     -> 0 *)
-
-(** Returns the nth of a susbstitution,
-    returns S.Identity if i > number_of_element(s)
-*)
-let rec nthOf s i =
-  match s, i with
-  | S.Cons _, 0       -> s
-  | S.Shift _, 0      -> s
-  | S.Identity, _     -> s
-  | S.Cons(_, s1), _  -> nthOf s1 (i - 1)
-  | S.Shift(s1, _), _ -> nthOf s1 (i - 1)
+let rec sizeOf (s: (int * int) list): int = List.length s
 
 (** Returns the db_index of the "inside" of a Var
 *)
 let idxOf (_, idx) = idx
 
 (** Returns a list of couple (X, idx) where X go from beg_ to end_*)
-let rec genDummyVar beg_ end_ idx =
+let rec genDummyVar (beg_: int) (end_: int) (idx: int): (int * int) list =
   if beg_ < end_
   then (beg_, idx)::(genDummyVar (beg_ + 1) end_ idx)
   else []
 
 (** Returns a dummy variable with the db_index idx
 *)
-let mkVar idx = Var((U.dummy_location, ""), idx)
-
-(** Map a list of tuple to a sequence of S.Cons
-*)
-let rec generate_s l =
-  match l with
-  | (_, i)::tail -> S.Cons(mkVar i, (generate_s tail))
-  | []           -> S.Identity
-
-(* With the exemple of the article :
-   should return <code>(1,1)::(3,2)::(4,3)::[]</code>
-*)
-let rec genCons s i =
-  match s with
-  | S.Cons(Var(v), s1) -> ((idxOf v), i)::(genCons s1 (i + 1)) (* e_{idx_of v} = i *)
-  | S.Identity -> []
-  | _ -> assert false
+let mkVar (idx: int): lexp = Var((U.dummy_location, ""), idx)
 
 (* With the exemple of the article :
    should return <code>(1,1)::(2, X)::(3,2)::(4,3)::(5, Z)::[]</code>
 *)
-let fill l size acc =
+let fill (l: (int * int) list) (size: int) (acc: (int * int) list): (int * int) list =
   let genDummyVar beg_ end_ = genDummyVar beg_ end_ (size + 1)
   in
-  let rec fill_before l =
+  let rec fill_before (l: (int * int) list): (int * int) list =
     match l with
     | [] -> []
     | (idx, val_)::tail -> (if idx > 0 then (genDummyVar 0 idx)@l
                             else l)
-  and fill_after l size acc =
+  and fill_after (l: (int * int) list) (size: int) (acc: (int * int) list): (int * int) list =
     match l with
     | (idx1, val1)::(idx2, val2)::tail ->
       let tail = (idx2, val2)::tail in
@@ -179,14 +126,6 @@ let fill l size acc =
       else acc@[(idx1, val1)]
     | [] -> acc
   in fill_after (fill_before l) size acc
-
-(** Take a "flattened" substitution and returns the inverse of the Cons
-*)
-let generateCons s _size shift =
-  let sort = List.sort (fun (ei1, _) (ei2, _) -> compare ei1 ei2)
-  in
-  generate_s (fill (sort (genCons s 0)) shift [])
-(* generate_s (fill (genCons s 0) shift []) *)
 
 let to_list (s: lexp S.subst) : (((int * int) list) * int) =
   let rec as_list (s: lexp S.subst) (i: int) : (((int * int) list) * int) =
