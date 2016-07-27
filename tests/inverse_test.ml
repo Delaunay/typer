@@ -29,21 +29,40 @@ let rec mkTestSubst lst =
                                   mkShift2 shift (mkTestSubst tail))
   | [] -> S.Identity
 
+type result_type =
+  | Ok
+  | TransfoFail
+  | InverseFail
+
+(*TODO better checking of where it should fail*)
 let input =
-  (mkTestSubst ((0, 3)::(2, 2)::(3, 5)::[]))::
-  (mkTestSubst ((1, 3)::(2, 2)::(3, 5)::[]))::
-  (mkTestSubst ((1, 3)::(2, 2)::(4, 5)::[]))::
-  (mkTestSubst ((0, 3)::(2, 2)::(4, 5)::[]))::
-  (mkTestSubst ((0, 3)::(1, 2)::(4, 5)::[]))::
-  (mkTestSubst ((0, 3)::(1, 2)::(4, 1)::(5, 5)::[]))::
-  (S.Cons (mkVar 1, S.Shift(S.Identity, 3)))::
-  (S.Cons (mkVar 1, S.Cons (mkVar 3, S.Identity)))::
-  (S.Shift (S.Shift (S.Identity, 3), 4))::
-  (S.Shift (S.Cons (mkVar 1, S.Identity), 5))::
-  (mkTestSubst ((4, 0)::(2, 2)::(3, 5)::[]))::
-  (mkTestSubst ((1, 2)::(5, 2)::(3, 5)::[]))::
-  (mkTestSubst ((0, 3)::(1, 2)::(4, 1)::(9, 5)::[])):: (* Erroneous result -> normal ?*)
+  ((mkTestSubst ((0, 3)::(2, 2)::(3, 5)::[])),         Ok)::
+  ((mkTestSubst ((1, 3)::(2, 2)::(3, 5)::[])),         Ok)::
+  ((mkTestSubst ((1, 3)::(2, 2)::(4, 5)::[])),         Ok)::
+  ((mkTestSubst ((0, 3)::(2, 2)::(4, 5)::[])),         Ok)::
+  ((mkTestSubst ((0, 3)::(1, 2)::(4, 5)::[])),         Ok)::
+  ((mkTestSubst ((0, 3)::(1, 2)::(4, 1)::(5, 5)::[])), TransfoFail)::
+  ((S.Cons (mkVar 1, S.Shift(S.Identity, 3))),         Ok)::
+  ((S.Cons (mkVar 1, S.Cons (mkVar 3, S.Identity))),   TransfoFail)::
+  ((S.Shift (S.Shift (S.Identity, 3), 4)),             Ok)::
+  ((S.Shift (S.Cons (mkVar 1, S.Identity), 5)),        TransfoFail)::
+  ((mkTestSubst ((4, 0)::(2, 2)::(3, 5)::[])),         Ok)::
+  ((mkTestSubst ((1, 2)::(5, 1)::(3, 5)::[])),         Ok)::
+  ((mkTestSubst ((1, 2)::(5, 2)::(3, 5)::[])),         InverseFail)::
+  ((mkTestSubst ((0, 3)::(1, 2)::(4, 1)::(9, 5)::[])), TransfoFail)::
   []
+
+let is_identity s =
+  let rec is_identity s acc =
+    match s with
+    | S.Cons(Var(_, idx), s1) when idx = acc -> is_identity s1 (acc + 1)
+    | S.Shift(S.Identity, shift)             -> (acc = shift)
+    | S.Identity                             -> true
+    | _                                      -> false
+  in match s with
+  | S.Shift(S.Identity, _) -> true
+  | S.Identity             -> true
+  | _                      -> is_identity s 0
 
 let generateRandInput n m =
   Random.self_init ();
