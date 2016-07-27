@@ -208,11 +208,13 @@ let rec to_cons (lst: (int * int) list) (shift: int) : lexp S.subst option =
     Return undefined result for bad input
 *)
 let rec inverse (subst: lexp S.subst ) : lexp S.subst option =
+  let sort = List.sort (fun (ei1, _) (ei2, _) -> compare ei1 ei2)
+  in
   match flatten subst with
   | None -> None
   | Some (s) ->
     let cons_lst, shift_val = to_list s
     in let size = sizeOf cons_lst
-    in let cons_lst = fill cons_lst shift_val []
+    in let cons_lst = fill (sort cons_lst) shift_val []
     in to_cons cons_lst size
 
