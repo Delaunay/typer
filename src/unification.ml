@@ -22,8 +22,9 @@ type constraints  = (lexp * lexp) list
 (*| Error _  -> None*)
 (*| Nil      -> None*)
 
-let global_last_metavar = ref 0
-let create_metavar = global_last_metavar := !global_last_metavar + 1; !global_last_metavar
+let global_last_metavar = ref (-1) (*The first metavar is 0*)
+let create_metavar () = global_last_metavar := !global_last_metavar + 1; !global_last_metavar
+let mkMetavar subst vdef = Metavar (create_metavar (), subst, vdef)
 
 (* For convenience *)
 type return_type = (substitution * constraints) option

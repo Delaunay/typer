@@ -48,6 +48,8 @@ open Eval
 open Grammar
 open Builtin
 
+module Unif = Unification
+
 module TC = Typecheck
 module EL = Elexp
 module SU = Subst
@@ -274,8 +276,11 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
             let ltp, _ = lexp_infer ptp ctx in
                 (_lexp_p_check pxp ltp ctx (i + 1)), ltp
 
-        | _ -> pexp_print p; print_string "\n";
-            lexp_fatal tloc "Unhandled Pexp"
+        (* | _ -> pexp_print p; print_string "\n"; *)
+            (* lexp_fatal tloc "Unhandled Pexp" *)
+        | _ -> let meta = Unif.mkMetavar S.Identity (Util.dummy_location, "")
+          in (meta, lexp_p_check p meta ctx)
+          (* lexp_p_check p (Unif.mkMetavar S.Identity (*???*) (Util.dummy_location, "")) ctx  *)
 
 
 and lexp_let_decls decls (body: lexp) ctx i =
