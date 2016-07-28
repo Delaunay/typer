@@ -26,14 +26,9 @@ let toIr (s: lexp S.subst) : inter_subst =
   let rec toIr s total_offset =
     match s with
     | S.Shift (s_1, offset) -> toIr s_1 (total_offset + offset)
-    (* FIXME: A Cons with something else than a Var is not an error.
-     * It might mean that we can't invert this substitution, but that's
-     * no justification for "assert false".  *)
-    | S.Cons(Var _ as v, s_1)
-      (* FIXME: Why not L.mkSusp?  *)
-      -> Susp (v, S.shift total_offset)::(toIr s_1 total_offset)
-    | S.Identity -> [Susp (dummy_var, S.shift total_offset)]
-    | _ -> assert false
+    | S.Cons(v, s_1)
+      -> (mkSusp v (S.shift total_offset))::(toIr s_1 total_offset)
+    | S.Identity -> [Susp (dummy_var, S.shift total_offset)] (* FIXME : better stop case ?*)
   in toIr s 0
 
 (** Transform an 'intermediate representation' into a sequence of cons followed by a shift
@@ -45,9 +40,12 @@ let toIr (s: lexp S.subst) : inter_subst =
     - <code>S.Cons(var, S.Shift(S.Identity, offset))::...::Identity -> S.Cons(var, S.Cons(...S.Shift(S.Identity, x1+x2+x3...)))</code>
 *)
 let flattenIr (s: inter_subst): lexp S.subst option =
-  let rec flattenCons s =
+  let rec flattenCons (s: inter_subst): lexp S.subst option =
     match s with
-    | Susp (_dummy_var, s)::[] -> Some s
+    (*FIXME  : a Susp = error
+               a Var = cool*)
+    | Susp (dv, s)::[] when dv = dummy_var -> Some s (*FIXME better stop case ?*)
+    | Susp ( _ )::_ -> None
     | susp::tail -> (match flattenCons tail with
         | Some (s1) -> Some (S.cons (nosusp susp) s1)
         | None -> None)
