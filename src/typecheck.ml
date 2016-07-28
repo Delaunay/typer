@@ -110,7 +110,7 @@ let lookup_type ctx vref =
 let lookup_value ctx vref =
   let (_, i) = vref in
   match Myers.nth i ctx with
-  | (o, _, LetDef v, _) -> Some (unsusp v (S.shift (i + 1 - o)))
+  | (o, _, LetDef v, _) -> Some (push_susp v (S.shift (i + 1 - o)))
   | _ -> None
 
 let assert_type e t t' =
@@ -151,7 +151,7 @@ let rec check ctx e =
   | Builtin (_, t) -> t
   (* FIXME: Check recursive references.  *)
   | Var v -> lookup_type ctx v
-  | Susp (e, s) -> check ctx (unsusp e s)
+  | Susp (e, s) -> check ctx (push_susp e s)
   | Let (_, defs, e)
     -> let tmp_ctx =
         L.fold_left (fun ctx (v, e, t)
