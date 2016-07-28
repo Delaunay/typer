@@ -153,6 +153,14 @@ let _ = generate_tests "INVERSION"
              | _ -> true)))
     )
 
+let fmt_res str =
+  List.map (fun (s, sf, s', com) -> "[ " ^
+                                       (s) ^ " -> " ^
+                                       ((sf ^ " ]")) ^ " ∘ " ^
+                                       (s') ^ " = " ^
+                                       (com)
+              ) str
+
 (* TODO find a better way to check test*)
 let _ = generate_tests "INVERSION-RAND"
     (fun () -> generateRandInput 5 10)
