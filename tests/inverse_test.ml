@@ -56,7 +56,7 @@ let is_identity s =
   let rec is_identity s acc =
     match s with
     | S.Cons(Var(_, idx), s1) when idx = acc -> is_identity s1 (acc + 1)
-    | S.Shift(S.Identity, shift)             -> (0 = shift)
+    | S.Shift(S.Identity, shift)             -> (acc = shift)
     | S.Identity                             -> true
     | _                                      -> false
   in is_identity s 0
