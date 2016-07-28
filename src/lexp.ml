@@ -53,13 +53,14 @@ type label = symbol
 (* Pour la propagation des types bidirectionnelle, tout va dans `infer`,
  * sauf Lambda et Case qui vont dans `check`.  Je crois.  *)
 type ltype = lexp
+ and subst = lexp S.subst
  and lexp =
    | Imm of sexp                        (* Used for strings, ...  *)
    | SortLevel of sort_level
    | Sort of U.location * sort
    | Builtin of vdef * ltype
    | Var of vref
-   | Susp of lexp * lexp S.subst  (* Lazy explicit substitution: e[σ].  *)
+   | Susp of lexp * subst  (* Lazy explicit substitution: e[σ].  *)
    (* This "Let" allows recursion.  *)
    | Let of U.location * (vdef * lexp * ltype) list * lexp
    | Arrow of arg_kind * vdef option * ltype * U.location * lexp
@@ -74,7 +75,7 @@ type ltype = lexp
              * ltype (* The type of the return value of all branches *)
              * (U.location * (arg_kind * vdef option) list * lexp) SMap.t
              * lexp option               (* Default.  *)
-    | Metavar of int * (lexp S.subst) * vdef (*idx * S.subst * (name * location)*)
+   | Metavar of int * subst * vdef
  (*   (\* For logical metavars, there's no substitution.  *\)
   *   | Metavar of (U.location * string) * metakind * metavar ref
   * and metavar =
@@ -110,9 +111,13 @@ type varbind =
 
 let rec mkSusp e s =
   if S.identity_p s then e else
+    (* We apply the substitution eagerly to some terms.
+     * There's no deep technical rason for that:
+     * it just seemed like a good idea to do it eagerly when it's easy.  *)
     match e with
     | Susp (e, s') -> mkSusp e (scompose s' s)
-    | Var (l,v) -> slookup s l v  (* Apply the substitution eagerly.  *)
+    | Var (l,v) -> slookup s l v
+    | Metavar (vn, s', vd) -> Metavar (vn, scompose s' s, vd)
     | _ -> Susp (e, s)
 and scompose s1 s2 = S.compose mkSusp s1 s2
 and slookup s l v = S.lookup (fun l i -> Var (l, i))
@@ -272,16 +277,13 @@ let rec lexp_location e =
 let vdummy = (U.dummy_location, "dummy")
 let maybev mv = match mv with None -> vdummy | Some v -> v
 
-let rec unsusp e s =            (* Push a suspension one level down.  *)
+let rec push_susp e s =            (* Push a suspension one level down.  *)
   match e with
   | Imm _ -> e
   | SortLevel _ -> e
   | Sort (l, Stype e) -> Sort (l, Stype (mkSusp e s))
   | Sort (l, _) -> e
   | Builtin _ -> e
-  | Var ((l,_) as lv,v) -> U.msg_error "SUSP" l "¡Susp(Var)!"; slookup s lv v
-  | Susp (e,s') -> U.msg_error "SUSP" (lexp_location e) "¡Susp(Susp)!";
-                  mkSusp e (scompose s' s)
   | Let (l, defs, e)
     -> let s' = L.fold_left (fun s (v, _, _) -> ssink v s) s defs in
       let (_,ndefs) = L.fold_left (fun (s,ndefs) (v, def, ty)
@@ -322,11 +324,19 @@ let rec unsusp e s =            (* Push a suspension one level down.  *)
             match default with
             | None -> default
             | Some e -> Some (mkSusp e s))
-  | Metavar (idx, s', vdef_) -> Metavar(idx, (S.compose (mkSusp) s s'), vdef_)
+  (* Susp should never appear around Var/Susp/Metavar because mkSusp
+   * pushes the subst into them eagerly.  IOW if there's a Susp(Var..)
+   * or Susp(Metavar..) it's because some chunk of code should use mkSusp
+   * rather than Susp.  *)
+  | Susp (e,s') -> U.msg_error "SUSP" (lexp_location e) "¡Susp(Susp)!";
+                  push_susp e (scompose s' s)
+  | (Var _ | Metavar _)
+    -> U.msg_error "SUSP" (lexp_location e) "¡Susp((meta)var)!";
+      push_susp (mkSusp e s) S.identity
 
-let unsusp_all e =
+let nosusp e =                  (* Return `e` without `Susp`.  *)
   match e with
-    | Susp(e, s) -> unsusp e s
+    | Susp(e, s) -> push_susp e s
     | _ -> e
 
 let lexp_to_string e =
@@ -670,7 +680,7 @@ and _lexp_to_str ctx exp =
             | Float  (_, s) -> tval (string_of_float s)
             | e -> sexp_to_str e)
 
-        | Susp _ -> _lexp_to_str ctx (unsusp_all exp)
+        | Susp (e, s) -> _lexp_to_str ctx (push_susp e s)
 
         | Var ((loc, name), idx) -> name ^ (index idx) ;
 

@@ -21,6 +21,28 @@ this program.  If not, see <http://www.gnu.org/licenses/>.  *)
 
 module U = Util
 
+(* Implementation of the subsitution calculus.
+ *
+ * As a general rule, try not to use the constructors of the `subst'
+ * datatype, but use the following entry points instead.
+ * Constructor functions:
+ * - S.identity
+ * - S.cons
+ * - S.mkShift
+ * - S.shift
+ * - S.compose
+ * - S.substitute
+ * - S.sink
+ * Destructor functions:
+ * - S.identity_p
+ * - S.lookup
+ *
+ * This implementation is generic (i.e. can be with various datatypes
+ * implementing the associated lambda-calculus), which is the reason for
+ * the added complexity of arguments like `mkVar` and `mkShift` to `S.lookup`.
+ * So in general, you'll want to use Lexp.scompose and Lexp.slookup
+ * for those functions.
+ *)
 
 (* Suspensions definitions.
  *
@@ -236,6 +258,7 @@ let shift (m:db_offset) = mkShift Identity m
 (* The trivial substitution which doesn't do anything.  *)
 let identity = Identity
 
+(* Test if a substitution is trivial.  The "_p" stands for "predicate".  *)
 let identity_p s = match s with | Identity -> true | _ -> false
 
 (* Compose two substitutions.  This implements the merging rules.

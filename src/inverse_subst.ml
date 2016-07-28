@@ -12,28 +12,27 @@ type inter_subst = lexp list (* Intermediate between "tree"-like substitution an
 
 let dummy_var = Var((dummy_location, "DummyVar"), -1)
 
-(** Make a Shift with Identity as "inner" substitution.
-    Returns Identity if the Shift offset is lower or equal to 0
-*)
-let mkFinalShift (value: int): lexp S.subst =
-  if value > 0
-  then S.Shift (S.Identity, value)
-  else S.Identity
+(** Transform a subst into a more linear 'intermediate representation':
 
-(** Transform a subst into a more linear 'intermdiate representation':
-
-    - a1.↑^\{x1\}(a2.↑^\{x2\}(a3.↑^\{x3\}id)) -> a1.(↑^\{x1\}a2).(↑^\{x2\}a3).↑^\{x3\}id
+    - a₁ · ↑n₁ (a₂ · ↑n₂ (a₃ · ↑n₃ id)) 
+      ⇒ a₁' · a₂' · a₃' · ↑n₃ id
 
     or in ocaml-ish representation :
 
-    - S.Cons(var, S.Shift(..., offset))  -> S.Cons(var, S.Shift(S.Identity, offset))::...::Identity
+    - S.Cons(var, S.Shift(..., offset))
+      ⇒ S.Cons(var, S.Shift(S.Identity, offset))::...::Identity
 *)
 let toIr (s: lexp S.subst) : inter_subst =
-  let rec toIr s last_offset =
+  let rec toIr s total_offset =
     match s with
-    | S.Shift (s_1, offset) -> toIr s_1 (last_offset + offset)
-    | S.Cons(Var _ as v, s_1) -> Susp(v, (S.mkShift S.Identity last_offset))::(toIr s_1 last_offset)
-    | S.Identity -> [Susp(dummy_var, (S.mkShift S.Identity last_offset ))]
+    | S.Shift (s_1, offset) -> toIr s_1 (total_offset + offset)
+    (* FIXME: A Cons with something else than a Var is not an error.
+     * It might mean that we can't invert this substitution, but that's
+     * no justification for "assert false".  *)
+    | S.Cons(Var _ as v, s_1)
+      (* FIXME: Why not L.mkSusp?  *)
+      -> Susp (v, S.shift total_offset)::(toIr s_1 total_offset)
+    | S.Identity -> [Susp (dummy_var, S.shift total_offset)]
     | _ -> assert false
   in toIr s 0
 
@@ -46,15 +45,14 @@ let toIr (s: lexp S.subst) : inter_subst =
     - <code>S.Cons(var, S.Shift(S.Identity, offset))::...::Identity -> S.Cons(var, S.Cons(...S.Shift(S.Identity, x1+x2+x3...)))</code>
 *)
 let flattenIr (s: inter_subst): lexp S.subst option =
-  let rec flattenCons s offset =
+  let rec flattenCons s =
     match s with
-    | Susp (_, S.Shift (S.Identity, o))::[] -> Some (S.Shift(S.Identity, o + offset))
-    | Susp (_, S.Identity)::[] -> Some (mkFinalShift offset)
-    | susp::tail -> (match flattenCons tail offset with
-        | Some (s1) -> Some (S.Cons (unsusp_all susp, s1))
+    | Susp (_dummy_var, s)::[] -> Some s
+    | susp::tail -> (match flattenCons tail with
+        | Some (s1) -> Some (S.cons (nosusp susp) s1)
         | None -> None)
     | _ -> None
-  in flattenCons s 0
+  in flattenCons s
 
 (** Flatten a "tree"-like substitution:
 
@@ -156,9 +154,9 @@ let to_list (s: lexp S.subst) : (((int * int) list) * int) =
 let rec to_cons (lst: (int * int) list) (shift: int) : lexp S.subst option =
   match lst with
   | (_, i)::tail -> (match (to_cons tail shift) with
-      | Some s -> Some (S.Cons (mkVar i, s))
+      | Some s -> Some (S.cons (mkVar i) s)
       | None -> None)
-  | []           -> Some (mkFinalShift shift)
+  | []           -> Some (S.shift shift)
 
 (** Compute the inverse, if there is one, of the substitution.
 

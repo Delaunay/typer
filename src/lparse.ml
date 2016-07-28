@@ -241,7 +241,7 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
                 let inductive_type = Var((loc, type_name), idx) in
 
                 (* Get constructor args *)
-                let formal, args = match unsusp_all idt with
+                let formal, args = match nosusp idt with
                     | Inductive(_, _, formal, ctor_def) -> (
                         try formal, (SMap.find cname ctor_def)
                         with Not_found ->
@@ -297,7 +297,7 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
         (* This case cannot be inferred *)
         | Plambda (kind, var, None, body) ->(
             (* Read var type from the provided type *)
-            let ltp, lbtp = match unsusp_all t with
+            let ltp, lbtp = match nosusp t with
                 | Arrow(kind, _, ltp, _, lbtp) -> ltp, lbtp
                 | _ -> lexp_error tloc "Type does not match"; dltype, dltype in
 
@@ -402,7 +402,7 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
 
     (* consume Arrows and args together *)
     let rec get_return_type name i ltp args =
-        match (unsusp_all ltp), args with
+        match (nosusp ltp), args with
             | _, [] -> ltp
             | Arrow(_, _, _, _, ltp), hd::tl -> (get_return_type name (i + 1) ltp tl)
             | _, _ -> lexp_warning loc
@@ -416,7 +416,7 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
 
     (* retrieve function's body *)
     let body, ltp = _lexp_p_infer fun_name ctx (i + 1) in
-    let ltp = unsusp_all ltp in
+    let ltp = nosusp ltp in
 
     let handle_named_call (loc, name) =
         (*  Process Arguments *)
@@ -428,7 +428,7 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
             let idx = senv_lookup name ctx in
             let vf = (make_var name idx loc) in
 
-                match unsusp_all (env_lookup_expr ctx ((loc, name), idx)) with
+                match nosusp (env_lookup_expr ctx ((loc, name), idx)) with
                     | Builtin((_, "Built-in"), _) ->(
                         (* ------ SPECIAL ------ *)
                         match !_parsing_internals, largs with
@@ -476,7 +476,7 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
               lexp_fatal loc (name ^ " was found but " ^ (string_of_int idx) ^
                     " is not a correct index.") in
 
-          let lxp = match unsusp_all lxp with
+          let lxp = match nosusp lxp with
               | Call(Var((_, "Macro_"), _), [(_, fct)]) -> fct
               | _ ->
                 print_string "\n";
@@ -555,7 +555,7 @@ and lexp_read_pattern pattern exp target ctx:
         | Ppatvar ((loc, name) as var) ->(
             try(
                 let idx = senv_lookup name ctx in
-                match unsusp_all (env_lookup_expr ctx ((loc, name), idx)) with
+                match nosusp (env_lookup_expr ctx ((loc, name), idx)) with
                     (* We are matching a constructor *)
                     | Cons _ -> (name, loc, []), ctx
 
@@ -641,7 +641,7 @@ and lexp_decls_macro (loc, mname) sargs ctx: (pdecl list * lexp_context) =
                   " is not a correct index.") in
 
   (* get stored function *)
-  let lxp = match unsusp_all lxp with
+  let lxp = match nosusp lxp with
     | Call(Var((_, "Macro_"), _), [(_, fct)]) -> fct
     | _ -> print_string "\n";
       print_string (lexp_to_string lxp); print_string "\n";

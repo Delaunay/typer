@@ -81,11 +81,11 @@ let zip_fold list1 list2 f =
  The metavar unifyer is the end rule, it can't call unify with it's parameter (changing their order)
 *)
 let rec unify (l: lexp) (r: lexp) (subst: substitution) : return_type =
-  let tmp = match (l, r) with
+  let tmp = match (nosusp l, nosusp r) with
     | (_, Metavar _)   -> _unify_metavar  r l subst
     | (_, Call _)      -> _unify_call     r l subst
     | (_, Case _)      -> _unify_case     r l subst
-    | (_, Susp _)      -> _unify_susp     r l subst
+    | (_, Susp _)      -> assert false
     | (_, Let _)       -> _unify_let      r l subst
     | (Imm _, _)       -> _unify_imm      l r subst
     | (Cons _, _)      -> _unify_cons     l r subst
@@ -96,7 +96,7 @@ let rec unify (l: lexp) (r: lexp) (subst: substitution) : return_type =
     | (Lambda _, _)    -> _unify_lambda   l r subst
     | (Metavar _, _)   -> _unify_metavar  l r subst
     | (Call _, _)      -> _unify_call     l r subst
-    | (Susp _, _)      -> _unify_susp     l r subst
+    | (Susp _, _)      -> assert false
     | (Case _, _)      -> _unify_case     l r subst
     | (Inductive _, _) -> _unfiy_induct   l r subst
     | (Sort _, _)      -> _unify_sort     l r subst
@@ -270,13 +270,6 @@ and _unify_call (call: lexp) (lxp: lexp) (subst: substitution) : return_type =
   in match tmp with
   | None -> Debug_fun.debug_print_unify "_unify_call" call lxp " -> unification failed"; tmp
   | Some _ -> Debug_fun.debug_print_unify "_unify_call" call lxp " -> unification success"; tmp
-
-(** Apply unsusp to the Susp and unify the result with the lexp
-*)
-and _unify_susp (susp_: lexp) (lxp: lexp) (subst: substitution) : return_type =
-  match susp_ with
-  | Susp _ -> unify (unsusp_all susp_) lxp subst
-  | _ -> None
 
 (** Unify a Case with a lexp
  - Case, Case -> try to unify

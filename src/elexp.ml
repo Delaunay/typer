@@ -86,7 +86,7 @@ let rec erase_type (lxp: L.lexp): elexp =
             Case(l, (erase_type target), (clean_map cases),
                                          (clean_maybe default))
 
-        | L.Susp(l, s)                -> erase_type (L.unsusp l s)
+        | L.Susp(l, s)                -> erase_type (L.push_susp l s)
 
         (* To be thrown out *)
         | L.Arrow _                   -> Type

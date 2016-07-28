@@ -21,13 +21,13 @@ open Fmt_lexp
 open Debug_fun
 
 let mkShift2 shift subst =
-  S.Shift (subst, shift)
+  S.mkShift subst shift
 
 let rec mkTestSubst lst =
   match lst with
-  | (var, shift)::tail -> S.Cons (mkVar var,
-                                  mkShift2 shift (mkTestSubst tail))
-  | [] -> S.Identity
+  | (var, shift)::tail -> S.cons (mkVar var)
+                                (mkShift2 shift (mkTestSubst tail))
+  | [] -> S.identity
 
 type result_type =
   | Ok
@@ -42,10 +42,10 @@ let input =
   ((mkTestSubst ((0, 3)::(2, 2)::(4, 5)::[])),         Ok)::
   ((mkTestSubst ((0, 3)::(1, 2)::(4, 5)::[])),         Ok)::
   ((mkTestSubst ((0, 3)::(1, 2)::(4, 1)::(5, 5)::[])), TransfoFail)::
-  ((S.Cons (mkVar 1, S.Shift(S.Identity, 3))),         Ok)::
-  ((S.Cons (mkVar 1, S.Cons (mkVar 3, S.Identity))),   TransfoFail)::
-  ((S.Shift (S.Shift (S.Identity, 3), 4)),             Ok)::
-  ((S.Shift (S.Cons (mkVar 1, S.Identity), 5)),        TransfoFail)::
+  ((S.cons (mkVar 1) (S.shift 3)),                      Ok)::
+  ((S.cons (mkVar 1) (S.cons (mkVar 3) (S.identity))),   TransfoFail)::
+  ((S.mkShift (S.shift 3) 4),                            Ok)::
+  ((S.mkShift (S.cons (mkVar 1) (S.identity)) 5),       TransfoFail)::
   ((mkTestSubst ((4, 0)::(2, 2)::(3, 5)::[])),         Ok)::
   ((mkTestSubst ((1, 2)::(5, 1)::(3, 5)::[])),         Ok)::
   ((mkTestSubst ((1, 2)::(5, 2)::(3, 5)::[])),         InverseFail)::
@@ -59,10 +59,7 @@ let is_identity s =
     | S.Shift(S.Identity, shift)             -> (acc = shift)
     | S.Identity                             -> true
     | _                                      -> false
-  in match s with
-  | S.Shift(S.Identity, _) -> true
-  | S.Identity             -> true
-  | _                      -> is_identity s 0
+  in is_identity s 0
 
 let generateRandInput shiftMax numberOfTest =
   Random.self_init ();
@@ -184,8 +181,8 @@ let _ = generate_tests "TRANSFORMATION"
     (fun (subst, b) -> match flatten subst, b with
        | Some(s), Ok -> ((subst, (s)), true)
        | Some(s), InverseFail -> ((subst, (s)), true)
-       | None, TransfoFail -> ((subst, S.Identity), true)
+       | None, TransfoFail -> ((subst, S.identity), true)
        | Some (s), _ -> ((subst, s), false)
-       | None, _ -> ((subst, S.Identity), false))
+       | None, _ -> ((subst, S.identity), false))
 
 let _ = run_all ()
