@@ -276,11 +276,9 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
             let ltp, _ = lexp_infer ptp ctx in
                 (_lexp_p_check pxp ltp ctx (i + 1)), ltp
 
-        (* | _ -> pexp_print p; print_string "\n"; *)
-            (* lexp_fatal tloc "Unhandled Pexp" *)
-        | _ -> let meta = Unif.mkMetavar S.Identity (Util.dummy_location, "")
+        (*FIXME right thing to do*)
+        | _ -> let meta = Unif.mkMetavar S.Identity (Util.dummy_location, "") (*???*)
           in (meta, lexp_p_check p meta ctx)
-          (* lexp_p_check p (Unif.mkMetavar S.Identity (*???*) (Util.dummy_location, "")) ctx  *)
 
 
 and lexp_let_decls decls (body: lexp) ctx i =
@@ -292,6 +290,8 @@ and lexp_let_decls decls (body: lexp) ctx i =
 and lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context): lexp =
   _lexp_p_check p t ctx 1
 
+(*TODO : - add substitution parameter for unification
+         - try to unify in default case *)
 and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
     let tloc = pexp_location p in
 
@@ -317,18 +317,21 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
                 lxp
 
         | _ -> let (e, inferred_t) = _lexp_p_infer p ctx (i + 1) in
-            e (*
+            (* e *)
             match e with
                 (* Built-in is a dummy function with no type. We cannot check
                  * Built-in *)
                 | Builtin _ -> e
                 | _ ->
-            (if TC.conv_p inferred_t t then () else debug_msg (
+            (* (if TC.conv_p inferred_t t then () else debug_msg ( *)
+                  (match Unif.unify inferred_t t Unif.empty_subst with
+                   | Some _ -> ()
+                   | None -> debug_msg (
                 print_string "1 exp "; lexp_print e; print_string "\n";
                 print_string "2 inf "; lexp_print inferred_t; print_string "\n";
                 print_string "3 Ann "; lexp_print t; print_string "\n";
                 lexp_warning tloc "Type Mismatch inferred != Annotation"));
-                e*)
+                e
 
 (* Lexp.case cam be checked and inferred *)
 and lexp_case (rtype: lexp option) (loc, target, patterns) ctx i =
