@@ -42,10 +42,10 @@ let input =
   ((mkTestSubst ((0, 3)::(2, 2)::(4, 5)::[])),         Ok)::
   ((mkTestSubst ((0, 3)::(1, 2)::(4, 5)::[])),         Ok)::
   ((mkTestSubst ((0, 3)::(1, 2)::(4, 1)::(5, 5)::[])), TransfoFail)::
-  ((S.cons (mkVar 1) (S.shift 3)),                      Ok)::
-  ((S.cons (mkVar 1) (S.cons (mkVar 3) (S.identity))),   TransfoFail)::
-  ((S.mkShift (S.shift 3) 4),                            Ok)::
-  ((S.mkShift (S.cons (mkVar 1) (S.identity)) 5),       TransfoFail)::
+  ((S.cons (mkVar 1) (S.shift 3)),                     Ok)::
+  ((S.cons (mkVar 1) (S.cons (mkVar 3) (S.identity))), TransfoFail)::
+  ((S.mkShift (S.shift 3) 4),                          Ok)::
+  ((S.mkShift (S.cons (mkVar 1) (S.identity)) 5),      TransfoFail)::
   ((mkTestSubst ((4, 0)::(2, 2)::(3, 5)::[])),         Ok)::
   ((mkTestSubst ((1, 2)::(5, 1)::(3, 5)::[])),         Ok)::
   ((mkTestSubst ((1, 2)::(5, 2)::(3, 5)::[])),         InverseFail)::

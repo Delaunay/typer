@@ -14,7 +14,7 @@ let dummy_var = Var((dummy_location, "DummyVar"), -1)
 
 (** Transform a subst into a more linear 'intermediate representation':
 
-    - a₁ · ↑n₁ (a₂ · ↑n₂ (a₃ · ↑n₃ id)) 
+    - a₁ · ↑n₁ (a₂ · ↑n₂ (a₃ · ↑n₃ id))
       ⇒ a₁' · a₂' · a₃' · ↑n₃ id
 
     or in ocaml-ish representation :
@@ -111,9 +111,9 @@ let mkVar (idx: int): lexp = Var((U.dummy_location, ""), idx)
 let fill (l: (int * int) list) (size: int) (acc: (int * int) list): (int * int) list option =
   let genDummyVar beg_ end_ = genDummyVar beg_ end_ (size + 1)
   in
-  let rec fill_before (l: (int * int) list): (int * int) list =
+  let rec fill_before (l: (int * int) list) (size: int): (int * int) list =
     match l with
-    | [] -> []
+    | [] -> genDummyVar 0 size
     | (idx, val_)::tail -> (if idx > 0 then (genDummyVar 0 idx)@l
                             else l)
   and fill_after (l: (int * int) list) (size: int) (acc: (int * int) list): (int * int) list option =
@@ -129,7 +129,7 @@ let fill (l: (int * int) list) (size: int) (acc: (int * int) list): (int * int) 
       then Some (acc@((idx1, val1)::(genDummyVar (idx1 + 1) size)))
       else Some (acc@[(idx1, val1)])
     | [] -> Some acc
-  in fill_after (fill_before l) size acc
+  in fill_after (fill_before l size) size acc
 
 (** Transform a L-exp to a list of (e_i, i) where e_i is the position of the debuijn index i
     in the debuijn index sequence
