@@ -29,27 +29,22 @@ let rec mkTestSubst lst =
                                 (mkShift2 shift (mkTestSubst tail))
   | [] -> S.identity
 
-type result_type =
-  | Ok
-  | TransfoFail
-  | InverseFail
-
 (*TODO better checking of where it should fail*)
 let input =
-  ((mkTestSubst ((0, 3)::(2, 2)::(3, 5)::[])),         Ok)::
-  ((mkTestSubst ((1, 3)::(2, 2)::(3, 5)::[])),         Ok)::
-  ((mkTestSubst ((1, 3)::(2, 2)::(4, 5)::[])),         Ok)::
-  ((mkTestSubst ((0, 3)::(2, 2)::(4, 5)::[])),         Ok)::
-  ((mkTestSubst ((0, 3)::(1, 2)::(4, 5)::[])),         Ok)::
-  ((mkTestSubst ((0, 3)::(1, 2)::(4, 1)::(5, 5)::[])), TransfoFail)::
-  ((S.cons (mkVar 1) (S.shift 3)),                     Ok)::
-  ((S.cons (mkVar 1) (S.cons (mkVar 3) (S.identity))), TransfoFail)::
-  ((S.mkShift (S.shift 3) 4),                          Ok)::
-  ((S.mkShift (S.cons (mkVar 1) (S.identity)) 5),      TransfoFail)::
-  ((mkTestSubst ((4, 0)::(2, 2)::(3, 5)::[])),         Ok)::
-  ((mkTestSubst ((1, 2)::(5, 1)::(3, 5)::[])),         Ok)::
-  ((mkTestSubst ((1, 2)::(5, 2)::(3, 5)::[])),         InverseFail)::
-  ((mkTestSubst ((0, 3)::(1, 2)::(4, 1)::(9, 5)::[])), TransfoFail)::
+  ((mkTestSubst ((0, 3)::(2, 2)::(3, 5)::[])),         true)::
+  ((mkTestSubst ((1, 3)::(2, 2)::(3, 5)::[])),         true)::
+  ((mkTestSubst ((1, 3)::(2, 2)::(4, 5)::[])),         true)::
+  ((mkTestSubst ((0, 3)::(2, 2)::(4, 5)::[])),         true)::
+  ((mkTestSubst ((0, 3)::(1, 2)::(4, 5)::[])),         true)::
+  ((mkTestSubst ((0, 3)::(1, 2)::(4, 1)::(5, 5)::[])), false)::
+  ((S.cons (mkVar 1) (S.shift 3)),                     true)::
+  ((S.cons (mkVar 1) (S.cons (mkVar 3) (S.identity))), false)::
+  ((S.mkShift (S.shift 3) 4),                          true)::
+  ((S.mkShift (S.cons (mkVar 1) (S.identity)) 5),      false)::
+  ((mkTestSubst ((4, 0)::(2, 2)::(3, 5)::[])),         true)::
+  ((mkTestSubst ((1, 2)::(5, 1)::(3, 5)::[])),         true)::
+  ((mkTestSubst ((1, 2)::(5, 2)::(3, 5)::[])),         false)::
+  ((mkTestSubst ((0, 3)::(1, 2)::(4, 1)::(9, 5)::[])), false)::
   []
 
 let is_identity s =
@@ -106,93 +101,53 @@ let get_dim lst =
   let max i s = max i (String.length s)
   in
   List.fold_left
-    (fun (acs, acsf, acs', acc) (s, sf, s', comp) -> ((max acs s), (max acsf sf), (max acs' s'), (max acc comp)))
-    (0,0,0,0)
+    (fun (acs, acs', acc) (s, s', comp) -> ((max acs s), (max acs' s'), (max acc comp)))
+    (0,0,0)
     lst
 
 let fmt_res str =
-  let (ds, dsf, ds', dcomp) = get_dim str
-  in List.map (fun (s, sf, s', com) -> "[ " ^
-                                       (padding_right s ds ' ') ^ " -> " ^
-                                       (padding_right (sf ^ " ]") dsf ' ') ^ " ∘ " ^
-                                       (padding_right s' ds' ' ') ^ " = " ^
-                                       (com)
+  let (ds, ds', dcomp) = get_dim str
+  in List.map (fun (s, s', com) -> (padding_right s ds ' ') ^ " -> " ^
+                                   (padding_right s' ds' ' ') ^ " = " ^
+                                   (com)
               ) str
-
-(* let string_of_subst = ocaml_string_of_subst *)
-(* let fmt_res str = *)
-(* List.map (fun (_, sf, s', com) -> sf  ^ " ∘ " ^ s'  ^ " = " ^ com ) str *)
 
 let get_dim lst =
   let max i s = max i (String.length s)
   in
   List.fold_left
-    (fun (acs, acsf, acs', acc) (s, sf, s', comp) -> ((max acs s), (max acsf sf), (max acs' s'), (max acc comp)))
-    (0,0,0,0)
+    (fun (acs, acs', acc) (s, s', comp) -> ((max acs s), (max acs' s'), (max acc comp)))
+    (0,0,0)
     lst
 
 
-let inverse = inverse2
 let _ = generate_tests "INVERSION"
     (fun () -> input)
     fmt_res
-    (fun (s, b) -> ( match inverse s, flatten s with
-         | Some (s'), Some (sf) -> (let comp = scompose sf s' in
-                                    let ret = (match (is_identity comp), b with
-                                        | true, Ok -> true (*if we are here, the result of the composition should be Id*)
-                                        | false, Ok -> false
-                                        | _, _ -> false)
-                                    in let str = ((string_of_subst s), (string_of_subst sf), (string_of_subst s'), (string_of_subst comp))
-                                    in (str, ret))
-         | Some (s'), None -> ((string_of_subst s, "None", string_of_subst s', "None"),(match b with
-             | TransfoFail -> true
-             | _ -> false))
-         | None, Some(sf) -> ((string_of_subst s, string_of_subst sf, "None", "None"), (match b with
-             | InverseFail -> true
-             | _ -> false))
-         | _ -> ((string_of_subst s, "None", "None", "None"), (match b with
-             | Ok -> false
-             | _ -> true)))
+    (fun (s, b) -> ( match inverse s with
+         | Some (s') -> (let comp = scompose s s' in
+                       let ret = (is_identity comp)
+                       in let str = ((string_of_subst s), (string_of_subst s'), (string_of_subst comp))
+                       in (str, ret))
+         | None      -> ((string_of_subst s, "None", "None"), not b)
+       )
     )
 
 let fmt_res str =
-  List.map (fun (s, sf, s', com) -> "[ " ^
-                                       (s) ^ " -> " ^
-                                       ((sf ^ " ]")) ^ " ∘ " ^
-                                       (s') ^ " = " ^
-                                       (com)
-              ) str
+  List.map (fun (s, s', com) -> (s) ^ " -> " ^
+                                (s') ^ " = " ^
+                                (com) ) str
 
 (* TODO find a better way to check test*)
 let _ = generate_tests "INVERSION-RAND"
     (fun () -> generateRandInput 5 10)
     fmt_res
-    (fun (s) -> ( match inverse s, flatten s with
-         | Some (s'), Some (sf) -> (let comp = scompose sf s' in
-                                    let ret = (is_identity comp)
-                                    in let str = ((string_of_subst s), (string_of_subst sf), (string_of_subst s'), (string_of_subst comp))
-                                    in (str, ret))
-         | Some (s'), None -> ((string_of_subst s, "None", string_of_subst s', "None"),false)
-         | None, Some(sf) -> ((string_of_subst s, string_of_subst sf, "None", "None"), false)
-         | _ -> ((string_of_subst s, "None", "None", "None"), false)
+    (fun (s) -> ( match inverse s with
+         | Some (s') -> (let comp = scompose s s' in
+                       let ret = (is_identity comp)
+                       in let str = ((string_of_subst s), (string_of_subst s'), (string_of_subst comp))
+                       in (str, ret))
+         | None      -> ((string_of_subst s , "None"             , "None") , false)
     ))
-
-let _ = generate_tests "TRANSFORMATION"
-    (fun () -> input)
-    (fun subst ->
-       let padding_right s d c = "\n" ^ s ^ "\n"
-       in let string_of_subst = pp_ocaml_string_of_subst
-       in let subst = List.map (fun (s,fs) -> (string_of_subst s, string_of_subst fs)) subst
-       in let get_dim lst =
-            let max i s = max i (String.length s)
-            in List.fold_left (fun (acs, acsf) (s, sf) -> ((max acs s), (max acsf sf))) (0,0) lst
-       in let (ds, dsf) = get_dim subst
-       in List.map (fun (s,sf) -> (padding_right s ds ' ') ^ " -> " ^ (padding_right sf dsf ' ')) subst)
-    (fun (subst, b) -> match flatten subst, b with
-       | Some(s), Ok -> ((subst, (s)), true)
-       | Some(s), InverseFail -> ((subst, (s)), true)
-       | None, TransfoFail -> ((subst, S.identity), true)
-       | Some (s), _ -> ((subst, s), false)
-       | None, _ -> ((subst, S.identity), false))
 
 let _ = run_all ()
