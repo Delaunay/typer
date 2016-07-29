@@ -34,73 +34,6 @@ let transfo (s: lexp S.subst) : substIR option =
     | _                   -> None
   in transfo s 0 0
 
-(** Transform a subst into a more linear 'intermediate representation':
-
-    - a₁ · ↑n₁ (a₂ · ↑n₂ (a₃ · ↑n₃ id))
-      ⇒ a₁' · a₂' · a₃' · ↑n₃ id
-
-    or in ocaml-ish representation :
-
-    - S.Cons(var, S.Shift(..., offset))
-      ⇒ S.Cons(var, S.Shift(S.Identity, offset))::...::Identity
-*)
-let toIr (s: lexp S.subst) : inter_subst =
-  let rec toIr s total_offset =
-    match s with
-    | S.Shift (s_1, offset) -> toIr s_1 (total_offset + offset)
-    | S.Cons(v, s_1)
-      -> (mkSusp v (S.shift total_offset))::(toIr s_1 total_offset)
-    | S.Identity -> [Susp (dummy_var, S.shift total_offset)] (* FIXME : better stop case ?*)
-  in toIr s 0
-
-(** Transform an 'intermediate representation' into a sequence of cons followed by a shift
-
-    - a1.(↑^\{x1\}a2).(↑^\{x2\}a3).↑^\{x3\}id -> a1.a2.a3.(id ↑^\{x1+x2+x3\})
-
-    or in ocaml-ish representation :
-
-    - <code>S.Cons(var, S.Shift(S.Identity, offset))::...::Identity -> S.Cons(var, S.Cons(...S.Shift(S.Identity, x1+x2+x3...)))</code>
-*)
-let flattenIr (s: inter_subst): lexp S.subst option =
-  let rec flattenCons (s: inter_subst): lexp S.subst option =
-    match s with
-    (*FIXME  : a Susp = error
-               a Var = cool*)
-    | Susp (dv, s)::[] when dv = dummy_var -> Some s (*FIXME better stop case ?*)
-    | Susp ( _ )::_ -> None
-    | susp::tail -> (match flattenCons tail with
-        | Some (s1) -> Some (S.cons (nosusp susp) s1)
-        | None -> None)
-    | _ -> None
-  in flattenCons s
-
-(** Flatten a "tree"-like substitution:
-
-    - a1.↑^\{x1\}(a2.↑^\{x2\}(a3.↑^\{x3\}id)) -> a1.(↑^\{x1\}a2).(↑^\{x2\}a3).↑^\{x3\}id -> a1.a2.a3 ↑^\{x1+x2+x3\}
-
-    or in ocaml-ish representation :
-
-    - <code>S.Cons(var, S.Shift(S.Identity, offset))::...::Identity -> S.Cons(var, S.Cons(...S.Shift(S.Identity, x1+x2+x3...)))</code>
-*)
-let flatten (s: lexp S.subst): lexp S.subst option =
-  let rec check (sf: lexp S.subst): int option =
-    match sf with
-    | S.Identity -> Some 0
-    | S.Shift(sf, o) -> (match check sf with
-        | None -> None
-        | Some o2 -> Some (o + o2))
-    | S.Cons (Var(_, idx), sf) -> (match check sf with
-        | None -> None
-        | Some o -> if idx >= o then None else Some o)
-    | _ -> assert false
-  in
-  match flattenIr (toIr s) with
-  | None -> None
-  | Some (sf2) as sf -> match check sf2 with
-    | Some _ -> sf
-    | None ->  None
-
-
 (* Inverse *)
 
 (** Returns the number of element in a sequence of S.Cons
@@ -153,18 +86,6 @@ let fill (l: (int * int) list) (size: int) (acc: (int * int) list): (int * int) 
     | [] -> Some acc
   in fill_after (fill_before l size) size acc
 
-(** Transform a L-exp to a list of (e_i, i) where e_i is the position of the debuijn index i
-    in the debuijn index sequence
-*)
-let to_list (s: lexp S.subst) : (((int * int) list) * int) =
-  let rec as_list (s: lexp S.subst) (i: int) : (((int * int) list) * int) =
-    match s with
-    | S.Cons (Var(v), s1) -> let tail, o = as_list s1 (i + 1) in ((((idxOf v), i)::tail ), o)
-    | S.Shift (S.Identity, shift) -> ([], shift)
-    | S.Identity -> ([], 0)
-    | _ -> assert false;
-  in as_list s 0
-
 (** Transform a (e_i, i) list to a substitution by transforming the list into Cons and
     adding a Shift.
 
@@ -182,19 +103,7 @@ let rec to_cons (lst: (int * int) list) (shift: int) : lexp S.subst option =
 
     <code>s:S.subst, l:lexp, s':S.subst</code> where <code>l[s][s'] = l</code> and <code> inverse s = s' </code>
 *)
-let rec inverse (subst: lexp S.subst ) : lexp S.subst option =
-  let sort = List.sort (fun (ei1, _) (ei2, _) -> compare ei1 ei2)
-  in
-  match flatten subst with
-  | None -> None
-  | Some (s) ->
-    let cons_lst, shift_val = to_list s
-    in let size = sizeOf cons_lst
-    in match fill (sort cons_lst) shift_val [] with
-    | None -> None
-    | Some cons_lst -> to_cons cons_lst size
-
-let inverse2 (s: lexp S.subst) : lexp S.subst option =
+let inverse (s: lexp S.subst) : lexp S.subst option =
   let sort = List.sort (fun (ei1, _) (ei2, _) -> compare ei1 ei2)
   in
   match transfo s with
