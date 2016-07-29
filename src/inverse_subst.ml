@@ -15,6 +15,7 @@ let dummy_var = Var((dummy_location, "DummyVar"), -1)
 type substIR = ((int * int) list * int)
 
 (* toIr + flattenIr + to_list *)
+(* TODO : find better name ?*)
 let transfo (s: lexp S.subst) : substIR option =
   let rec transfo (s: lexp S.subst) (off_acc: int) (idx: int): substIR option =
     let valueOf (v: lexp): int =
@@ -53,6 +54,43 @@ let rec genDummyVar (beg_: int) (end_: int) (idx: int): (int * int) list =
 (** Returns a dummy variable with the db_index idx
 *)
 let mkVar (idx: int): lexp = Var((U.dummy_location, ""), idx)
+
+let fill2 (l: (int * int) list) (nbVar: int) (shift: int): lexp S.subst option =
+  let rec genDummyVar (beg_: int) (end_: int) (l: lexp S.subst): lexp S.subst =
+    if beg_ < end_
+    then S.cons (mkVar (nbVar + 1)) (genDummyVar (beg_ + 1) end_ l)
+    else l
+  in
+  let fill_before (l: (int * int) list) (s: lexp S.subst) (nbVar: int): lexp S.subst option =
+    match l with
+    | []                      -> Some (genDummyVar 0 nbVar S.identity)
+    | (i1, v1)::_ when i1 > 0 -> Some (genDummyVar 0 i1 s)
+    | _                       -> Some s
+  in let rec fill_after (l: (int * int) list) (nbVar: int) (shift: int): lexp S.subst option =
+    match l with
+    | (idx1, val1)::(idx2, val2)::tail when (idx1 = idx2)     -> None
+
+    | (idx1, val1)::(idx2, val2)::tail when (idx2 - idx1) > 1 ->
+      (match fill_after ((idx2, val2)::tail) nbVar shift with
+        | None   -> None
+        | Some s -> Some (S.cons (mkVar val1) (genDummyVar (idx1 + 1) idx2 s)))
+
+    | (idx1, val1)::(idx2, val2)::tail                        ->
+      (match fill_after ((idx2, val2)::tail) nbVar shift with
+        | None   -> None
+        | Some s -> Some (S.cons (mkVar val1) s))
+
+    | (idx1, val1)::[] when (idx1 + 1) < nbVar                ->
+      Some (S.cons (mkVar val1) (genDummyVar (idx1 + 1) nbVar (S.shift shift)))
+
+    | (idx1, val1)::[]                                       ->
+      Some (S.cons (mkVar val1) (S.shift shift))
+
+    | []                                                     ->
+      Some (S.shift shift)
+  in match fill_after l nbVar shift with
+  | None   -> None
+  | Some s -> fill_before l s nbVar
 
 (** Fill the gap between e_i in the list of couple (e_i, i) by adding
     dummy variables.
@@ -105,11 +143,12 @@ let rec to_cons (lst: (int * int) list) (shift: int) : lexp S.subst option =
 *)
 let inverse (s: lexp S.subst) : lexp S.subst option =
   let sort = List.sort (fun (ei1, _) (ei2, _) -> compare ei1 ei2)
-  in
-  match transfo s with
+  in let fill = fill2
+  in match transfo s with
   | None                   -> None
   | Some (cons_lst, shift_val) ->
     let size  = sizeOf cons_lst
-    in match fill (sort cons_lst) shift_val [] with
-    | None          -> None
-    | Some cons_lst -> to_cons cons_lst size
+    in fill (sort cons_lst) shift_val size
+    (* in match fill (sort cons_lst) shift_val [] with *)
+    (* | None -> None *)
+    (* | Some s -> to_cons s size *)
