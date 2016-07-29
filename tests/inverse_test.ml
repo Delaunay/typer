@@ -131,6 +131,8 @@ let get_dim lst =
     (0,0,0,0)
     lst
 
+
+let inverse = inverse2
 let _ = generate_tests "INVERSION"
     (fun () -> input)
     fmt_res

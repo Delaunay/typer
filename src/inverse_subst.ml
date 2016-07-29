@@ -12,6 +12,26 @@ type inter_subst = lexp list (* Intermediate between "tree"-like substitution an
 
 let dummy_var = Var((dummy_location, "DummyVar"), -1)
 
+type substIR = ((int * int) list * int)
+
+(* toIr + flattenIr + to_list *)
+let transfo (s: lexp S.subst) : substIR option =
+  let rec transfo (s: lexp S.subst) (off_acc: int) (idx: int): substIR option =
+    let valueOf (v: lexp): int =
+      match v with
+      | Var (_, v) -> v
+      | _          -> assert false
+    in let shiftVar (var: lexp) (offset: int): int = valueOf (mkSusp var (S.shift offset))
+    in match s with
+    | S.Cons (Var _ as v, s) ->
+      (match transfo s off_acc (idx + 1) with
+        | Some (tail, off) -> Some (((shiftVar v idx), idx)::tail, off)
+        | None             -> None)
+    | S.Shift (s, offset) -> transfo s (offset + off_acc) idx
+    | S.Identity          -> Some ([], off_acc)
+    | _                   -> None
+  in transfo s 0 0
+
 (** Transform a subst into a more linear 'intermediate representation':
 
     - a₁ · ↑n₁ (a₂ · ↑n₂ (a₃ · ↑n₃ id))
@@ -172,3 +192,13 @@ let rec inverse (subst: lexp S.subst ) : lexp S.subst option =
     | None -> None
     | Some cons_lst -> to_cons cons_lst size
 
+let inverse2 (s: lexp S.subst) : lexp S.subst option =
+  let sort = List.sort (fun (ei1, _) (ei2, _) -> compare ei1 ei2)
+  in
+  match transfo s with
+  | None                   -> None
+  | Some (cons_lst, shift_val) ->
+    let size  = sizeOf cons_lst
+    in match fill (sort cons_lst) shift_val [] with
+    | None          -> None
+    | Some cons_lst -> to_cons cons_lst size
