@@ -25,7 +25,7 @@ let transfo (s: lexp S.subst) : substIR option =
     in match s with
     | S.Cons (Var _ as v, s) ->
       (match transfo s off_acc (idx + 1) with
-        | Some (tail, off) -> Some (((shiftVar v idx), idx)::tail, off)
+        | Some (tail, off) -> Some (((shiftVar v off_acc), idx)::tail, off)
         | None             -> None)
     | S.Shift (s, offset) -> transfo s (offset + off_acc) idx
     | S.Identity          -> Some ([], off_acc)
