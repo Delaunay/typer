@@ -130,6 +130,9 @@ let build_var name ctx =
 let get_type0 ctx = build_var "Type" ctx
 let get_int ctx = build_var "Int" ctx
 
+(* :-( *)
+let global_substitution = ref (Unif.empty_subst, [])
+
 (* shift all variables by an offset *)
 let senv_lookup name ctx =
   senv_lookup name ctx + !_shift_glob
