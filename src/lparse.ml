@@ -279,9 +279,9 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
             let ltp, _ = lexp_infer ptp ctx in
                 (_lexp_p_check pxp ltp ctx (i + 1)), ltp
 
-        (*FIXME right thing to do*)
-        | _ -> let meta = Unif.mkMetavar S.Identity (Util.dummy_location, "") (*???*)
-          in (meta, lexp_p_check p meta ctx)
+        | _ -> (let meta = Unif.mkMetavar S.Identity (Util.dummy_location, "") (*???*)
+                in let lxp= lexp_p_check p meta ctx
+                in (lxp, meta))
 
 
 and lexp_let_decls decls (body: lexp) ctx i =
