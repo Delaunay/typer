@@ -293,8 +293,6 @@ and lexp_let_decls decls (body: lexp) ctx i =
 and lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context): lexp =
   _lexp_p_check p t ctx 1
 
-(*TODO : - add substitution parameter for unification
-         - try to unify in default case *)
 and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
     let tloc = pexp_location p in
 
@@ -307,7 +305,15 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
             (* Read var type from the provided type *)
             let ltp, lbtp = match nosusp t with
                 | Arrow(kind, _, ltp, _, lbtp) -> ltp, lbtp
-                | _ -> lexp_error tloc "Type does not match"; dltype, dltype in
+                | lxp -> (let meta_arg_var  = Unif.mkMetavar S.Identity (Util.dummy_location, "")
+                          and meta_body_var = Unif.mkMetavar S.Identity (Util.dummy_location, "")
+                          in let arrow = Arrow(kind, None, meta_arg_var, Util.dummy_location, meta_body_var)
+                          in let subst, _ = !global_substitution
+                          in match Unif.unify arrow lxp subst with
+                          | None                 -> lexp_error tloc "Type does not match"; dltype, dltype
+                          | Some (subst) -> global_substitution := subst; meta_arg_var, meta_body_var (* ??? *))
+            in
+                (* | _ -> lexp_error tloc "Type does not match"; dltype, dltype in *)
 
             let nctx = env_extend ctx var Variable ltp in
             let lbody = _lexp_p_check body lbtp nctx (i + 1) in
