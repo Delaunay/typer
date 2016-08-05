@@ -213,21 +213,16 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
             let v = Inductive(tloc, label, formal, map_ctor) in
                 v, ltp
 
-        (* This case can be inferred *)
-        | Plambda (kind, var, optype, body) ->
-            let ltp, _ = match optype with
-                | Some ptype -> lexp_infer ptype ctx
-                (* This case must have been lexp_p_check *)
-                | None -> lexp_error tloc "Lambda require type annotation";
-                    dltype, dltype in
-
-            let nctx = env_extend ctx var Variable ltp in
-            let lbody, lbtp = lexp_infer body nctx in
-            (* We added one variable in the ctx * )
-            let lbtp = _type_shift lbtp 1 in *)
-
-            let lambda_type = Arrow(kind, None, ltp, tloc, lbtp) in
-                Lambda(kind, var, ltp, lbody), lambda_type
+        (* | Plambda (kind, var, optype, body) -> *)
+          (* let ltp, _ = match optype with *)
+            (* | Some ptype -> lexp_infer ptype ctx *)
+            (* | None -> ((Unif.mkMetavar S.identity (Util.dummy_location, "")), *)
+                       (* (Unif.mkMetavar S.identity (Util.dummy_location, ""))) *)
+          (* in let nctx = env_extend ctx var Variable ltp *)
+          (* in let lbody, lbtp = lexp_infer body nctx *)
+          (* in let lbtp = _type_shift lbtp 1 *)
+          (* in let lambda_type = Arrow(kind, None, ltp, tloc, lbtp) *)
+          (* in (Lambda(kind, var, ltp, lbody), lambda_type) *)
 
         | Pcall (fname, _args) ->
             lexp_call fname _args ctx i
