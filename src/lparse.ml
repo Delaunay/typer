@@ -289,6 +289,8 @@ and lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context): lexp =
   _lexp_p_check p t ctx 1
 
 and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
+    let mkMetavar () = Unif.mkMetavar S.Identity (Util.dummy_location, "")
+    in
     let tloc = pexp_location p in
 
     _global_lexp_ctx := ctx;
@@ -296,16 +298,20 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
 
     match p with
         (* This case cannot be inferred *)
-        | Plambda (kind, var, None, body) ->(
+    | Plambda (kind, var, optype, body) ->(
             (* Read var type from the provided type *)
+        let lexp_infer p ctx = _lexp_p_infer p ctx (i + 1) in
+        match optype with
+        | Some ptype -> let ltp, _ = lexp_infer ptype ctx in ltp
+        | None ->
             let ltp, lbtp = match nosusp t with
                 | Arrow(kind, _, ltp, _, lbtp) -> ltp, lbtp
-                | lxp -> (let meta_arg_var  = Unif.mkMetavar S.Identity (Util.dummy_location, "")
-                          and meta_body_var = Unif.mkMetavar S.Identity (Util.dummy_location, "")
-                          in let arrow = Arrow(kind, None, meta_arg_var, Util.dummy_location, meta_body_var)
-                          in let subst, _ = !global_substitution
+                | lxp -> (let meta_arg_var  = mkMetavar ()
+                          and meta_body_var = mkMetavar ()
+                          in let arrow      = Arrow(kind, None, meta_arg_var, Util.dummy_location, meta_body_var)
+                          in let subst, _   = !global_substitution
                           in match Unif.unify arrow lxp subst with
-                          | None                 -> lexp_error tloc "Type does not match"; dltype, dltype
+                          | None         -> lexp_error tloc "Type does not match"; dltype, dltype
                           | Some (subst) -> global_substitution := subst; meta_arg_var, meta_body_var (* ??? *))
             in
                 (* | _ -> lexp_error tloc "Type does not match"; dltype, dltype in *)
