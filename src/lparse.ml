@@ -253,8 +253,8 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
                             lexp_error loc
                                 ("Constructor \"" ^ cname ^ "\" does not exist");
                                 [], [])
-
-                    | _ -> lexp_error loc "Not an Inductive Type"; [], [] in
+                    | _ -> lexp_error loc "Not an Inductive Type"; [], []
+              in
 
                 (* build Arrow type *)
                 let cons_type = List.fold_left (fun ltp (kind, v, tp) ->
