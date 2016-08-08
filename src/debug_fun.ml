@@ -1,8 +1,8 @@
 
 open Fmt_lexp
 
-(* let _debug = true *)
-let _debug = false
+let _debug = true
+(* let _debug = false *)
 
 let logs = ref []
 
@@ -17,18 +17,21 @@ let clear_indent () =
   in
   do_debug (fun () ->
       List.iter (fun (s1, s2) ->
-          print_string s1;
-          print_string (String.make (!indent * 2) '-');
-          print_string s2;
+          prerr_string s1;
+          prerr_string (String.make (!indent * 2) '-');
+          prerr_string s2;
           indent := !indent + 1;
         ) (!logs);
       logs := [];
-      print_newline ();
+      prerr_newline ();
       ())
+
+let debug_print_no_buff str =
+  do_debug (fun () -> prerr_string str; ())
 
 let debug_print_lexp lxp =
   let str = colored_string_of_lxp lxp str_yellow str_magenta
-  in do_debug (fun () -> print_string str; ())
+  in do_debug (fun () -> prerr_string str; ())
 
 let debug_print_unify fn lhs rhs str =
     let debug_print_unify fn lhs rhs str =
