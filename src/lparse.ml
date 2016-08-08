@@ -140,6 +140,8 @@ let senv_lookup name ctx =
 let rec lexp_p_infer (p : pexp) (ctx : lexp_context): lexp * ltype =
     _lexp_p_infer p ctx 1
 
+and mkMetavar () = Unif.mkMetavar S.identity (Util.dummy_location, "")
+
 and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
 
     let lexp_infer p ctx = _lexp_p_infer p ctx (i + 1) in
@@ -213,17 +215,6 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
             let v = Inductive(tloc, label, formal, map_ctor) in
                 v, ltp
 
-        (* | Plambda (kind, var, optype, body) -> *)
-          (* let ltp, _ = match optype with *)
-            (* | Some ptype -> lexp_infer ptype ctx *)
-            (* | None -> ((Unif.mkMetavar S.identity (Util.dummy_location, "")), *)
-                       (* (Unif.mkMetavar S.identity (Util.dummy_location, ""))) *)
-          (* in let nctx = env_extend ctx var Variable ltp *)
-          (* in let lbody, lbtp = lexp_infer body nctx *)
-          (* in let lbtp = _type_shift lbtp 1 *)
-          (* in let lambda_type = Arrow(kind, None, ltp, tloc, lbtp) *)
-          (* in (Lambda(kind, var, ltp, lbody), lambda_type) *)
-
         | Pcall (fname, _args) ->
             lexp_call fname _args ctx i
 
@@ -274,7 +265,7 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
             let ltp, _ = lexp_infer ptp ctx in
                 (_lexp_p_check pxp ltp ctx (i + 1)), ltp
 
-        | _ -> (let meta = Unif.mkMetavar S.Identity (Util.dummy_location, "") (*???*)
+        | _ -> (let meta = mkMetavar ()
                 in let lxp= lexp_p_check p meta ctx
                 in (lxp, meta))
 
@@ -439,7 +430,8 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
         let pargs = List.map pexp_parse sargs in
         let largs = _lexp_parse_all pargs ctx i in
         (*TODO use ltype to get arg_kind, if implicit and not given, create metavar*)
-        Debug_fun.do_debug (fun () ->
+
+        Debug_fun.do_debug (fun () -> (* Some debug printing, remove ASAP*)
             prerr_string "<LPARSE.lexp_call>(largs) ";
             List.iter (fun l -> Debug_fun.debug_print_lexp l; prerr_string ", ") largs;
             prerr_newline (); ());
@@ -487,7 +479,8 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
                     | e ->
                          let ret_type = get_return_type name 0 ltp new_args in
                          let call = Call(vf, new_args)
-                         in Debug_fun.debug_print_no_buff "<Lparse.lexp_call> ";
+                         in
+                         Debug_fun.debug_print_no_buff "<LPARSE.lexp_call> "; (* debug printing remove ASAP*)
                          Debug_fun.do_debug (fun () ->
                              List.iter (fun (_, l) -> Debug_fun.debug_print_lexp l; prerr_string ", "; ()) new_args; ()
                            );
