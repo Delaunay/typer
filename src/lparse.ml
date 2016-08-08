@@ -280,57 +280,57 @@ and lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context): lexp =
   _lexp_p_check p t ctx 1
 
 and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
-    let mkMetavar () = Unif.mkMetavar S.Identity (Util.dummy_location, "")
-    in
-    let tloc = pexp_location p in
+  let tloc = pexp_location p
+  in
+
+  let unify_with_arrow lxp kind subst = (* Unify an arrow composed of new metavar with lxp *)
+       let arg, body = mkMetavar (), mkMetavar ()
+       in let arrow = Arrow(kind, None, arg, Util.dummy_location, body)
+       in match Unif.unify arrow lxp subst with
+       | None         -> lexp_error tloc "Type does not match"; dltype, dltype
+       | Some (subst) -> global_substitution := subst; arg, body
+  in
+
+  (* Infer the pexp option part of the lambda when it's None *)
+  let infer_lambda_ptype t kind var subst body = (match nosusp t with
+      | Arrow(kind, _, ltp, _, lbtp) -> ltp, lbtp
+      | lxp -> (unify_with_arrow lxp kind subst) )
+  in
 
     _global_lexp_ctx := ctx;
     _global_lexp_trace := (i, tloc, p)::!_global_lexp_trace;
 
+    let subst, _ = !global_substitution in
     match p with
         (* This case cannot be inferred *)
-    | Plambda (kind, var, optype, body) ->(
-            (* Read var type from the provided type *)
+    | Plambda (kind, var, optype, body) ->( (* Read var type from the provided type *)
         let lexp_infer p ctx = _lexp_p_infer p ctx (i + 1) in
-        match optype with
-        | Some ptype -> let ltp, _ = lexp_infer ptype ctx in ltp
-        | None ->
-            let ltp, lbtp = match nosusp t with
-                | Arrow(kind, _, ltp, _, lbtp) -> ltp, lbtp
-                | lxp -> (let meta_arg_var  = mkMetavar ()
-                          and meta_body_var = mkMetavar ()
-                          in let arrow      = Arrow(kind, None, meta_arg_var, Util.dummy_location, meta_body_var)
-                          in let subst, _   = !global_substitution
-                          in match Unif.unify arrow lxp subst with
-                          | None         -> lexp_error tloc "Type does not match"; dltype, dltype
-                          | Some (subst) -> global_substitution := subst; meta_arg_var, meta_body_var (* ??? *))
-            in
-                (* | _ -> lexp_error tloc "Type does not match"; dltype, dltype in *)
+        let ltp, lbtp = (match optype with
+        | Some ptype -> lexp_infer ptype ctx
+        | None       -> infer_lambda_ptype t kind var subst body)
+    in
+    let nctx = env_extend ctx var Variable ltp
+    in let lbody = _lexp_p_check body lbtp nctx (i + 1)
+    in Lambda(kind, var, ltp, lbody))
 
-            let nctx = env_extend ctx var Variable ltp in
-            let lbody = _lexp_p_check body lbtp nctx (i + 1) in
+    (* This is mostly for the case where no branches are provided *)
+    | Pcase (loc, target, patterns) ->
+      let lxp, _ = lexp_case (Some t) (loc, target, patterns) ctx i in lxp
 
-                Lambda(kind, var, ltp, lbody))
-
-        (* This is mostly for the case where no branches are provided *)
-        | Pcase (loc, target, patterns) ->
-          let lxp, _ = lexp_case (Some t) (loc, target, patterns) ctx i in lxp
-
-        | _ -> let (e, inferred_t) = _lexp_p_infer p ctx (i + 1) in
-            (* e *)
-            match e with
-                (* Built-in is a dummy function with no type. We cannot check
-                 * Built-in *)
-                | Builtin _ -> e
-            (* (if TC.conv_p inferred_t t then () else debug_msg ( *)
-                | _ -> (let subst, _ = !global_substitution in
-                    match Unif.unify inferred_t t subst with
-                    | Some subst -> global_substitution := subst; inferred_t
-                    | None -> debug_msg (
-                print_string "1 exp "; lexp_print e; print_string "\n";
-                print_string "2 inf "; lexp_print inferred_t; print_string "\n";
-                print_string "3 Ann "; lexp_print t; print_string "\n";
-                lexp_warning tloc "Type Mismatch inferred != Annotation"); e)
+    | _ -> let (e, inferred_t) = _lexp_p_infer p ctx (i + 1) in
+        (* e *)
+        match e with
+            (* Built-in is a dummy function with no type. We cannot check
+             * Built-in *)
+            | Builtin _ -> e
+        (* (if TC.conv_p inferred_t t then () else debug_msg ( *)
+            | _ -> (match Unif.unify inferred_t t subst with
+                | Some subst -> global_substitution := subst; inferred_t
+                | None -> debug_msg (
+            print_string "1 exp "; lexp_print e; print_string "\n";
+            print_string "2 inf "; lexp_print inferred_t; print_string "\n";
+            print_string "3 Ann "; lexp_print t; print_string "\n";
+            lexp_warning tloc "Type Mismatch inferred != Annotation"); e)
 
 (* Lexp.case cam be checked and inferred *)
 and lexp_case (rtype: lexp option) (loc, target, patterns) ctx i =
