@@ -301,19 +301,26 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
     _global_lexp_ctx := ctx;
     _global_lexp_trace := (i, tloc, p)::!_global_lexp_trace;
 
+    let unify_with_arrow lxp kind subst =
+      let arg, body = mkMetavar (), mkMetavar ()
+      in let arrow = Arrow (kind, None, arg, Util.dummy_location, body)
+      in match Unif.unify arrow lxp subst with
+      | Some(subst) -> global_substitution := subst; arg, body
+      | None       -> lexp_error tloc ("Type " ^ Fmt_lexp.string_of_lxp lxp
+                                               ^ " and "
+                                               ^ Fmt_lexp.string_of_lxp arrow
+                                               ^ " does not match"); dltype, dltype
+
+    in
+    let subst, _ = !global_substitution
+    in
     match p with
         (* This case cannot be inferred *)
         | Plambda (kind, var, None, body) ->(
             (* Read var type from the provided type *)
             let ltp, lbtp = match nosusp t with
                 | Arrow(kind, _, ltp, _, lbtp) -> ltp, lbtp
-                | lxp -> (let meta_arg_var  = mkMetavar ()
-                          and meta_body_var = mkMetavar ()
-                          in let arrow = Arrow(kind, None, meta_arg_var, Util.dummy_location, meta_body_var)
-                          in let subst, _ = !global_substitution
-                          in match Unif.unify arrow lxp subst with
-                          | None                 -> lexp_error tloc "Type does not match"; dltype, dltype
-                          | Some (subst) -> global_substitution := subst; meta_arg_var, meta_body_var (* ??? *))
+                | lxp -> (unify_with_arrow lxp kind subst)
             in
                 (* | _ -> lexp_error tloc "Type does not match"; dltype, dltype in *)
 
