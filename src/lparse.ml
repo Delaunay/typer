@@ -502,6 +502,18 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
                             Call(vf, new_args), ret_type
 
         with Not_found ->
+            Debug_fun.debug_print_no_buff ("==== <LPARSE.LEXP_CALL>handle_named_call (?loc?, " ^ name ^ ") ====\n");
+            Debug_fun.do_debug (fun () -> (* Some debug printing, remove ASAP*)
+                prerr_string "==== <LPARSE.lexp_call>(largs)    ";
+                List.iter (fun l -> Debug_fun.debug_print_lexp l; prerr_string ", ") largs;
+                prerr_string " ====";
+                prerr_newline (); ());
+            Debug_fun.debug_print_no_buff "==== <LPARSE.lexp_call>(body)     ";
+            Debug_fun.debug_print_lexp body;
+            Debug_fun.do_debug (fun () -> prerr_string " =="; prerr_newline ();() );
+            Debug_fun.debug_print_no_buff "==== <LPARSE.lexp_call>(ltp)      ";
+            Debug_fun.debug_print_lexp ltp;
+            Debug_fun.do_debug (fun () -> prerr_string " ===="; prerr_newline ();() );
             lexp_error loc ("The function \"" ^ name ^ "\" was not defined");
             let vf = (make_var name (-1) loc) in
                 Call(vf, new_args), ltp in
