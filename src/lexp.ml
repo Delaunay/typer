@@ -797,7 +797,7 @@ and _lexp_to_str ctx exp =
             | SortLevel (SLn v) -> "Type" ^ (string_of_int v)
             | _ -> "Type")
 
-        | _ -> print_string "Printing Not Implemented"; "-- --"
+        | _ -> print_string "Printing Not Implemented\n"; "-- --"
 
 and lexp_str_ctor ctx ctors =
     SMap.fold (fun key value str ->

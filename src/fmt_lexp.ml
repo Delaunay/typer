@@ -65,7 +65,7 @@ and string_of_sort sort =
   | StypeOmega -> "StypeOmega"
   | StypeLevel -> "StypeLevel"
 
-let colored_string_of_lxp lxp lcol vcol =
+let rec colored_string_of_lxp lxp lcol vcol =
   match lxp with
   | Imm (Integer (_, value))        -> (lcol "Integer") ^ "("  ^ (vcol (string_of_int value)) ^ ")"
   | Imm (String (_, value))         -> (lcol "String") ^ "(" ^  (vcol value ) ^ ")"
@@ -81,9 +81,9 @@ let colored_string_of_lxp lxp lcol vcol =
   | Call (_)                        -> (lcol "Call(...)" )
   | Case _                          -> (lcol "Case") ^ "(...)"
   | Inductive _                     -> (lcol "Inductive") ^ "(...)"
-  | Sort _                          -> (lcol "Sort") ^ "(...)"
-  | SortLevel _                     -> (lcol "SortLevel") ^ "(...)"
-  | Susp _                          -> (lcol "Susp") ^ "(...)"
+  | Sort (_, s)                     -> (lcol "Sort") ^ "(" ^ vcol (string_of_sort s)^ ")"
+  | SortLevel l                     -> (lcol "SortLevel") ^ "(" ^ vcol (string_of_sort_level l)  ^ ")"
+  | Susp (v, s)                     -> (lcol "Susp") ^ "(" ^ colored_string_of_lxp v lcol vcol ^ ", " ^ vcol (string_of_subst s)  ^")"
   | _                               -> (lcol "Unidentified Lexp")
 
 let padding_right (str: string ) (dim: int ) (char_: char) : string =
