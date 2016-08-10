@@ -312,22 +312,21 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
                                                ^ " does not match"); dltype, dltype
 
     in
+    let infer_lambda_body kind var body subst =
+        (* Read var type from the provided type *)
+        let ltp, lbtp = match nosusp t with
+            | Arrow(kind, _, ltp, _, lbtp) -> ltp, lbtp
+            | lxp -> (unify_with_arrow lxp kind subst)
+        in
+        let nctx = env_extend ctx var Variable ltp in
+        let lbody = _lexp_p_check body lbtp nctx (i + 1) in Lambda(kind, var, ltp, lbody)
+
+    in
     let subst, _ = !global_substitution
     in
     match p with
         (* This case cannot be inferred *)
-        | Plambda (kind, var, None, body) ->(
-            (* Read var type from the provided type *)
-            let ltp, lbtp = match nosusp t with
-                | Arrow(kind, _, ltp, _, lbtp) -> ltp, lbtp
-                | lxp -> (unify_with_arrow lxp kind subst)
-            in
-                (* | _ -> lexp_error tloc "Type does not match"; dltype, dltype in *)
-
-            let nctx = env_extend ctx var Variable ltp in
-            let lbody = _lexp_p_check body lbtp nctx (i + 1) in
-
-                Lambda(kind, var, ltp, lbody))
+        | Plambda (kind, var, None, body) ->(infer_lambda_body kind var body subst)
 
         (* This is mostly for the case where no branches are provided *)
         | Pcase (loc, target, patterns) ->
