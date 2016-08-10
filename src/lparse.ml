@@ -307,8 +307,8 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
             (* Read var type from the provided type *)
             let ltp, lbtp = match nosusp t with
                 | Arrow(kind, _, ltp, _, lbtp) -> ltp, lbtp
-                | lxp -> (let meta_arg_var  = Unif.mkMetavar S.Identity (Util.dummy_location, "")
-                          and meta_body_var = Unif.mkMetavar S.Identity (Util.dummy_location, "")
+                | lxp -> (let meta_arg_var  = mkMetavar ()
+                          and meta_body_var = mkMetavar ()
                           in let arrow = Arrow(kind, None, meta_arg_var, Util.dummy_location, meta_body_var)
                           in let subst, _ = !global_substitution
                           in match Unif.unify arrow lxp subst with
