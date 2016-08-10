@@ -423,13 +423,37 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
             | Arrow(_, _, _, _, ltp), hd::tl -> (get_return_type name (i + 1) ltp tl)
             | _, _ -> lexp_warning loc
                 (name ^ " was provided with too many args. Expected: " ^
-                            (string_of_int i)); ltp in
+                            (string_of_int i) ^ " got : " ^ (string_of_int (List.length args))); ltp in
 
     (*  Vanilla     : sqr is inferred and (lambda x -> x * x) is returned
      *  Macro       : sqr is returned
      *  Constructor : a constructor is returned
      *  Anonymous   : lambda                                                  *)
 
+    let rec infer_implicit_arg ltp largs nargs depth =
+      (* TODO : check arg number ?*)
+      (* FIXME error management *)
+      match nosusp ltp with
+      | Arrow (kind, _, ltp_arg, _, ltp_ret) when kind = Aexplicit -> (if List.length largs > 0
+          then let head, tail = List.hd largs, List.tl largs
+          in (Aexplicit, head)::(infer_implicit_arg ltp_ret tail (nargs - 1) (depth - 1))
+          else assert false)
+      | Arrow (kind, _, ltp_arg, _, ltp_ret) when nargs = depth -> (if List.length largs > 0
+          then let head, tail = List.hd largs, List.tl largs
+          in (Aexplicit, head)::(infer_implicit_arg ltp_ret tail (nargs - 1) (depth - 1))
+          else assert false)
+      | Arrow (kind, _, ltp_arg, _, ltp_ret) -> (kind, mkMetavar ())::(infer_implicit_arg ltp_ret largs nargs (depth - 1))
+      | _ -> [] (* List.map (fun g -> Aexplicit, g) largs *) (* ??????? *) (* Make get_return_type not complain ... *)
+
+    and infer_implicit_arg_2 ltp largs =
+      match ltp with
+      | Arrow (kind, _, ltp_arr, _, _) -> (match largs with
+          | arg::return::[]          -> (Aexplicit, arg)::(Aexplicit, return)::[]
+          | _ when kind == Aexplicit -> List.map (fun g -> (kind, g)) largs
+          | return::[]               -> ((kind, mkMetavar ())::(Aexplicit, return)::[])
+          | _                        -> Debug_fun.debug_print_no_buff "Unknown case\n"; assert false)
+      | _ -> List.map (fun g -> (Aexplicit, g)) largs
+    in
     (* retrieve function's body *)
     let body, ltp = _lexp_p_infer fun_name ctx (i + 1) in
     let ltp = nosusp ltp in
