@@ -460,32 +460,28 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
 
     let handle_named_call (loc, name) =
         (*  Process Arguments *)
+        Debug_fun.do_debug (fun () -> prerr_newline (); ());
         let pargs = List.map pexp_parse sargs in
         let largs = _lexp_parse_all pargs ctx i in
         (*TODO use ltype to get arg_kind, if implicit and not given, create metavar*)
 
         Debug_fun.do_debug (fun () -> (* Some debug printing, remove ASAP*)
-            prerr_string "<LPARSE.lexp_call>(largs) ";
+            prerr_string "<LPARSE.lexp_call>(largs)    ";
             List.iter (fun l -> Debug_fun.debug_print_lexp l; prerr_string ", ") largs;
             prerr_newline (); ());
-        Debug_fun.debug_print_no_buff "<LPARSE.lexp_call>(body) ";
+        Debug_fun.debug_print_no_buff "<LPARSE.lexp_call>(body)     ";
         Debug_fun.debug_print_lexp body;
         Debug_fun.do_debug (fun () -> prerr_newline ();() );
-        Debug_fun.debug_print_no_buff "<LPARSE.lexp_call>(ltp) ";
+        Debug_fun.debug_print_no_buff "<LPARSE.lexp_call>(ltp)      ";
         Debug_fun.debug_print_lexp ltp;
         Debug_fun.do_debug (fun () -> prerr_newline ();() );
-        let argk, ltp_arr = match ltp with
-          | Arrow(kind, _, ltp_arr, _, _) -> kind, ltp_arr
-          | _ -> prerr_string ("<Lparse.lexp_call> Expected Arrow, got " ^ Fmt_lexp.string_of_lxp ltp ^ "\n");
-            Aexplicit, ltp
+
+        let rec depth_of = function
+            Arrow (_, _, _, _, ltp) -> 1 + (depth_of ltp)
+          | _                       -> 0
         in
-        let new_args = match largs with
-          | arg::return::[] -> (Aexplicit, arg)::(Aexplicit, return)::[]
-          | _ when argk == Aexplicit -> List.map (fun g -> (argk, g)) largs
-          | return::[] -> ((argk, Unif.mkMetavar S.identity (Util.dummy_location, ""))::(Aexplicit, return)::[])
-          | _ -> Debug_fun.debug_print_no_buff "Unknown case\n";
-            assert false
-        (* let new_args = List.map (fun g -> (argk, g)) largs *)
+        let new_args = infer_implicit_arg ltp largs ((List.length largs) - 1) (depth_of ltp)
+        (* let new_args = infer_implicit_arg_2 ltp largs *)
         in
         try (*  Check if the function was defined *)
             let idx = senv_lookup name ctx in
