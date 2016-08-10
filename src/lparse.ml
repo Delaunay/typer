@@ -266,7 +266,7 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
                 (_lexp_p_check pxp ltp ctx (i + 1)), ltp
 
         | _ -> (let meta = mkMetavar ()
-                in let lxp= lexp_p_check p meta ctx
+                in let lxp = lexp_p_check p meta ctx
                 in (lxp, meta))
 
 
@@ -292,9 +292,13 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
   in
 
   (* Infer the pexp option part of the lambda when it's None *)
-  let infer_lambda_ptype t kind var subst body = (match nosusp t with
-      | Arrow(kind, _, ltp, _, lbtp) -> ltp, lbtp
-      | lxp -> (unify_with_arrow lxp kind subst) )
+  let infer_lambda_ptype t kind var subst body =
+    let ltp, lbtp = ( match nosusp t with
+        | Arrow(kind, _, ltp, _, lbtp) -> ltp, lbtp
+        | lxp -> (unify_with_arrow lxp kind subst))
+    in let nctx = env_extend ctx var Variable ltp
+    in let lbody = _lexp_p_check body lbtp nctx (i + 1)
+    in ltp, lbody
   in
 
     _global_lexp_ctx := ctx;
@@ -305,13 +309,14 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
         (* This case cannot be inferred *)
     | Plambda (kind, var, optype, body) ->( (* Read var type from the provided type *)
         let lexp_infer p ctx = _lexp_p_infer p ctx (i + 1) in
-        let ltp, lbtp = (match optype with
-        | Some ptype -> lexp_infer ptype ctx
-        | None       -> infer_lambda_ptype t kind var subst body)
+        let ltp, lbody = (match optype with
+        | Some ptype -> (let ltp, _ = lexp_infer ptype ctx in
+                         let nctx = env_extend ctx var Variable ltp
+                         in let lbody, lbtp = lexp_infer body nctx
+                         in (ltp, lbody))
+        | None       -> (infer_lambda_ptype t kind var subst body))
     in
-    let nctx = env_extend ctx var Variable ltp
-    in let lbody = _lexp_p_check body lbtp nctx (i + 1)
-    in Lambda(kind, var, ltp, lbody))
+    Lambda(kind, var, ltp, lbody))
 
     (* This is mostly for the case where no branches are provided *)
     | Pcase (loc, target, patterns) ->
@@ -480,7 +485,7 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
                          let ret_type = get_return_type name 0 ltp new_args in
                          let call = Call(vf, new_args)
                          in
-                         Debug_fun.debug_print_no_buff "<LPARSE.lexp_call> "; (* debug printing remove ASAP*)
+                         Debug_fun.debug_print_no_buff "<LPARSE.lexp_call>(new_args) "; (* debug printing remove ASAP*)
                          Debug_fun.do_debug (fun () ->
                              List.iter (fun (_, l) -> Debug_fun.debug_print_lexp l; prerr_string ", "; ()) new_args; ()
                            );
