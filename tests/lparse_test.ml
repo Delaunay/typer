@@ -52,7 +52,7 @@ let _ = (add_test "TYPECHEK_LEXP" "lexp_print" (fun () ->
         sqr = lambda (x) -> x * x;
         cube = lambda (x) -> x * (sqr x);
 
-        mult = lambda (x) -> lambda (y : Int) -> x * y;
+        mult = lambda (x) -> lambda (y) -> x * y;
 
         twice = (mult 2);
 
