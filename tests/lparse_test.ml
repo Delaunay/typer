@@ -29,7 +29,8 @@ let generate_tests (name: string)
         (fun () -> if res then success () else failure ()))
     (test input_gen fmt tester)
 
-let input = "y = lambda x -> x + 1;"
+(* let input = "y = lambda x -> x + 1;" *)
+let input = "id = lambda (α : Type) ≡> lambda x : α -> x;"
 
 let generate_lexp_from_str str =
   List.hd ((fun (lst, _) ->
