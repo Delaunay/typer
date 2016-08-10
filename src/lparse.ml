@@ -266,7 +266,7 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
                 (_lexp_p_check pxp ltp ctx (i + 1)), ltp
 
         | _ -> (let meta = mkMetavar ()
-                in let lxp= lexp_p_check p meta ctx
+                in let lxp = lexp_p_check p meta ctx
                 in (lxp, meta))
 
 
@@ -327,7 +327,9 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
             let lxp, _ = lexp_case (Some t) (loc, target, patterns) ctx i in
                 lxp
 
-        | _ -> let (e, inferred_t) = _lexp_p_infer p ctx (i + 1) in
+        | _ -> match t with
+          | Metavar _ -> t
+          | _         -> (let (e, inferred_t) = _lexp_p_infer p ctx (i + 1) in (* SO : infinite mutual recursion *)
             (* e *)
             match e with
                 (* Built-in is a dummy function with no type. We cannot check
@@ -342,7 +344,7 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
                       print_string "1 exp "; (print_lxp e); print_string "\n";
                       print_string "2 inf "; (print_lxp inferred_t); print_string "\n";
                       print_string "3 Ann susp("; (print_lxp (nosusp t)); print_string ")\n";
-                      lexp_warning tloc "Type Mismatch inferred != Annotation"); e )
+                      lexp_warning tloc "Type Mismatch inferred != Annotation"); e ))
                   (* (match Unif.unify inferred_t t Unif.empty_subst with *) (* No error (cf other version)*)
                    (* | Some _ -> () *)
                    (* | None -> debug_msg ((* Error management ??? *) *)
