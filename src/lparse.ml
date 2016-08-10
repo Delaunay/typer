@@ -216,7 +216,7 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
                 v, ltp
 
         (* This case can be inferred *)
-        | Plambda (kind, var, optype, body) ->
+        | Plambda (kind, var, optype, body) -> (* TODO : move to lexp_check*)
             let ltp, _ = match optype with
                 | Some ptype -> lexp_infer ptype ctx
                 (* This case must have been lexp_p_check *)
@@ -281,7 +281,7 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
             let ltp, _ = lexp_infer ptp ctx in
                 (_lexp_p_check pxp ltp ctx (i + 1)), ltp
 
-        | _ -> (let meta = Unif.mkMetavar S.Identity (Util.dummy_location, "") (*???*)
+        | _ -> (let meta = mkMetavar ()
                 in let lxp= lexp_p_check p meta ctx
                 in (lxp, meta))
 
