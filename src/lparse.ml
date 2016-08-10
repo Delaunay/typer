@@ -322,20 +322,24 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
     | Pcase (loc, target, patterns) ->
       let lxp, _ = lexp_case (Some t) (loc, target, patterns) ctx i in lxp
 
-    | _ -> let (e, inferred_t) = _lexp_p_infer p ctx (i + 1) in
-        (* e *)
-        match e with
-            (* Built-in is a dummy function with no type. We cannot check
-             * Built-in *)
-            | Builtin _ -> e
-        (* (if TC.conv_p inferred_t t then () else debug_msg ( *)
-            | _ -> (match Unif.unify inferred_t t subst with
-                | Some subst -> global_substitution := subst; inferred_t
-                | None -> debug_msg (
-            print_string "1 exp "; lexp_print e; print_string "\n";
-            print_string "2 inf "; lexp_print inferred_t; print_string "\n";
-            print_string "3 Ann "; lexp_print t; print_string "\n";
-            lexp_warning tloc "Type Mismatch inferred != Annotation"); e)
+    | _ -> match t with (* Prevent SO but not sure if it's the right solution *)
+      | Metavar _ -> t
+      | _         -> (
+          let (e, inferred_t) = _lexp_p_infer p ctx (i + 1) in
+          (* e *)
+          match e with
+          (* Built-in is a dummy function with no type. We cannot check
+           * Built-in *)
+          | Builtin _ -> e
+          | _ -> (match Unif.unify inferred_t t subst with
+              | Some subst -> global_substitution := subst; inferred_t
+              | None -> debug_msg ( (* Error management ??? *)
+                  let print_lxp str =
+                    print_string (Fmt_lexp.colored_string_of_lxp str Fmt_lexp.str_yellow Fmt_lexp.str_magenta) in
+                  print_string "1 exp "; (print_lxp e); print_string "\n";
+                  print_string "2 inf "; (print_lxp inferred_t); print_string "\n";
+                  print_string "3 Ann susp("; (print_lxp (nosusp t)); print_string ")\n";
+                  lexp_warning tloc "Type Mismatch inferred != Annotation"); e))
 
 (* Lexp.case cam be checked and inferred *)
 and lexp_case (rtype: lexp option) (loc, target, patterns) ctx i =
