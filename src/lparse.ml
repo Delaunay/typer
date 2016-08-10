@@ -133,6 +133,8 @@ let get_int ctx = build_var "Int" ctx
 (* :-( *)
 let global_substitution = ref (Unif.empty_subst, [])
 
+let mkMetavar () = Unif.mkMetavar S.identity (Util.dummy_location, "")
+
 (* shift all variables by an offset *)
 let senv_lookup name ctx =
   senv_lookup name ctx + !_shift_glob
