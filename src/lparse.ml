@@ -443,15 +443,37 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
      *  Constructor : a constructor is returned
      *  Anonymous   : lambda                                                  *)
 
+    let rec infer_implicit_arg ltp largs nargs depth =
+      (* TODO : check arg number ?*)
+      (* FIXME error management *)
+      match nosusp ltp with
+      | Arrow (kind, _, ltp_arg, _, ltp_ret) when kind = Aexplicit -> (if List.length largs > 0
+          then let head, tail = List.hd largs, List.tl largs
+          in (Aexplicit, head)::(infer_implicit_arg ltp_ret tail (nargs - 1) (depth - 1))
+          else assert false)
+      | Arrow (kind, _, ltp_arg, _, ltp_ret) when nargs = depth -> (if List.length largs > 0
+          then let head, tail = List.hd largs, List.tl largs
+          in (Aexplicit, head)::(infer_implicit_arg ltp_ret tail (nargs - 1) (depth - 1))
+          else assert false)
+      | Arrow (kind, _, ltp_arg, _, ltp_ret) -> (kind, mkMetavar ())::(infer_implicit_arg ltp_ret largs nargs (depth - 1))
+      | _ -> [] (* List.map (fun g -> Aexplicit, g) largs *) (* ??????? *) (* Make get_return_type not complain ... *)
+    in
     (* retrieve function's body *)
     let body, ltp = _lexp_p_infer fun_name ctx (i + 1) in
     let ltp = nosusp ltp in
 
     let handle_named_call (loc, name) =
+        Debug_fun.debug_print_no_buff ("<LPARSE.LEXP_CALL>handle_named_call (?loc?, " ^ name ^ ")\n");
         (*  Process Arguments *)
         let pargs = List.map pexp_parse sargs in
         let largs = _lexp_parse_all pargs ctx i in
-        let new_args = List.map (fun g -> (Aexplicit, g)) largs in
+        let rec depth_of = function
+            Arrow (_, _, _, _, ltp) -> 1 + (depth_of ltp)
+          | _                       -> 0
+        in
+        let new_args = infer_implicit_arg ltp largs ((List.length largs) - 1) (depth_of ltp)
+        (* let new_args = List.map (fun g -> (Aexplicit, g)) largs *)
+        in
 
         try (*  Check if the function was defined *)
             let idx = senv_lookup name ctx in
