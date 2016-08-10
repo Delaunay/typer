@@ -315,15 +315,11 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
         | Plambda (kind, var, None, body) ->(infer_lambda_body kind var body subst)
 
         (* This case can be inferred *)
-        | Plambda (kind, var, optype, body) -> (* TODO : move to lexp_check*)
-            let ltp, _ = match optype with
-                | Some ptype -> lexp_infer ptype ctx
-                (* This case must have been lexp_p_check *)
-                | None -> lexp_error tloc "Lambda require type annotation";
-                    dltype, dltype in
-
-            let nctx = env_extend ctx var Variable ltp in
-            let lbody, lbtp = lexp_infer body nctx in Lambda(kind, var, ltp, lbody)
+        | Plambda (kind, var, Some (ptype), body) -> (* TODO : move to lexp_check*)
+          let ltp, _ = lexp_infer ptype ctx
+          in let nctx = env_extend ctx var Variable ltp
+          in let lbody, lbtp = lexp_infer body nctx
+          in Lambda(kind, var, ltp, lbody)
 
 
         (* This is mostly for the case where no branches are provided *)
