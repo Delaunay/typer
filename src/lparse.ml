@@ -340,14 +340,15 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
                  * Built-in *)
                 | Builtin _ -> e
                 | _ ->
-            (* (if TC.conv_p inferred_t t then () else debug_msg ( *)
                   (match Unif.unify inferred_t t Unif.empty_subst with
                    | Some _ -> ()
-                   | None -> debug_msg (
-                print_string "1 exp "; lexp_print e; print_string "\n";
-                print_string "2 inf "; lexp_print inferred_t; print_string "\n";
-                print_string "3 Ann "; lexp_print t; print_string "\n";
-                lexp_warning tloc "Type Mismatch inferred != Annotation"));
+                   | None -> debug_msg ((* Error management ??? *)
+                      let print_lxp str =
+                        print_string (Fmt_lexp.colored_string_of_lxp str Fmt_lexp.str_yellow Fmt_lexp.str_magenta) in
+                      print_string "1 exp "; (print_lxp e); print_string "\n";
+                      print_string "2 inf "; (print_lxp inferred_t); print_string "\n";
+                      print_string "3 Ann susp("; (print_lxp (nosusp t)); print_string ")\n";
+                      lexp_warning tloc "Type Mismatch inferred != Annotation"));
                 e
 
 (* Lexp.case cam be checked and inferred *)
