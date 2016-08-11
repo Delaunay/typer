@@ -1,7 +1,7 @@
 
 open Fmt_lexp
 
-let _debug = false
+let _debug = true
 (* let _debug = false *)
 
 let logs = ref []

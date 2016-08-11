@@ -133,6 +133,8 @@ let get_int ctx = build_var "Int" ctx
 (* :-( *)
 let global_substitution = ref (Unif.empty_subst, [])
 
+let mkMetavar () = Unif.mkMetavar S.identity (Util.dummy_location, "")
+
 (* shift all variables by an offset *)
 let senv_lookup name ctx =
   senv_lookup name ctx + !_shift_glob
@@ -261,13 +263,21 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
         | Pcase (loc, target, patterns) ->
             lexp_case None (loc, target, patterns) ctx i
 
+        (* | Pmetavar _ -> (let meta = mkMetavar () *) (*TODO*)
+                         (* in (* return what ???*)) *)
         | Phastype (_, pxp, ptp) ->
             let ltp, _ = lexp_infer ptp ctx in
                 (_lexp_p_check pxp ltp ctx (i + 1)), ltp
 
-        | _ -> (let meta = mkMetavar ()
+        | Plambda _ -> (let meta = mkMetavar ()
                 in let lxp = lexp_p_check p meta ctx
                 in (lxp, meta))
+
+        | _ -> lexp_error Util.dummy_location ("<LEXP_P_INFER> " ^ Fmt_lexp.string_of_pexp p ^ " not handled\n"); assert false
+
+        (* | Pcase _ -> (let meta = mkMetavar () *)
+                (* in let lxp = lexp_p_check p meta ctx *)
+                (* in (lxp, meta)) *)
 
 
 and lexp_let_decls decls (body: lexp) ctx i =
@@ -304,42 +314,74 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
     _global_lexp_ctx := ctx;
     _global_lexp_trace := (i, tloc, p)::!_global_lexp_trace;
 
-    let subst, _ = !global_substitution in
+    let unify_with_arrow lxp kind subst =
+      let arg, body = mkMetavar (), mkMetavar ()
+      in let arrow = Arrow (kind, None, arg, Util.dummy_location, body)
+      in match Unif.unify arrow lxp subst with
+      | Some(subst) -> global_substitution := subst; arg, body
+      | None       -> lexp_error tloc ("Type " ^ Fmt_lexp.string_of_lxp lxp
+                                               ^ " and "
+                                               ^ Fmt_lexp.string_of_lxp arrow
+                                               ^ " does not match"); dltype, dltype
+
+    in
+    let infer_lambda_body kind var body subst =
+        (* Read var type from the provided type *)
+        let ltp, lbtp = match nosusp t with
+            | Arrow(kind, _, ltp, _, lbtp) -> ltp, lbtp
+            | lxp -> (unify_with_arrow lxp kind subst)
+        in
+        let nctx = env_extend ctx var Variable ltp in
+        let lbody = _lexp_p_check body lbtp nctx (i + 1) in Lambda(kind, var, ltp, lbody)
+
+    in
+    let subst, _ = !global_substitution
+    in
+    let lexp_infer p ctx = _lexp_p_infer p ctx (i + 1)
+    in
     match p with
         (* This case cannot be inferred *)
-    | Plambda (kind, var, optype, body) ->( (* Read var type from the provided type *)
-        let lexp_infer p ctx = _lexp_p_infer p ctx (i + 1) in
-        let ltp, lbody = (match optype with
-        | Some ptype -> (let ltp, _ = lexp_infer ptype ctx in
-                         let nctx = env_extend ctx var Variable ltp
-                         in let lbody, lbtp = lexp_infer body nctx
-                         in (ltp, lbody))
-        | None       -> (infer_lambda_ptype t kind var subst body))
-    in
-    Lambda(kind, var, ltp, lbody))
+        | Plambda (kind, var, None, body) ->(infer_lambda_body kind var body subst)
 
-    (* This is mostly for the case where no branches are provided *)
-    | Pcase (loc, target, patterns) ->
-      let lxp, _ = lexp_case (Some t) (loc, target, patterns) ctx i in lxp
+        (* This case can be inferred *)
+        | Plambda (kind, var, Some (ptype), body) -> (* TODO : move to lexp_check*)
+          let ltp, _ = lexp_infer ptype ctx
+          in let nctx = env_extend ctx var Variable ltp
+          in let lbody, lbtp = lexp_infer body nctx
+          in Lambda(kind, var, ltp, lbody)
 
-    | _ -> match t with (* Prevent SO but not sure if it's the right solution *)
-      | Metavar _ -> t
-      | _         -> (
-          let (e, inferred_t) = _lexp_p_infer p ctx (i + 1) in
-          (* e *)
-          match e with
-          (* Built-in is a dummy function with no type. We cannot check
-           * Built-in *)
-          | Builtin _ -> e
-          | _ -> (match Unif.unify inferred_t t subst with
-              | Some subst -> global_substitution := subst; inferred_t
-              | None -> debug_msg ( (* Error management ??? *)
-                  let print_lxp str =
-                    print_string (Fmt_lexp.colored_string_of_lxp str Fmt_lexp.str_yellow Fmt_lexp.str_magenta) in
-                  print_string "1 exp "; (print_lxp e); print_string "\n";
-                  print_string "2 inf "; (print_lxp inferred_t); print_string "\n";
-                  print_string "3 Ann susp("; (print_lxp (nosusp t)); print_string ")\n";
-                  lexp_warning tloc "Type Mismatch inferred != Annotation"); e))
+
+        (* This is mostly for the case where no branches are provided *)
+        | Pcase (loc, target, patterns) ->
+            let lxp, _ = lexp_case (Some t) (loc, target, patterns) ctx i in
+                lxp
+
+        | _ -> (let (e, inferred_t) = _lexp_p_infer p ctx (i + 1) in
+            (* e *)
+            match e with
+                (* Built-in is a dummy function with no type. We cannot check
+                 * Built-in *)
+                | Builtin _ -> e
+                | _ ->
+                  (match Unif.unify inferred_t t Unif.empty_subst with (* cause eval test to fail : too many arguments *)
+                   | Some subst -> global_substitution := subst; inferred_t
+                   | None -> debug_msg (
+                      let print_lxp str =
+                        print_string (Fmt_lexp.colored_string_of_lxp str Fmt_lexp.str_yellow Fmt_lexp.str_magenta) in
+                      print_string "1 exp "; (print_lxp e); print_string "\n";
+                      print_string "2 inf "; (print_lxp inferred_t); print_string "\n";
+                      print_string "3 Ann susp("; (print_lxp (nosusp t)); print_string ")\n";
+                      lexp_warning tloc "Type Mismatch inferred != Annotation"); e ))
+                  (* (match Unif.unify inferred_t t Unif.empty_subst with *) (* No error (cf other version)*)
+                   (* | Some _ -> () *)
+                   (* | None -> debug_msg ((* Error management ??? *) *)
+                      (* let print_lxp str = *)
+                        (* print_string (Fmt_lexp.colored_string_of_lxp str Fmt_lexp.str_yellow Fmt_lexp.str_magenta) in *)
+                      (* print_string "1 exp "; (print_lxp e); print_string "\n"; *)
+                      (* print_string "2 inf "; (print_lxp inferred_t); print_string "\n"; *)
+                      (* print_string "3 Ann susp("; (print_lxp (nosusp t)); print_string ")\n"; *)
+                      (* lexp_warning tloc "Type Mismatch inferred != Annotation")); *)
+                (* e *)
 
 (* Lexp.case cam be checked and inferred *)
 and lexp_case (rtype: lexp option) (loc, target, patterns) ctx i =
@@ -444,45 +486,25 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
           else assert false)
       | Arrow (kind, _, ltp_arg, _, ltp_ret) -> (kind, mkMetavar ())::(infer_implicit_arg ltp_ret largs nargs (depth - 1))
       | _ -> [] (* List.map (fun g -> Aexplicit, g) largs *) (* ??????? *) (* Make get_return_type not complain ... *)
-
-    and infer_implicit_arg_2 ltp largs =
-      match ltp with
-      | Arrow (kind, _, ltp_arr, _, _) -> (match largs with
-          | arg::return::[]          -> (Aexplicit, arg)::(Aexplicit, return)::[]
-          | _ when kind == Aexplicit -> List.map (fun g -> (kind, g)) largs
-          | return::[]               -> ((kind, mkMetavar ())::(Aexplicit, return)::[])
-          | _                        -> Debug_fun.debug_print_no_buff "Unknown case\n"; assert false)
-      | _ -> List.map (fun g -> (Aexplicit, g)) largs
     in
     (* retrieve function's body *)
     let body, ltp = _lexp_p_infer fun_name ctx (i + 1) in
     let ltp = nosusp ltp in
 
     let handle_named_call (loc, name) =
+        Debug_fun.debug_print_no_buff ("<LPARSE.LEXP_CALL>handle_named_call (?loc?, " ^ name ^ ")\n");
         (*  Process Arguments *)
         Debug_fun.do_debug (fun () -> prerr_newline (); ());
         let pargs = List.map pexp_parse sargs in
         let largs = _lexp_parse_all pargs ctx i in
-        (*TODO use ltype to get arg_kind, if implicit and not given, create metavar*)
-
-        Debug_fun.do_debug (fun () -> (* Some debug printing, remove ASAP*)
-            prerr_string "<LPARSE.lexp_call>(largs)    ";
-            List.iter (fun l -> Debug_fun.debug_print_lexp l; prerr_string ", ") largs;
-            prerr_newline (); ());
-        Debug_fun.debug_print_no_buff "<LPARSE.lexp_call>(body)     ";
-        Debug_fun.debug_print_lexp body;
-        Debug_fun.do_debug (fun () -> prerr_newline ();() );
-        Debug_fun.debug_print_no_buff "<LPARSE.lexp_call>(ltp)      ";
-        Debug_fun.debug_print_lexp ltp;
-        Debug_fun.do_debug (fun () -> prerr_newline ();() );
-
         let rec depth_of = function
             Arrow (_, _, _, _, ltp) -> 1 + (depth_of ltp)
           | _                       -> 0
         in
         let new_args = infer_implicit_arg ltp largs ((List.length largs) - 1) (depth_of ltp)
-        (* let new_args = infer_implicit_arg_2 ltp largs *)
+        (* let new_args = List.map (fun g -> (Aexplicit, g)) largs *)
         in
+
         try (*  Check if the function was defined *)
             let idx = senv_lookup name ctx in
             let vf = (make_var name idx loc) in
@@ -518,6 +540,18 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
                          call, ret_type
 
         with Not_found ->
+            Debug_fun.debug_print_no_buff ("==== <LPARSE.LEXP_CALL>handle_named_call (?loc?, " ^ name ^ ") ====\n");
+            Debug_fun.do_debug (fun () -> (* Some debug printing, remove ASAP*)
+                prerr_string "==== <LPARSE.lexp_call>(largs)    ";
+                List.iter (fun l -> Debug_fun.debug_print_lexp l; prerr_string ", ") largs;
+                prerr_string " ====";
+                prerr_newline (); ());
+            Debug_fun.debug_print_no_buff "==== <LPARSE.lexp_call>(body)     ";
+            Debug_fun.debug_print_lexp body;
+            Debug_fun.do_debug (fun () -> prerr_string " =="; prerr_newline ();() );
+            Debug_fun.debug_print_no_buff "==== <LPARSE.lexp_call>(ltp)      ";
+            Debug_fun.debug_print_lexp ltp;
+            Debug_fun.do_debug (fun () -> prerr_string " ===="; prerr_newline ();() );
             lexp_error loc ("The function \"" ^ name ^ "\" was not defined");
             let vf = (make_var name (-1) loc) in
                 Call(vf, new_args), ltp in

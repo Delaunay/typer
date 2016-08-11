@@ -1,5 +1,6 @@
 
 open Sexp
+open Pexp
 open Lexp
 open Fmt
 
@@ -102,3 +103,20 @@ let center (str: string ) (dim: int ) (char_: char) : string =
   in (String.make lpad char_) ^ str ^ (String.make lpad char_)
 
 
+let rec string_of_pexp pxp =
+  match pxp with
+  (* | Psort of location * sort *)
+  | Pimm (Integer (_, i))     -> "Pimm( Integer (" ^ string_of_int i ^ "))"
+  | Pimm (Float (_, f))       -> "Pimm( Float (" ^ string_of_float f ^ "))"
+  | Pimm (String (_, s))      -> "Pimm (String (" ^ s ^ "))"
+  | Pvar (_, s)               -> "Pvar (" ^ s ^ ")"
+  | Phastype (_, p1, p2)      -> "Phastype (" ^ string_of_pexp p1 ^ ", " ^ string_of_pexp p2 ^ ")"
+  | Pmetavar (_, s)           -> "Pmetavar (" ^ s ^ ")"
+  | Plet (_, _, p)            -> "Plet (_, " ^ string_of_pexp p ^ ")"
+  | Parrow (_, _, _, _, _)    -> "Parrow (...)"
+  | Plambda _                 -> "Plambda (...)"
+  | Pcall _                   -> "Pcall (...)"
+  | Pinductive _              -> "Pinductive (...)"
+  | Pcons ( (_, s), (_, s2) ) -> "Pcons (" ^ s ^ ", " ^ s2 ^ ")"
+  | Pcase _                   -> "Pcase (...)"
+  | _                         -> "Pexp not handled"
