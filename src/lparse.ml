@@ -335,9 +335,7 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
             let lxp, _ = lexp_case (Some t) (loc, target, patterns) ctx i in
                 lxp
 
-        | _ -> match t with
-          | Metavar _ -> t
-          | _         -> (let (e, inferred_t) = _lexp_p_infer p ctx (i + 1) in (* SO : infinite mutual recursion *)
+        | _ -> (let (e, inferred_t) = _lexp_p_infer p ctx (i + 1) in
             (* e *)
             match e with
                 (* Built-in is a dummy function with no type. We cannot check
@@ -346,7 +344,7 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
                 | _ ->
                   (match Unif.unify inferred_t t Unif.empty_subst with (* cause eval test to fail : too many arguments *)
                    | Some subst -> global_substitution := subst; inferred_t
-                   | None -> debug_msg ((* Error management ??? *)
+                   | None -> debug_msg (
                       let print_lxp str =
                         print_string (Fmt_lexp.colored_string_of_lxp str Fmt_lexp.str_yellow Fmt_lexp.str_magenta) in
                       print_string "1 exp "; (print_lxp e); print_string "\n";
