@@ -261,13 +261,21 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
         | Pcase (loc, target, patterns) ->
             lexp_case None (loc, target, patterns) ctx i
 
+        (* | Pmetavar _ -> (let meta = mkMetavar () *) (*TODO*)
+                         (* in (* return what ???*)) *)
         | Phastype (_, pxp, ptp) ->
             let ltp, _ = lexp_infer ptp ctx in
                 (_lexp_p_check pxp ltp ctx (i + 1)), ltp
 
-        | _ -> (let meta = mkMetavar ()
+        | Plambda _ -> (let meta = mkMetavar ()
                 in let lxp = lexp_p_check p meta ctx
                 in (lxp, meta))
+
+        | _ -> lexp_error Util.dummy_location ("<LEXP_P_INFER> " ^ Fmt_lexp.string_of_pexp p ^ " not handled\n"); assert false
+
+        (* | Pcase _ -> (let meta = mkMetavar () *)
+                (* in let lxp = lexp_p_check p meta ctx *)
+                (* in (lxp, meta)) *)
 
 
 and lexp_let_decls decls (body: lexp) ctx i =
