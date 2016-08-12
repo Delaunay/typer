@@ -133,7 +133,10 @@ let get_int ctx = build_var "Int" ctx
 (* :-( *)
 let global_substitution = ref (Unif.empty_subst, [])
 
-let mkMetavar () = Unif.mkMetavar S.identity (Util.dummy_location, "")
+let mkMetavar () = let meta = Unif.create_metavar ()
+  in let name = "__Metavar_" ^ (string_of_int meta)
+  in Metavar (meta, S.Identity, (Util.dummy_location, name))
+  (* Unif.mkMetavar S.identity (Util.dummy_location, "") *)
 
 (* shift all variables by an offset *)
 let senv_lookup name ctx =
@@ -141,8 +144,6 @@ let senv_lookup name ctx =
 
 let rec lexp_p_infer (p : pexp) (ctx : lexp_context): lexp * ltype =
     _lexp_p_infer p ctx 1
-
-and mkMetavar () = Unif.mkMetavar S.identity (Util.dummy_location, "")
 
 and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
 
@@ -273,7 +274,9 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
                 in let lxp = lexp_p_check p meta ctx
                 in (lxp, meta))
 
-        | _ -> lexp_error Util.dummy_location ("<LEXP_P_INFER> " ^ Fmt_lexp.string_of_pexp p ^ " not handled\n"); assert false
+        | _ -> lexp_error Util.dummy_location ("<LEXP_P_INFER> " ^ Fmt_lexp.string_of_pexp p
+                                               ^ " not handled\n");
+          assert false
 
         (* | Pcase _ -> (let meta = mkMetavar () *)
                 (* in let lxp = lexp_p_check p meta ctx *)
