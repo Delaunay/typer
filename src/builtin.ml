@@ -171,7 +171,7 @@ let rec tlist2olist acc expr =
         | Vcons((_, "nil"), []) -> List.rev acc
         | _ ->
             print_string (value_name expr); print_string "\n";
-            value_print expr;
+            value_print expr; print_newline ();
 
             builtin_error dloc "List conversion failure'"
 

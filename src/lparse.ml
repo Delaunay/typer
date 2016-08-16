@@ -488,7 +488,17 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
           in (Aexplicit, head)::(infer_implicit_arg ltp_ret tail (nargs - 1) (depth - 1))
           else assert false)
       | Arrow (kind, _, ltp_arg, _, ltp_ret) -> (kind, mkMetavar ())::(infer_implicit_arg ltp_ret largs nargs (depth - 1))
-      | _ -> [] (* List.map (fun g -> Aexplicit, g) largs *) (* ??????? *) (* Make get_return_type not complain ... *)
+      | _ -> Debug_fun.debug_print_no_buff ( "<LPARSE.LEXP_CALL>(infer_implicit_arg) ltp = "
+                                             ^ Fmt_lexp.string_of_lxp ltp
+                                             ^ " ,\nlargs = ["
+                                             ^ (List.fold_left (fun a e -> a ^ ", " ^ (Fmt_lexp.string_of_lxp e)) "" largs)
+                                             ^ "],\nfun_name = "
+                                             ^ Fmt_lexp.string_of_pexp fun_name
+                                             ^ "\n");
+        (* Cause the throw in builtin*)
+        (* [] *)
+        List.map (fun g -> Aexplicit, g) largs
+        (* cause the too many args *)
     in
     (* retrieve function's body *)
     let body, ltp = _lexp_p_infer fun_name ctx (i + 1) in
