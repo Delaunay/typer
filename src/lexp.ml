@@ -684,6 +684,8 @@ and _lexp_to_str ctx exp =
 
         | Var ((loc, name), idx) -> name ^ (index idx) ;
 
+        | Metavar (idx, subst, (loc, name)) -> "?" ^ name ^ (index idx) (*TODO : print subst*)
+
         | Let (_, decls, body)   ->
             (* Print first decls without indent *)
             let h1, decls, idt_lvl =
