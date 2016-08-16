@@ -30,7 +30,8 @@ let generate_tests (name: string)
     (test input_gen fmt tester)
 
 (* let input = "y = lambda x -> x + 1;" *)
-let input = "id = lambda (α : Type) ≡> lambda x : α -> x;"
+let input = "id = lambda (α : Type) ≡> lambda x : α -> x;
+res = id 3;"
 
 let generate_lexp_from_str str =
   List.hd ((fun (lst, _) ->
@@ -68,6 +69,8 @@ let _ = (add_test "TYPECHEK_LEXP" "lexp_print" (fun () ->
 
     (* Cast to string *)
     let str1 = to_str ret1 in
+
+    print_string str1;
 
     (* read code again *)
     let ret2, _ = lexp_decl_str str1 lctx in
