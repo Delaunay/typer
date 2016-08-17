@@ -274,14 +274,9 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
                 in let lxp = lexp_p_check p meta ctx
                 in (lxp, meta))
 
-        | _ -> lexp_error Util.dummy_location ("<LEXP_P_INFER> " ^ Fmt_lexp.string_of_pexp p
-                                               ^ " not handled\n");
-          assert false
-
-        (* | Pcase _ -> (let meta = mkMetavar () *)
-                (* in let lxp = lexp_p_check p meta ctx *)
-                (* in (lxp, meta)) *)
-
+        (* | _ -> lexp_error Util.dummy_location ("<LEXP_P_INFER> " ^ Fmt_lexp.string_of_pexp p *)
+                                               (* ^ " not handled\n"); *)
+          (* assert false *)
 
 and lexp_let_decls decls (body: lexp) ctx i =
   (* build the weird looking let *)
@@ -293,26 +288,8 @@ and lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context): lexp =
   _lexp_p_check p t ctx 1
 
 and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
-  let tloc = pexp_location p
-  in
-
-  let unify_with_arrow lxp kind subst = (* Unify an arrow composed of new metavar with lxp *)
-       let arg, body = mkMetavar (), mkMetavar ()
-       in let arrow = Arrow(kind, None, arg, Util.dummy_location, body)
-       in match Unif.unify arrow lxp subst with
-       | None         -> lexp_error tloc "Type does not match"; dltype, dltype
-       | Some (subst) -> global_substitution := subst; arg, body
-  in
-
-  (* Infer the pexp option part of the lambda when it's None *)
-  let infer_lambda_ptype t kind var subst body =
-    let ltp, lbtp = ( match nosusp t with
-        | Arrow(kind, _, ltp, _, lbtp) -> ltp, lbtp
-        | lxp -> (unify_with_arrow lxp kind subst))
-    in let nctx = env_extend ctx var Variable ltp
-    in let lbody = _lexp_p_check body lbtp nctx (i + 1)
-    in ltp, lbody
-  in
+    let tloc = pexp_location p
+    in
 
     _global_lexp_ctx := ctx;
     _global_lexp_trace := (i, tloc, p)::!_global_lexp_trace;
@@ -347,7 +324,7 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
         | Plambda (kind, var, None, body) ->(infer_lambda_body kind var body subst)
 
         (* This case can be inferred *)
-        | Plambda (kind, var, Some (ptype), body) -> (* TODO : move to lexp_check*)
+        | Plambda (kind, var, Some (ptype), body) ->
           let ltp, _ = lexp_infer ptype ctx
           in let nctx = env_extend ctx var Variable ltp
           in let lbody, lbtp = lexp_infer body nctx
