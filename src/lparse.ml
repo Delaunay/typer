@@ -136,7 +136,6 @@ let global_substitution = ref (Unif.empty_subst, [])
 let mkMetavar () = let meta = Unif.create_metavar ()
   in let name = "__Metavar_" ^ (string_of_int meta)
   in Metavar (meta, S.Identity, (Util.dummy_location, name))
-  (* Unif.mkMetavar S.identity (Util.dummy_location, "") *)
 
 (* shift all variables by an offset *)
 let senv_lookup name ctx =
@@ -264,8 +263,10 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
         | Pcase (loc, target, patterns) ->
             lexp_case None (loc, target, patterns) ctx i
 
-        (* | Pmetavar _ -> (let meta = mkMetavar () *) (*TODO*)
-                         (* in (* return what ???*)) *)
+        | Pmetavar _ -> (let meta = mkMetavar () (*TODO *)
+                         in lexp_warning dloc "<LEXP_P_INFER>(Pmetavar case) Check output : may be wrong lexp/type returned";
+                         (meta, meta) (* FIXME pretty sure that's not should be returned*))
+
         | Phastype (_, pxp, ptp) ->
             let ltp, _ = lexp_infer ptp ctx in
                 (_lexp_p_check pxp ltp ctx (i + 1)), ltp
