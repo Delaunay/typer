@@ -274,10 +274,6 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
                 in let lxp = lexp_p_check p meta ctx
                 in (lxp, meta))
 
-        (* | _ -> lexp_error Util.dummy_location ("<LEXP_P_INFER> " ^ Fmt_lexp.string_of_pexp p *)
-                                               (* ^ " not handled\n"); *)
-          (* assert false *)
-
 and lexp_let_decls decls (body: lexp) ctx i =
   (* build the weird looking let *)
   let decls = List.rev decls in
@@ -352,16 +348,6 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
                       print_string "2 inf "; (print_lxp inferred_t); print_string "\n";
                       print_string "3 Ann susp("; (print_lxp (nosusp t)); print_string ")\n";
                       lexp_warning tloc "Type Mismatch inferred != Annotation"); e ))
-                  (* (match Unif.unify inferred_t t Unif.empty_subst with *) (* No error (cf other version)*)
-                   (* | Some _ -> () *)
-                   (* | None -> debug_msg ((* Error management ??? *) *)
-                      (* let print_lxp str = *)
-                        (* print_string (Fmt_lexp.colored_string_of_lxp str Fmt_lexp.str_yellow Fmt_lexp.str_magenta) in *)
-                      (* print_string "1 exp "; (print_lxp e); print_string "\n"; *)
-                      (* print_string "2 inf "; (print_lxp inferred_t); print_string "\n"; *)
-                      (* print_string "3 Ann susp("; (print_lxp (nosusp t)); print_string ")\n"; *)
-                      (* lexp_warning tloc "Type Mismatch inferred != Annotation")); *)
-                (* e *)
 
 (* Lexp.case cam be checked and inferred *)
 and lexp_case (rtype: lexp option) (loc, target, patterns) ctx i =
