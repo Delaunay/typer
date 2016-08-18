@@ -426,13 +426,21 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
             raise e) in
 
     (* consume Arrows and args together *)
-    let rec get_return_type name i ltp args =
+    let rec get_return_type name i ltp args subst ctx =
         match (nosusp ltp), args with
             | _, [] -> ltp
-            | Arrow(_, _, _, _, ltp), hd::tl -> (get_return_type name (i + 1) ltp tl)
+            | Arrow(_, _, _, _, ltp), hd::tl -> (get_return_type name (i + 1) ltp tl subst ctx)
+            (* Do a lookup to check where the var "point" to*)
+            (* | Var(vt), hd::args -> (let ltp = Debruijn.env_lookup_expr ctx vt in get_return_type name (i) ltp args subst ctx) *)
+            | Metavar _, (kind, arg)::tl -> let arr = Arrow (kind, None, mkMetavar (), Util.dummy_location, ltp)
+              (* in ltp *)
+              in (match Unif.unify ltp arr subst with
+                  | None -> ltp (*?????*)
+                  | Some (subst, c) -> global_substitution := (subst, c); get_return_type name (i + 1) arr tl subst ctx)
             | _, _ -> lexp_warning loc
                 (name ^ " was provided with too many args. Expected: " ^
-                            (string_of_int i) ^ " got : " ^ (string_of_int (List.length args))); ltp in
+                 (string_of_int i) ^ " got : " ^ (string_of_int (List.length args))
+                ^ " for lexp : " ^ Fmt_lexp.string_of_lxp (nosusp ltp)); ltp in
 
     (*  Vanilla     : sqr is inferred and (lambda x -> x * x) is returned
      *  Macro       : sqr is returned
@@ -523,7 +531,8 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
                                     dlxp, dltype)
 
                     | e ->
-                         let ret_type = get_return_type name 0 ltp new_args in
+                         let subst, _ = !global_substitution in
+                         let ret_type = get_return_type name 0 ltp new_args subst ctx in
                          let call = Call(vf, new_args)
                          in
                          Debug_fun.debug_print_no_buff "<LPARSE.lexp_call>(new_args) "; (* debug printing remove ASAP*)
