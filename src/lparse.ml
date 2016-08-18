@@ -443,26 +443,44 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
       (* TODO : check arg number ?*)
       (* FIXME error management *)
       match nosusp ltp with
-      | Arrow (kind, _, ltp_arg, _, ltp_ret) when kind = Aexplicit -> (if List.length largs > 0
+      (* Error case *)
+      | Arrow (Aexplicit, _, _, _, _) when (List.length largs <= 0) ->
+         Debug_fun.debug_print_no_buff ( "<LPARSE.LEXP_CALL>(infer_implicit_arg) Not enough arguments : \n\tltp = "
+         ^ Fmt_lexp.string_of_lxp ltp
+         ^ " ,\n\tlargs = ["
+         ^ (List.fold_left (fun a e -> a ^ ", " ^ (Fmt_lexp.string_of_lxp e)) "" largs)
+         ^ "],\n\tfun_name = "
+         ^ Fmt_lexp.string_of_pexp fun_name);
+         Debug_fun.do_debug (fun () -> prerr_newline (); ());
+         assert false
+
+      (* Explicit parameter *)
+      | Arrow (Aexplicit, _, ltp_arg, _, ltp_ret) ->
+        (let head, tail = List.hd largs, List.tl largs
+          in (Aexplicit, head)::(infer_implicit_arg ltp_ret tail (nargs - 1) (depth - 1)))
+
+      (* Implicit parameter explictly given*)
+      | Arrow (kind, _, ltp_arg, _, ltp_ret) when nargs = depth ->
+        (if List.length largs >0
           then let head, tail = List.hd largs, List.tl largs
-          in (Aexplicit, head)::(infer_implicit_arg ltp_ret tail (nargs - 1) (depth - 1))
+            in (Aexplicit, head)::(infer_implicit_arg ltp_ret tail (nargs - 1) (depth - 1))
           else assert false)
-      | Arrow (kind, _, ltp_arg, _, ltp_ret) when nargs = depth -> (if List.length largs > 0
-          then let head, tail = List.hd largs, List.tl largs
-          in (Aexplicit, head)::(infer_implicit_arg ltp_ret tail (nargs - 1) (depth - 1))
-          else assert false)
+
+      (* Implicit paramter not given*)
       | Arrow (kind, _, ltp_arg, _, ltp_ret) -> (kind, mkMetavar ())::(infer_implicit_arg ltp_ret largs nargs (depth - 1))
+
+      (* "End" of the arrow "list"*)
       | _ -> Debug_fun.debug_print_no_buff ( "<LPARSE.LEXP_CALL>(infer_implicit_arg) ltp = "
                                              ^ Fmt_lexp.string_of_lxp ltp
-                                             ^ " ,\nlargs = ["
+                                             ^ " ,\n\tlargs = ["
                                              ^ (List.fold_left (fun a e -> a ^ ", " ^ (Fmt_lexp.string_of_lxp e)) "" largs)
-                                             ^ "],\nfun_name = "
+                                             ^ "],\n\tfun_name = "
                                              ^ Fmt_lexp.string_of_pexp fun_name
                                              ^ "\n");
-        (* Cause the throw in builtin*)
-        (* [] *)
-        List.map (fun g -> Aexplicit, g) largs
-        (* cause the too many args *)
+                                             (* Cause the throw in builtin*)
+                                             (* [] *)
+                                             List.map (fun g -> Aexplicit, g) largs
+                                             (* cause the too many args *)
     in
     (* retrieve function's body *)
     let body, ltp = _lexp_p_infer fun_name ctx (i + 1) in
