@@ -44,7 +44,7 @@ and string_of_lxp lxp =
   | Builtin ((_, name), _)          -> "Builtin(" ^ name ^ ")"
   | Let (_)                         -> "Let(..)"
   | Var ((_, name), idx)            -> "Var(" ^ name ^ ", #" ^(string_of_int idx) ^ ")"
-  | Arrow (_, _, a, _, b)           -> "Arrow(" ^ (string_of_lxp a) ^ " => " ^ (string_of_lxp b) ^ ")"
+  | Arrow (kind, _, a, _, b)        -> "Arrow(" ^ (string_of_lxp a) ^ ":"  ^ string_of_kind kind ^ " => " ^ (string_of_lxp b) ^ ")"
   | Lambda (_,(_, name), dcl, body) -> "Lambda(" ^ name ^ ": " ^ (string_of_lxp dcl) ^ " => (" ^ (string_of_lxp body) ^ "))"
   | Metavar (value, _, (_, name))      -> "Metavar(" ^ (string_of_int value) ^ ", " ^ name ^ ")"
   | Call (_)                        -> "Call(...)"
@@ -54,6 +54,11 @@ and string_of_lxp lxp =
   | Case _                          -> ("Case") ^ "(...)"
   | Susp (v, s)                     -> "Susp(" ^ (string_of_lxp v) ^ ", " ^ (string_of_subst s) ^ ")"
   | _                               -> "Unidentified Lexp"
+
+and string_of_kind = function
+ | Aexplicit -> "Aexplicit"
+ | Aimplicit -> "Aimplicit"
+ | Aerasable -> "Aerasable"
 
 and string_of_sort_level lvl =
   match lvl with
