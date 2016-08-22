@@ -452,7 +452,7 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
       (* FIXME error management *)
       match nosusp ltp with
       (* Error case *)
-      | Arrow (Aexplicit, _, _, _, _) when (List.length largs <= 0) ->
+      | Arrow (Aexplicit, _, _, _, _) when (List.length largs <= 0) -> (* It's a partial application ? *)
          Debug_fun.debug_print_no_buff ( "<LPARSE.LEXP_CALL>(infer_implicit_arg) Not enough arguments : \n\tltp = "
          ^ Fmt_lexp.string_of_lxp ltp
          ^ " ,\n\tlargs = ["
@@ -460,7 +460,7 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
          ^ "],\n\tfun_name = "
          ^ Fmt_lexp.string_of_pexp fun_name);
          Debug_fun.do_debug (fun () -> prerr_newline (); ());
-         assert false
+         []
 
       (* Explicit parameter *)
       | Arrow (Aexplicit, _, ltp_arg, _, ltp_ret) ->
@@ -472,7 +472,7 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
         (if List.length largs >0
           then let head, tail = List.hd largs, List.tl largs
             in (Aexplicit, head)::(infer_implicit_arg ltp_ret tail (nargs - 1) (depth - 1))
-          else assert false)
+          else [])
 
       (* Implicit paramter not given*)
       | Arrow (kind, _, ltp_arg, _, ltp_ret) -> (kind, mkMetavar ())::(infer_implicit_arg ltp_ret largs nargs (depth - 1))
