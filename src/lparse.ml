@@ -452,15 +452,7 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
       (* FIXME error management *)
       match nosusp ltp with
       (* Error case *)
-      | Arrow (Aexplicit, _, _, _, _) when (List.length largs <= 0) -> (* It's a partial application ? *)
-         Debug_fun.debug_print_no_buff ( "<LPARSE.LEXP_CALL>(infer_implicit_arg) Not enough arguments : \n\tltp = "
-         ^ Fmt_lexp.string_of_lxp ltp
-         ^ " ,\n\tlargs = ["
-         ^ (List.fold_left (fun a e -> a ^ ", " ^ (Fmt_lexp.string_of_lxp e)) "" largs)
-         ^ "],\n\tfun_name = "
-         ^ Fmt_lexp.string_of_pexp fun_name);
-         Debug_fun.do_debug (fun () -> prerr_newline (); ());
-         []
+      | Arrow (Aexplicit, _, _, _, _) when (List.length largs <= 0) -> []
 
       (* Explicit parameter *)
       | Arrow (Aexplicit, _, ltp_arg, _, ltp_ret) ->
