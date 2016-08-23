@@ -448,8 +448,6 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
      *  Anonymous   : lambda                                                  *)
 
     let rec infer_implicit_arg ltp largs nargs depth =
-      (* TODO : check arg number ?*)
-      (* FIXME error management *)
       match nosusp ltp with
       (* Error case *)
       | Arrow (Aexplicit, _, _, _, _) when (List.length largs <= 0) -> []
@@ -470,26 +468,14 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
       | Arrow (kind, _, ltp_arg, _, ltp_ret) -> (kind, mkMetavar ())::(infer_implicit_arg ltp_ret largs nargs (depth - 1))
 
       (* "End" of the arrow "list"*)
-      | _ -> Debug_fun.debug_print_no_buff ( "<LPARSE.LEXP_CALL>(infer_implicit_arg) ltp = "
-                                             ^ Fmt_lexp.string_of_lxp ltp
-                                             ^ " ,\n\tlargs = ["
-                                             ^ (List.fold_left (fun a e -> a ^ ", " ^ (Fmt_lexp.string_of_lxp e)) "" largs)
-                                             ^ "],\n\tfun_name = "
-                                             ^ Fmt_lexp.string_of_pexp fun_name
-                                             ^ "\n");
-                                             (* Cause the throw in builtin*)
-                                             (* [] *)
-                                             List.map (fun g -> Aexplicit, g) largs
-                                             (* cause the too many args *)
+      | _ -> List.map (fun g -> Aexplicit, g) largs
     in
     (* retrieve function's body *)
     let body, ltp = _lexp_p_infer fun_name ctx (i + 1) in
     let ltp = nosusp ltp in
 
     let handle_named_call (loc, name) =
-        Debug_fun.debug_print_no_buff ("<LPARSE.LEXP_CALL>handle_named_call (?loc?, " ^ name ^ ")\n");
         (*  Process Arguments *)
-        Debug_fun.do_debug (fun () -> prerr_newline (); ());
         let pargs = List.map pexp_parse sargs in
         let largs = _lexp_parse_all pargs ctx i in
         let rec depth_of = function
@@ -526,14 +512,7 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
                          let subst, _ = !global_substitution in
                          let ret_type = get_return_type name 0 ltp new_args subst ctx in
                          let call = Call(vf, new_args)
-                         in
-                         Debug_fun.debug_print_no_buff "<LPARSE.lexp_call>(new_args) "; (* debug printing remove ASAP*)
-                         Debug_fun.do_debug (fun () ->
-                             List.iter (fun (_, l) -> Debug_fun.debug_print_lexp l; prerr_string ", "; ()) new_args; ()
-                           );
-                         Debug_fun.debug_print_lexp call;
-                         Debug_fun.debug_print_no_buff "\n";
-                         call, ret_type
+                         in call, ret_type
 
         with Not_found ->
             Debug_fun.debug_print_no_buff ("==== <LPARSE.LEXP_CALL>handle_named_call (?loc?, " ^ name ^ ") ====\n");
