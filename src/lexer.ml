@@ -97,11 +97,13 @@ let nexttoken (stt : token_env) (pts : pretoken list) bpos cpos
              pts', 0, 0)
           else
             let char = name.[bp] in
-            if char == '_' then
+            if char == '_'
+               && bp + 1 < String.length name
+               && name.[bp + 1] != '_' then
               (* Skip next char, in case it's a special token.  *)
               (* For utf-8, this cp+2 is risky but actually works: _ counts
-                    as 1 and if the input is valid utf-8 the next byte has to
-                    be a leading byte, so it has to count as 1 as well ;-) *)
+               * as 1 and if the input is valid utf-8 the next byte has to
+               * be a leading byte, so it has to count as 1 as well ;-) *)
               lexsym (bp+2) (cp+2)
             else if stt.(Char.code name.[bp]) && (bp + 1 >= String.length name
                                                   || not (name.[bp+1] == '_')) then
