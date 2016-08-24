@@ -1023,7 +1023,7 @@ let default_rctx =
  * --------------------------------------------------------- *)
 
 (* Lexp helper *)
-let _lexp_expr_str (str: string) (tenv: bool array)
+let _lexp_expr_str (str: string) (tenv: token_env)
             (grm: grammar) (limit: string option) (ctx: lexp_context) =
     let pxps = _pexp_expr_str str tenv grm limit in
         lexp_parse_all pxps ctx

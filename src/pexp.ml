@@ -389,7 +389,7 @@ let pexp_decls_all (nodes: sexp list): pdecl list =
  * --------------------------------------------------------- *)
 
 (* Lexp helper *)
-let _pexp_expr_str (str: string) (tenv: bool array)
+let _pexp_expr_str (str: string) (tenv: token_env)
             (grm: grammar) (limit: string option) =
     let sxps = _sexp_parse_str str tenv grm limit in
         pexp_parse_all sxps
@@ -419,5 +419,3 @@ let pexp_to_string e =
   | Pinductive ((_,_), _, _) -> "Pinductive"
   | Pcons ((_,_),_) -> "Pcons"
   | Pcase (_, _, _) -> "Pcase"
-
-
