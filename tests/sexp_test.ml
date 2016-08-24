@@ -23,5 +23,21 @@ let _ = test_sexp_add "x * x * x" (fun ret ->
         | _ -> failure ()
 )
 
+let test_sexp_eqv dcode1 dcode2 =
+  add_test "SEXP" dcode1
+           (fun () ->
+             let s1 = sexp_parse_str dcode1 in
+             let s2 = sexp_parse_str dcode2 in
+             if sexp_eq_list s1 s2
+             then success ()
+             else (sexp_print (List.hd s1);
+                   sexp_print (List.hd s2);
+                   failure ()))
+
+let _ = test_sexp_eqv "((a) ((1.00)))" "a 1.0"
+let _ = test_sexp_eqv "(x + y)" "_+_ x y"
+let _ = test_sexp_eqv "case e | p1 => e1 | p2 => e2"
+                      "case_ ( _|_ e ( _=>_ p1 e1) ( _=>_ p2 e2))"
+
 (* run all tests *)
 let _ = run_all ()

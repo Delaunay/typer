@@ -231,3 +231,21 @@ let sexp_parse_all_to_list grm tokens limit =
             | _ -> let (sxp, rest) = sexp_parse_all grm tokens limit in
                     sexp_parse_impl grm rest limit (sxp :: acc) in
     sexp_parse_impl grm tokens limit []
+
+(* Sexp comparison, ignoring source-line-number info, used for tests.  *)
+let rec sexp_equal s1 s2 = match s1, s2 with
+  | Epsilon, Epsilon -> true
+  | Block (_, ps1, _), Block (_, ps2, _) -> pretokens_eq_list ps1 ps2
+  | Symbol (_, s1), Symbol (_, s2) -> s1 = s2
+  | String (_, s1), String (_, s2) -> s1 = s2
+  | Integer (_, n1), Integer (_, n2) -> n1 = n2
+  | Float (_, n1), Float (_, n2) -> n1 = n2
+  | Node (s1, ss1), Node (s2, ss2) ->
+     sexp_equal s1 s2 && sexp_eq_list ss1 ss2
+  | _ -> false
+
+and sexp_eq_list ss1 ss2 = match ss1, ss2 with
+  | [],  [] -> true
+  | (s1 :: ss1), (s2 :: ss2) ->
+     sexp_equal s1 s2 && sexp_eq_list ss1 ss2
+  | _ -> false

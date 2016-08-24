@@ -172,3 +172,15 @@ let pretokens_to_str pretokens =
 let pretokens_print p = print_string (pretokens_to_str p)
 
 
+(* Prelexer comparison, ignoring source-line-number info, used for tests.  *)
+let rec pretokens_equal p1 p2 = match p1, p2 with
+  | Pretoken (_, s1), Pretoken (_, s2) -> s1 = s2
+  | Prestring (_, s1), Prestring (_, s2) -> s1 = s2
+  | Preblock (_, ps1, _), Preblock (_, ps2, _) ->
+     pretokens_eq_list ps1 ps2
+  | _ -> false
+and pretokens_eq_list ps1 ps2 = match ps1, ps2 with
+  | [], [] -> true
+  | (p1 :: ps1), (p2 :: ps2) ->
+     pretokens_equal p1 p2 && pretokens_eq_list ps1 ps2
+  | _ -> false
