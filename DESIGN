@@ -1,5 +1,12 @@
 -*- outline -*-
 
+New:
+- extend the stt table to give precedence for "inner op chars" to use within
+  identifiers (i.e. the "." for module naming).
+- "Confusion is power: blurring the line between Bool and Type".
+  Maybe have "if" use a "Decidable" type class, or maybe automatically
+  turn "e : t : Bool" into "e : t = true : Type"?
+
 * Categories of arguments
 We want different categories of arguments.  I'm thinking here of the
 following categories, which are not necessarily mutually-exclusive:
@@ -841,16 +848,6 @@ univalence n =   ua ¹ n , ua n , ua-  n , ua-  n , ua-  n
 
 
 
-* Modules and macros
-If we want to be able to call a macro from another module (via
-"Module.macro <args>"), then we have to allow macro calls to have a "name"
-that's not just a symbol but a module-ref (i.e. a potentially complex
-expression), so it's not obvious how to distinguish macro calls from
-function calls, short of normalizing Pcall's function argument.
-
-Solution: macros have a different type, so if M.x has type "macro", we know
-we should normalize it to get the actual macro.
-
 * Modules
 
 Modules should be able to hold definitions which are universe-polymorphic,
@@ -1003,32 +1000,10 @@ Tokens will be made of any sequence of letters other than blanks/comments.
     special tokens: a(b are 3 tokens if ( is special, but a_(_b is a single
     (magic) token.
 
-** To affect lexing and parsing, declarations have to take effect before the
-  whole file is parsed.  At first we could say that parsing stops (to allow
-  evaluation) at every top-level semi-colon, or after every top-level
-  closer.  But what about
+** Structured identifiers
+We want to support identifiers with inner structure, such as "foo.bar.baz".
 
-  module Toto = {
-    define _::_ a b = ...
-    define foo = 1 :: 2
-  }
-
-  This seems very reasonable, but requires evaluation in the middle of the
-  parse of a top-level construct.  So we have to handle some top-level
-  elements (like "module = ...") specially.
-
-  E.g.:
-  - make it imperative: "module toto;" is a self-contained top-level
-    expression which affects the interpretation of subsequent expressions
-    to be considered as within `toto'.
-  - if we disallow declarations of new special tokens within such a module,
-    then we could re-parse the remaining expressions after finding the
-    definition for _::_.
-  - make it possible for the evaluation of expressions to read the rest
-    of the input (and hence lex&parse it any way it wants).
-  - define special "reader macros", so "module".
-  - define {...} as special so it gets read and passed to `module'
-    without parsing.
+This could be lexed into a Node identical to that of ( __.__ foo bar baz)
 
 ** Provide syntax for backquote&unquote
 Since "," is to be used as separator, maybe (,e) and (`e) could be used?
@@ -1379,6 +1354,7 @@ when they're only used in irrelevant args might relieve the tension.
 ** Papers
 *** occurrence checks: [Reed, LFMTP 2009; Abel & Pientka, TLCA 2011]
 *** pruning: [Pientka, PhD, Sec. 3.1.2; Abel & Pientka, TLCA 2011]
+*** http://www.cs.cmu.edu/~fp/papers/jicslp96.pdf
 
 * Universes
 ** Universe polymorphism

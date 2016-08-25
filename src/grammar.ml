@@ -38,12 +38,20 @@ open Util
 
 type grammar = (int option * int option) SMap.t
 
-let default_stt =
-  let stt = Array.make 256 false
-  in stt.(Char.code ';') <- true;
-     stt.(Char.code ',') <- true;
-     stt.(Char.code '(') <- true;
-     stt.(Char.code ')') <- true;
+(* A token_end array indicates the few chars which are separate tokens,
+ * even if not surrounded by spaces, such as '(', ')', and ';'.
+ * It also indicates which chars are "inner" operators, i.e. those chars
+ * that make up the inner structure of structured identifiers such as
+ * foo.bar.baz.  *)
+type char_kind = | CKnormal | CKseparate | CKinner of int
+type token_env = char_kind array
+let default_stt : token_env =
+  let stt = Array.make 256 CKnormal
+  in stt.(Char.code ';') <- CKseparate;
+     stt.(Char.code ',') <- CKseparate;
+     stt.(Char.code '(') <- CKseparate;
+     stt.(Char.code ')') <- CKseparate;
+     stt.(Char.code '.') <- CKinner 5;
      stt
 
 (* default_grammar is auto-generated from typer-smie-grammar via:

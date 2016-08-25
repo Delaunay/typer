@@ -27,17 +27,6 @@ open Grammar
 
 (*************** The Lexer phase *********************)
 
-(* FIXME: if we want to handle mixfix declarations such as "let _$_ x y =
-   toto in a+1 $ b-2" we could make the "_$_" token (i.e. a simple lexical
-   criteria) trigger the addition of corresponding syntax rules, but
-   it seems hard to extend it so the precedence can also be specified
-   because it is awkward to include the info in the lexical part, and as
-   soon as we move into the syntactical part we get bitten by the fact that
-   we don't know what the syntax means until we perform macroexpansion
-   (i.e. much later).  *)
-
-type token_env = bool array
-
 let digit_p char =
   let code = Char.code char
   in Char.code '0' <= code && code <= Char.code '9'
@@ -84,7 +73,7 @@ let nexttoken (stt : token_env) (pts : pretoken list) bpos cpos
         (hSymbol ({file;line;column=column+bpos},
                   string_sub name bpos (String.length name)),
          pts', 0, 0)
-      else if stt.(Char.code name.[bpos])
+      else if stt.(Char.code name.[bpos]) = CKseparate
               && not (name.[bpos+1] == '_') then
         (hSymbol ({file;line;column=column+bpos},
                   string_sub name bpos (bpos + 1)),
@@ -97,14 +86,17 @@ let nexttoken (stt : token_env) (pts : pretoken list) bpos cpos
              pts', 0, 0)
           else
             let char = name.[bp] in
-            if char == '_' then
+            if char == '_'
+               && bp + 1 < String.length name
+               && name.[bp + 1] != '_' then
               (* Skip next char, in case it's a special token.  *)
               (* For utf-8, this cp+2 is risky but actually works: _ counts
-                    as 1 and if the input is valid utf-8 the next byte has to
-                    be a leading byte, so it has to count as 1 as well ;-) *)
+               * as 1 and if the input is valid utf-8 the next byte has to
+               * be a leading byte, so it has to count as 1 as well ;-) *)
               lexsym (bp+2) (cp+2)
-            else if stt.(Char.code name.[bp]) && (bp + 1 >= String.length name
-                                                  || not (name.[bp+1] == '_')) then
+            else if stt.(Char.code name.[bp]) = CKseparate
+                    && (bp + 1 >= String.length name
+                       || not (name.[bp+1] == '_')) then
               (hSymbol ({file;line;column=column+bpos},
                         string_sub name bpos bp),
                pts, bp, cp)

@@ -233,8 +233,8 @@ let has_property ctx (var_i, var_n) (att_i, att_n): bool =
 
   try
     let pmap = PropertyMap.find (n - var_i, var_n) property_map in
-    let prop = PropertyMap.find (n - att_i, att_n) pmap in
-      true
+    let _ = PropertyMap.find (n - att_i, att_n) pmap in
+    true
   with Not_found -> false
 
 

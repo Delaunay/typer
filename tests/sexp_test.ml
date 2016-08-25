@@ -2,38 +2,43 @@ open Sexp
 open Lexer
 open Utest_lib
 
-let _ = (add_test "SEXP" "lambda x -> x + x" (fun () ->
+let test_sexp_add dcode testfun =
+  add_test "SEXP" dcode (fun () -> testfun (sexp_parse_str dcode))
 
-    let dcode = "lambda x -> x + x;" in
-
-    let ret = sexp_parse_str dcode in
+let _ = test_sexp_add "lambda x -> x + x" (fun ret ->
         match ret with
-            | [Node(lbd, [x; add])] -> (match lbd, x, add with
-                | (Symbol(_, "lambda_->_"), Symbol(_, "x"),
-                   Node(Symbol(_, "_+_"), [Symbol(_, "x"); Symbol(_, "x")])) -> success ()
-                | _ -> failure ())
-          | _ -> failure ()
-))
+        | [Node(Symbol(_, "lambda_->_"),
+                [Symbol(_, "x");
+                 Node(Symbol(_, "_+_"), [Symbol(_, "x"); Symbol(_, "x")])])]
+          -> success ()
+        | _ -> failure ()
+)
 
-let _ = (add_test "SEXP" "x * x * x" (fun () ->
+let _ = test_sexp_add "x * x * x" (fun ret ->
+        match ret with
+        | [Node(Symbol(_, "_*_"),
+                [Node(Symbol(_, "_*_"), [Symbol(_, "x"); Symbol(_, "x")]);
+                 Symbol(_, "x")])]
+          -> success ()
+        | _ -> failure ()
+)
 
-  let dcode = "x * x * x;" in
+let test_sexp_eqv dcode1 dcode2 =
+  add_test "SEXP" dcode1
+           (fun () ->
+             let s1 = sexp_parse_str dcode1 in
+             let s2 = sexp_parse_str dcode2 in
+             if sexp_eq_list s1 s2
+             then success ()
+             else (sexp_print (List.hd s1);
+                   sexp_print (List.hd s2);
+                   failure ()))
 
-  let ret = sexp_parse_str dcode in
-    match ret with
-      | [n] ->(match n with
-        | Node(Symbol(_, "_*_"),
-          [Node(Symbol(_, "_*_"), [Symbol(_, "x"); Symbol(_, "x")]); Symbol(_, "x")])
-            -> success ()
-
-        | Node(Symbol(_, "_*_"),
-          [Symbol(_, "x"); Node(Symbol(_, "_*_"), [Symbol(_, "x")]); Symbol(_, "x")])
-            -> success ()
-
-        | _ -> failure ())
-      | _ -> failure ()
-
-))
+let _ = test_sexp_eqv "((a) ((1.00)))" "a 1.0"
+let _ = test_sexp_eqv "(x + y)" "_+_ x y"
+let _ = test_sexp_eqv "f __; y" "(f ( __; ) y)"
+let _ = test_sexp_eqv "case e | p1 => e1 | p2 => e2"
+                      "case_ ( _|_ e ( _=>_ p1 e1) ( _=>_ p2 e2))"
 
 (* run all tests *)
 let _ = run_all ()
