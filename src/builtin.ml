@@ -347,8 +347,11 @@ let decltype_impl loc largs ctx ftype =
     ltype, type0
 
 let builtin_macro = [
+  (* FIXME: These should be functions!  *)
   ("decltype",      decltype_impl);
   ("declexpr",      declexpr_impl);
+  (* FIXME: These are not macros but `special-forms`.
+   * We should add here `let_in_`, `case_`, etc...  *)
   ("get-attribute", get_attribute_impl);
   ("new-attribute", new_attribute_impl);
   ("has-attribute", has_attribute_impl);
@@ -366,7 +369,7 @@ let get_macro_impl loc name =
     with Not_found -> builtin_error loc ("Builtin macro" ^ name ^ " not found")
 
 let is_builtin_macro name =
-  try SMap.find name macro_impl_map; true
+  try let _ = SMap.find name macro_impl_map in true
     with Not_found -> false
 
 

@@ -48,8 +48,8 @@ let _ = (add_test "MACROS" "macros base" (fun () ->
     (* define 'lambda x -> x * x' using macros *)
     let dcode = "
     my_fun = lambda (x : List Sexp) ->
-        let hd = head Sexp x in
-            (node_ (symbol_ \"_*_\") (cons hd (cons hd nil)));
+        let hd = head(a := Sexp) x in
+            (node_ (symbol_ \"_*_\") (cons(a := Sexp) hd (cons(a := Sexp) hd (nil(a := Sexp)))));
 
     sqr = Macro_ my_fun;
     " in
@@ -71,10 +71,10 @@ let _ = (add_test "MACROS" "macros decls" (fun () ->
 
     let dcode = "
       decls-impl = lambda (x : List Sexp) ->
-        cons (node_ (symbol_ \"_=_\")
-          (cons (symbol_ \"a\") (cons (integer_ 1) nil)))
-       (cons (node_ (symbol_ \"_=_\")
-        (cons (symbol_ \"b\") (cons (integer_ 2) nil))) nil);
+        cons(a := Sexp) (node_ (symbol_ \"_=_\")
+          (cons(a := Sexp) (symbol_ \"a\") (cons(a := Sexp) (integer_ 1) (nil(a := Sexp)))))
+       (cons(a := Sexp) (node_ (symbol_ \"_=_\")
+        (cons(a := Sexp) (symbol_ \"b\") (cons(a := Sexp) (integer_ 2) (nil(a := Sexp))))) (nil(a := Sexp)));
 
       my-decls = Macro_ decls-impl;
 

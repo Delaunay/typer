@@ -86,7 +86,7 @@
    (smie-merge-prec2s
     (smie-bnf->prec2
      '((id)
-       (exp ("(" exp ")")
+       (exp ("(" exp ")") ("(" explicit-arg ")")
             (exp "->" exp) (exp "=>" exp) (exp "≡>" exp)
             ("let" decls "in" exp)
             (exp ":" exp)
@@ -96,7 +96,7 @@
             ("lambda" simple_arg "≡>" exp)
             ("case" exp-branches)
             ;; ("letrec" decl "in" exp)
-            ;; ("if" exp "then" exp "else" exp)
+            ("if" exp "then" exp "else" exp)
             )
        (simple_arg (id) ("(" typed_arg ")"))
        (typed_arg (id ":" exp))
@@ -106,7 +106,8 @@
        (decls (decls ";" decls) (decl))
        (decl (id ":" exp) (exp "=" exp) ("type" inductive_branches))
        (inductive_branches (exp) (inductive_branches "|" inductive_branches))
-       (explicit-arg (id ":=" exp) (id ":-" exp) (id ":≡" exp))
+       (explicit-arg (id ":=" exp) ;; (id ":-" exp) (id ":≡" exp)
+                     )
        (exp-branches (exp "|" branches))
        (branches (branches "|" branches) (pattern "=>" exp)))
      '((assoc ";")
@@ -127,6 +128,11 @@
        (assoc ":")                      ;Should this be left or right?
        (right "->" "=>" "≡>")
        )
+       ;; There's also ambiguity with "else": should "...A else B => C"
+       ;; mean "(...A else B) => C" or "...A else (B => C)".
+       ;; I think it should be "...A else (B => C)".
+     '((nonassoc "else")
+       (nonassoc ":" "=>" "->" "≡>"))
      )
     ;; Precedence of "=" is tricky as well.  Cases to consider:
     ;; - "x : e1 = e2"

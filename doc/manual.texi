@@ -119,7 +119,6 @@ The core syntax of the language is as follows:
 
 @example
 arw   ::= '≡>' | '=>' | '->'
-assign::= ':≡' | ':=' | ':-'
 colon ::= ':::' | '::' | ':'
 exp   ::= id
         | '(' id ':' exp ')' arw exp
@@ -137,12 +136,12 @@ decl  ::= id ':' exp
 simple_arg  ::= id  | '(' id ':' exp ')'
 formal_arg  ::= id  | '(' id colon exp ')'
 ind_arg     ::= exp | '(' id colon exp ')'
-pat_arg     ::= id  | '(' id assign id ' )'
-actual_arg  ::= exp | '(' id assign exp ')'
+pat_arg     ::= id  | '(' id ':=' id ' )'
+actual_arg  ::= exp | '(' id ':=' exp ')'
 label       ::= id
 @end example
 
-The three different kinds of arrows, assign symbols and colons are
+The three different kinds of arrows and colons are
 used respectively for @emph{erasable} arguments, @emph{implicit}
 arguments, and @emph{explicit} arguments.  @emph{explicit} arguments
 are the normal kind of arguments we're all familiar with.
