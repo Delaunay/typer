@@ -33,6 +33,7 @@ open Lexp
 module S = Subst
 module L = List
 module B = Builtin
+module DB = Debruijn
 
 let conv_erase = true              (* If true, conv ignores erased terms. *)
 
@@ -97,6 +98,28 @@ and conv_p' (s1:lexp S.subst) (s2:lexp S.subst) e1 e2 : bool =
     | (_, _) -> false
 
 and conv_p e1 e2 = conv_p' S.identity S.identity e1 e2
+
+
+(* Reduce to weak head normal form.
+ * WHNF implies:
+ * - Not a Let.
+ * - Not a let-bound variable.
+ * - Not a Susp.
+ * - Not an instantiated Metavar.
+ * - Not a Call (Lambda _).
+ * - Not a Call (Call _).
+ * - Not a Call (_, []).
+ * - Not a Case (Cons _).
+ * - Not a Call (MetaSet, ..).
+ *)
+let rec lexp_whnf e ctx = match e with
+  | Var v -> (match DB.env_lookup_expr ctx v with
+             | None -> e
+             (* FIXME: We shouldn't do this blindly for recursive definitions!  *)
+             | Some e' -> lexp_whnf e' ctx)
+  | Susp (e, s) -> lexp_whnf (push_susp e s) ctx
+  (* FIXME: Obviously incomplete!  *)
+  | e -> e
 
 
 (********* Testing if a lexp is properly typed  *********)

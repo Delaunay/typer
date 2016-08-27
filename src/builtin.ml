@@ -303,7 +303,7 @@ let get_attribute_impl loc largs ctx ftype =
       | _ -> builtin_error loc "get-attribute expects two arguments" in
 
   let lxp = get_property ctx (vi, vn) (ai, an) in
-  let ltype = env_lookup_expr ctx ((loc, an), ai) in
+  let Some ltype = env_lookup_expr ctx ((loc, an), ai) in
     lxp, ltype
 
 let new_attribute_impl loc largs ctx ftype =
@@ -331,7 +331,7 @@ let declexpr_impl loc largs ctx ftype =
     | [Var((_, vn), vi)] -> (vi, vn)
     | _ -> builtin_error loc "declexpr expects one argument" in
 
-  let lxp = env_lookup_expr ctx ((loc, vn), vi) in
+  let Some lxp = env_lookup_expr ctx ((loc, vn), vi) in
   let ltp = env_lookup_type ctx ((loc, vn), vi) in
     lxp, ftype
 
