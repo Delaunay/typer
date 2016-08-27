@@ -241,7 +241,11 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
                             lexp_error loc
                                 ("Constructor \"" ^ cname ^ "\" does not exist");
                                 [], [])
-                    | _ -> lexp_error loc "Not an Inductive Type"; [], []
+                    | _ -> lexp_error loc "Not an Inductive Type";
+                      Debug_fun.do_debug (fun () ->
+                          print_string ("idt  : " ^ Fmt_lexp.string_of_lxp (nosusp idt) ^ ", p : " ^ (Fmt_lexp.string_of_pexp p));
+                          print_newline (); ());
+                      [], []
               in
 
                 (* build Arrow type *)
@@ -304,7 +308,7 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
     in
     let infer_lambda_body kind var body subst =
         (* Read var type from the provided type *)
-        let ltp, lbtp = match nosusp t with
+        let ltp, lbtp = match nosusp t (* t is captured *) with
             | Arrow(kind, _, ltp, _, lbtp) -> ltp, lbtp
             | lxp -> (unify_with_arrow lxp kind subst)
         in
@@ -340,11 +344,17 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
                  * Built-in *)
                 | Builtin _ -> e
                 | _ ->
-                  (match Unif.unify inferred_t t Unif.empty_subst with (* cause eval test to fail : too many arguments *)
+                  (match Unif.unify inferred_t t subst with
                    | Some subst -> global_substitution := subst; inferred_t
                    | None -> debug_msg (
                       let print_lxp str =
                         print_string (Fmt_lexp.colored_string_of_lxp str Fmt_lexp.str_yellow Fmt_lexp.str_magenta) in
+                      Debug_fun.do_debug (fun () ->
+                          prerr_string ("0 pxp " ^ Fmt_lexp.string_of_pexp p);
+                          prerr_newline ();
+                          print_lexp_ctx ctx;
+                          prerr_newline ();
+                          ());
                       print_string "1 exp "; (print_lxp e); print_string "\n";
                       print_string "2 inf "; (print_lxp inferred_t); print_string "\n";
                       print_string "3 Ann susp("; (print_lxp (nosusp t)); print_string ")\n";

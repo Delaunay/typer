@@ -125,3 +125,15 @@ let rec string_of_pexp pxp =
   | Pcons ( (_, s), (_, s2) ) -> "Pcons (" ^ s ^ ", " ^ s2 ^ ")"
   | Pcase _                   -> "Pcase (...)"
   | _                         -> "Pexp not handled"
+
+
+(* let rec string_of_lexp_ctx (senv, env, prop) = *)
+  (* "(" ^ (string_of_senv senv) ^ "\n" ^ (string_of_env env) ^ "\n" ^ (string_of_prop prop) ^ ")" *)
+(* and string_of_senv (len, sc) = *)
+  (* "(" ^ string_of_int len ^ ",\n  " ^ (string_of_scope sc) ^ ")" *)
+(* and string_of_scope sc = *)
+  (* "(" ^ *)
+  (* Debruijn.StringMap.fold (fun key value acc -> acc ^ ", (" ^ key ^ string_of_int value ^ ")") sc "" *)
+  (* ^ ")" *)
+(* and string_of_env env = *)
+
