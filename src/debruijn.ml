@@ -34,6 +34,7 @@
 
 open Util
 open Lexp
+module L = Lexp
 open Myers
 open Fmt
 (*open Typecheck  env_elem and env_type *)
@@ -146,15 +147,13 @@ let env_lookup_type ctx (v : vref): lexp =
   let (_, _, _, ltp) = _env_lookup ctx v in
     mkSusp ltp (S.shift (idx + 0))
 
-let env_lookup_expr ctx (v : vref): lexp =
+let env_lookup_expr ctx (v : vref): lexp option =
   let (_, idx) = v in
   let (r, _, lxp, _) =  _env_lookup ctx v in
-
-  let lxp = match lxp with
-    | LetDef lxp -> lxp
-    | _ -> Sort (dummy_location, Stype (SortLevel (SLn 0))) in
-
-     mkSusp lxp (S.shift (idx + 1 - r))
+  match lxp with
+  | LetDef lxp -> Some (L.push_susp lxp (S.shift (idx + 1 - r)))
+  (* FIXME: why Sort here?  *)
+  | _ -> None     
 
 let env_lookup_by_index index (ctx: lexp_context): env_elem =
     (Myers.nth index (_get_env ctx))

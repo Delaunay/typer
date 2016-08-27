@@ -1655,6 +1655,60 @@ Look ma!  No axioms!
 Or almost: with these classical definitions we cannot prove the classical
 axiom of choice as a theorem, so if you need it, you have to add it as an axiom.
 
+* Co-induction
+
+Coinductive data is basically defined by observation, so what is often
+written as something like
+
+    codata Stream α
+      | Nil
+      | Cons α (Stream α)
+
+really means something like:
+
+    type StreamAccessor
+      | Car | Cdr
+    Stream α =
+      (a : StreamAccessor)
+      -> case a
+          | Car => Maybe α
+          | Cdr => Maybe (Stream α)
+
+And with length, that could turn into:
+
+    type StreamAccessor n
+      | Empty? | Car (n > 0) | Cdr (n > 0)
+    Stream α n =
+      (a : StreamAccessor n)
+      -> case a
+          | Empty? => Maybe (n > 0)
+          | Car _ => α
+          | Cdr _ => Stream α (n - 1)
+
+In either case, the definition of `Stream` is recursive and doesn't follow
+the supported forms of recursion in CIC (i.e. inductive types and inductive
+functions) so it requires ad-hoc support.
+
+It would help to have something akin to the "impredicative encoding" of
+inductive types to get an intuitive idea of what should be safe and what
+might be dangerous.
+
+Let's try for `Stream α`:
+
+    Stream α =
+      (β : Type) -> (a : StreamAccessor)
+      -> (case a
+           | Car => Maybe α -> β
+           | Cdr => Maybe β -> β)
+      -> β
+
+So we'd define
+
+    numbers' n β a = case a
+     | Car => λ f -> f (just n)
+     | Cdr => λ f -> f (just ¿?¿)  %% (numbers' (n + 1))
+    numbers = numbers' 0
+
 * Papers
 ** BigBang: Designing a statically typed scripting language
 ** Dependently typed Racket

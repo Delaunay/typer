@@ -228,7 +228,7 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
             (*  An inductive type named type_name must be in the environment *)
             try let idx = senv_lookup type_name ctx in
                 (*  Check if the constructor exists *)
-                let idt = env_lookup_expr ctx (vr, idx) in
+                let Some idt = env_lookup_expr ctx (vr, idx) in
 
                 (* make Base type *)
                 let inductive_type = Var((loc, type_name), idx) in
@@ -416,8 +416,8 @@ and lexp_case (rtype: lexp option) (loc, target, patterns) ctx i =
     Case (loc, tlxp, tltp, return_type, lpattern, dflt), return_type
 
 (*  Identify Call Type and return processed call *)
-and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
-    let loc = pexp_location fun_name in
+and lexp_call (func: pexp) (sargs: sexp list) ctx i =
+    let loc = pexp_location func in
 
     let from_lctx ctx = try (from_lctx ctx)
         with e ->(
@@ -425,111 +425,70 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
             print_eval_trace ();
             raise e) in
 
-    (* consume Arrows and args together *)
-    let rec get_return_type name i ltp args subst ctx =
-        match (nosusp ltp), args with
-            | _, [] -> ltp
-            | Arrow(_, _, _, _, ltp), hd::tl -> (get_return_type name (i + 1) ltp tl subst ctx)
-            (* Do a lookup to check where the var "point" to*)
-            (* | Var(vt), hd::args -> (let ltp = Debruijn.env_lookup_expr ctx vt in get_return_type name (i) ltp args subst ctx) *)
-            | Metavar _, (kind, arg)::tl -> let arr = Arrow (kind, None, mkMetavar (), Util.dummy_location, ltp)
-              (* in ltp *)
-              in (match Unif.unify ltp arr subst with
-                  | None -> ltp (*?????*)
-                  | Some (subst, c) -> global_substitution := (subst, c); get_return_type name (i + 1) arr tl subst ctx)
-            | _, _ -> lexp_warning loc
-                (name ^ " was provided with too many args. Expected: " ^
-                 (string_of_int i) ^ " got : " ^ (string_of_int (List.length args))
-                ^ " for lexp : " ^ Fmt_lexp.string_of_lxp (nosusp ltp)); ltp in
-
     (*  Vanilla     : sqr is inferred and (lambda x -> x * x) is returned
      *  Macro       : sqr is returned
      *  Constructor : a constructor is returned
      *  Anonymous   : lambda                                                  *)
 
-    let rec infer_implicit_arg ltp largs nargs depth =
-      match nosusp ltp with
-      (* Error case *)
-      | Arrow (Aexplicit, _, _, _, _) when (List.length largs <= 0) -> []
-
-      (* Explicit parameter *)
-      | Arrow (Aexplicit, _, ltp_arg, _, ltp_ret) ->
-        (let head, tail = List.hd largs, List.tl largs
-          in (Aexplicit, head)::(infer_implicit_arg ltp_ret tail (nargs - 1) (depth - 1)))
-
-      (* Implicit parameter explictly given*)
-      | Arrow (kind, _, ltp_arg, _, ltp_ret) when nargs = depth ->
-        (if List.length largs >0
-          then let head, tail = List.hd largs, List.tl largs
-            in (Aexplicit, head)::(infer_implicit_arg ltp_ret tail (nargs - 1) (depth - 1))
-          else [])
-
-      (* Implicit paramter not given*)
-      | Arrow (kind, _, ltp_arg, _, ltp_ret) -> (kind, mkMetavar ())::(infer_implicit_arg ltp_ret largs nargs (depth - 1))
-
-      (* "End" of the arrow "list"*)
-      | _ -> List.map (fun g -> Aexplicit, g) largs
-    in
     (* retrieve function's body *)
-    let body, ltp = _lexp_p_infer fun_name ctx (i + 1) in
+    let body, ltp = _lexp_p_infer func ctx (i + 1) in
     let ltp = nosusp ltp in
 
-    let handle_named_call (loc, name) =
+    let rec handle_fun_args largs sargs ltp = match sargs with
+      | [] -> largs, ltp
+      | (Node (Symbol (_, "_:=_"), [Symbol (_, aname); sarg])) :: sargs
+        (* Explicit-implicit argument.  *)
+        -> (match TC.lexp_whnf ltp ctx with
+           | Arrow (ak, Some (_, aname'), arg_type, _, ret_type)
+                when aname = aname'
+             -> let parg = pexp_parse sarg in
+               let larg = _lexp_p_check parg arg_type ctx i in
+               handle_fun_args ((ak, larg) :: largs) sargs
+                               (L.mkSusp ret_type (S.substitute larg))
+           | _ -> lexp_fatal (sexp_location sarg)
+                            "Explicit arg to non-function")
+      | sarg :: sargs
+        (*  Process Argument *)
+        -> (match TC.lexp_whnf ltp ctx with
+           | Arrow (Aexplicit, _, arg_type, _, ret_type)
+             -> let parg = pexp_parse sarg in
+               let larg = _lexp_p_check parg arg_type ctx i in
+               handle_fun_args ((Aexplicit, larg) :: largs) sargs
+                               (L.mkSusp ret_type (S.substitute larg))
+           | Arrow _ as t -> lexp_print t; print_string "\n";
+                            sexp_print sarg; print_string "\n";
+                       lexp_fatal (sexp_location sarg)
+                                  "Expected non-explicit arg"
+           | _ -> lexp_fatal (sexp_location sarg)
+                            "Explicit arg to non-function") in
+
+    let handle_funcall () =
+
+      match TC.lexp_whnf body ctx with
+      | Builtin((_, "Built-in"), _)
+        -> (
+        (* ------ SPECIAL ------ *)
+        match !_parsing_internals, sargs with
+        | true, [String (_, str)] ->
+          Builtin((loc, str), ltp), ltp
+
+        | true, [String (_, str); stp] ->
+           let ptp = pexp_parse stp in
+           let ltp, _ = _lexp_p_infer ptp ctx (i + 1) in
+           Builtin((loc, str), ltp), ltp
+                                      
+        | true, _ ->
+          lexp_error loc "Wrong Usage of \"Built-in\"";
+          dlxp, dltype
+
+        | false, _ ->
+          lexp_error loc "Use of \"Built-in\" in user code";
+          dlxp, dltype)
+            
+      | e ->
         (*  Process Arguments *)
-        let pargs = List.map pexp_parse sargs in
-        let largs = _lexp_parse_all pargs ctx i in
-        let rec depth_of = function
-            Arrow (_, _, _, _, ltp) -> 1 + (depth_of ltp)
-          | _                       -> 0
-        in
-        let new_args = infer_implicit_arg ltp largs ((List.length largs) - 1) (depth_of ltp)
-        (* let new_args = List.map (fun g -> (Aexplicit, g)) largs *)
-        in
-
-        try (*  Check if the function was defined *)
-            let idx = senv_lookup name ctx in
-            let vf = (make_var name idx loc) in
-
-                match nosusp (env_lookup_expr ctx ((loc, name), idx)) with
-                    | Builtin((_, "Built-in"), _) ->(
-                        (* ------ SPECIAL ------ *)
-                        match !_parsing_internals, largs with
-                            | true, [Imm(String (_, str))] ->
-                                Builtin((loc, str), ltp), ltp
-
-                            | true, [Imm(String (_, str)); ltp] ->
-                                Builtin((loc, str), ltp), ltp
-
-                            | true, _ ->
-                                lexp_error loc "Wrong Usage of \"Built-in\"";
-                                    dlxp, dltype
-
-                            | false, _ ->
-                                lexp_error loc "Use of \"Built-in\" in user code";
-                                    dlxp, dltype)
-
-                    | e ->
-                         let subst, _ = !global_substitution in
-                         let ret_type = get_return_type name 0 ltp new_args subst ctx in
-                         let call = Call(vf, new_args)
-                         in call, ret_type
-
-        with Not_found ->
-            Debug_fun.debug_print_no_buff ("==== <LPARSE.LEXP_CALL>handle_named_call (?loc?, " ^ name ^ ") ====\n");
-            Debug_fun.do_debug (fun () -> (* Some debug printing, remove ASAP*)
-                prerr_string "==== <LPARSE.lexp_call>(largs)    ";
-                List.iter (fun l -> Debug_fun.debug_print_lexp l; prerr_string ", ") largs;
-                prerr_string " ====";
-                prerr_newline (); ());
-            Debug_fun.debug_print_no_buff "==== <LPARSE.lexp_call>(body)     ";
-            Debug_fun.debug_print_lexp body;
-            Debug_fun.do_debug (fun () -> prerr_string " =="; prerr_newline ();() );
-            Debug_fun.debug_print_no_buff "==== <LPARSE.lexp_call>(ltp)      ";
-            Debug_fun.debug_print_lexp ltp;
-            Debug_fun.do_debug (fun () -> prerr_string " ===="; prerr_newline ();() );
-            lexp_error loc ("The function \"" ^ name ^ "\" was not defined");
-            let vf = (make_var name (-1) loc) in
-                Call(vf, new_args), ltp in
+        let largs, ret_type = handle_fun_args [] sargs ltp in
+        Call (body, List.rev largs), ret_type in
 
     let handle_macro_call (loc, name) =
         (* check for builtin *)
@@ -541,20 +500,10 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
 
         (* user defined macro *)
         | false ->(
-          (* look up for definition *)
-          let idx = try senv_lookup name ctx
-              with Not_found ->
-                  lexp_fatal loc ("Could not find Variable: " ^ name) in
-
           (* Get the macro *)
-          let lxp = try env_lookup_expr ctx ((loc, name), idx)
-            with Not_found ->
-              lexp_fatal loc (name ^ " was found but " ^ (string_of_int idx) ^
-                    " is not a correct index.") in
-
-          let lxp = match nosusp lxp with
+          let lxp = match TC.lexp_whnf body ctx with
               | Call(Var((_, "Macro_"), _), [(_, fct)]) -> fct
-              | _ ->
+              | lxp ->
                 print_string "\n";
                 print_string (lexp_to_string lxp); print_string "\n";
                 lexp_print lxp; print_string "\n";
@@ -588,36 +537,12 @@ and lexp_call (fun_name: pexp) (sargs: sexp list) ctx i =
               _lexp_p_infer pxp ctx (i + 1))  in
 
     (* determine function type *)
-    match fun_name, ltp with
-        (* Anonymous *)
-        | ((Plambda _), _) ->
-            (*  Process Arguments *)
-            let pargs = List.map pexp_parse sargs in
-            let largs = _lexp_parse_all pargs ctx i in
-            let new_args = List.map (fun g -> (Aexplicit, g)) largs in
-                Call(body, new_args), ltp
-
-        | (Pvar (l, n), Var((_, "Macro"), _)) ->
-            (* FIXME: check db_idx points to a Macro type *)
-            handle_macro_call (l, n)
-
-        (* Call to Vanilla or constructor *)
-        | (Pvar v, _) -> handle_named_call v
-
-        (* Constructor. This case is rarely used *)
-        | (Pcons(_, v), _) -> handle_named_call v
-
-        | Pcall(fct, sargs2), ltp ->
-            let pargs = List.map pexp_parse sargs in
-            let largs = _lexp_parse_all pargs ctx i in
-            let new_args = List.map (fun g -> (Aexplicit, g)) largs in
-            let body, ltp = lexp_call fct sargs2 ctx (i + 1) in
-              Call(body, new_args), ltp
-
-        | e, _ ->
-          pexp_print e; print_string "\n";
-          print_string ((pexp_to_string e) ^ "\n");
-          lexp_fatal (pexp_location e) "This expression cannot be called"
+    match func, ltp with
+    (* FIXME: Rather than check a var name, define a builtin for it.  *)
+    (* FIXME: Don't force func to be a Pvar.  *)
+    | (Pvar (l, n), Var((_, "Macro"), _)) -> handle_macro_call (l, n)
+    (* FIXME: Handle special-forms here as well!  *)
+    | _ -> handle_funcall ()
 
 
 (*  Read a pattern and create the equivalent representation *)
@@ -631,15 +556,15 @@ and lexp_read_pattern pattern exp target ctx:
         | Ppatvar ((loc, name) as var) ->(
             try(
                 let idx = senv_lookup name ctx in
-                match nosusp (env_lookup_expr ctx ((loc, name), idx)) with
-                    (* We are matching a constructor *)
-                    | Cons _ -> (name, loc, []), ctx
+                match env_lookup_expr ctx ((loc, name), idx) with
+                (* We are matching a constructor *)
+                | Some (Cons _) -> (name, loc, []), ctx
 
-                    (* name is defined but is not a constructor  *)
-                    (* it technically could be ... (expr option) *)
-                    (* What about Var -> Cons ?                  *)
-                    | _ -> let nctx = env_extend ctx var (LetDef target) dltype in
-                        (name, loc, []), nctx)
+                (* name is defined but is not a constructor  *)
+                (* it technically could be ... (expr option) *)
+                (* What about Var -> Cons ?                  *)
+                | _ -> let nctx = env_extend ctx var (LetDef target) dltype in
+                      (name, loc, []), nctx)
 
             (* would it not make a default match too? *)
             with Not_found ->
@@ -717,9 +642,9 @@ and lexp_decls_macro (loc, mname) sargs ctx: (pdecl list * lexp_context) =
                   " is not a correct index.") in
 
   (* get stored function *)
-  let lxp = match nosusp lxp with
-    | Call(Var((_, "Macro_"), _), [(_, fct)]) -> fct
-    | _ -> print_string "\n";
+  let lxp = match lxp with
+    | Some (Call(Var((_, "Macro_"), _), [(_, fct)])) -> fct
+    | Some lxp -> print_string "\n";
       print_string (lexp_to_string lxp); print_string "\n";
       lexp_print lxp; print_string "\n";
       lexp_fatal loc "Macro is ill formed" in
@@ -922,8 +847,8 @@ and _lexp_parse_all (p: pexp list) (ctx: lexp_context) i : lexp list =
     let rec loop (plst: pexp list) ctx (acc: lexp list) =
         match plst with
             | [] -> (List.rev acc)
-            | _  -> let lxp, _ = _lexp_p_infer (List.hd plst) ctx (i + 1) in
-                    (loop (List.tl plst) ctx (lxp::acc)) in
+            | pe :: plst  -> let lxp, _ = _lexp_p_infer pe ctx (i + 1) in
+                    (loop plst ctx (lxp::acc)) in
 
     (loop p ctx [])
 
