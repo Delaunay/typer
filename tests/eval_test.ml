@@ -350,14 +350,14 @@ let _ = (add_test "EVAL" "List" (fun () ->
     reset_eval_trace ();
 
     let dcode = "
-        my_list = (cons 1 (cons 2 (cons 3 (cons 4 nil))));
+        my_list = (cons(a := Int) 1 (cons(a := Int) 2 (cons(a := Int) 3 (cons(a := Int) 4 (nil(a := Int))))));
     " in
 
     let rctx, lctx = eval_decl_str dcode lctx rctx in
 
-    let rcode = "(length Int my_list);
-                 (head Int my_list);
-                 (head Int (tail Int my_list));" in
+    let rcode = "(length(a := Int) my_list);
+                 (head(a := Int) my_list);
+                 (head(a := Int) (tail(a := Int) my_list));" in
 
     (* Eval defined lambda *)
     let ret = eval_expr_str rcode lctx rctx in

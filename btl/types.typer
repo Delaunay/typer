@@ -138,6 +138,12 @@ FileHandle = Built-in "FileHandle";
 
 % define operation on file handle
 run-io = Built-in "run-io" (
+  %% FIXME: runIO should have type IO Unit -> b -> b
+  %% or IO a -> b -> b, which means "run the IO, throw away the result,
+  %% and then return the second argument unchanged".  The "dummy" b argument
+  %% is actually crucial to make sure the result of runIO is used, otherwise
+  %% the whole call would look like a dead function call and could be
+  %% optimized away!
   (a : Type) ≡>
   (b : Type) ≡>
     IO a -> (a -> IO b) -> (IO b) -> Unit);
@@ -163,6 +169,7 @@ has-attribute = Built-in "has-attribute" (Macro);
 %       Context Accessors
 % -----------------------------------------------------
 
+%% FIXME: These should be functions!
 decltype = Built-in "decltype" Macro;
 declexpr = Built-in "declexpr" Macro;
 

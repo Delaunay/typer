@@ -99,7 +99,6 @@ or "implicit".  This has 2 downsides:
 * Syntax
 
 arw   ::= '≡>' | '=>' | '->'
-assign::= ':≡' | ':=' | ':-'
 colon ::= ':::' | '::' | ':'
 exp   ::= '(' id ':' exp ')' arw exp | exp arw exp      #Function Types
         | 'let' decls 'in' exp
@@ -115,8 +114,8 @@ decl  ::= id ':' exp
 simple_arg  ::= id  | '('id ':' exp')'
 formal_arg  ::= id  | '(' id colon exp ')'
 ind_arg     ::= exp | '(' id colon exp ')'
-pat_arg     ::= id  | '(' id assign pattern ')'
-actual_arg  ::= exp | '(' id assign exp ')'
+pat_arg     ::= id  | '(' id ':=' pattern ')'
+actual_arg  ::= exp | '(' id ':=' exp ')'
 
 An identifier which starts with a question mark is one meant to be
 generalized as an implicit/erasable argument.  E.g.
@@ -1434,7 +1433,13 @@ need to do anyway.
 Does it come with a cost?  That depends on the universe-level of the
 equality type.
 
-*** E.g. if (=) is in Type 0:
+We can encode equality in CoC:
+
+    eq x y = ∀f. f x -> f y
+    eq_refl : ∀x. eq x x
+    eq_refl x f P = P
+
+*** E.g. if (x = y) is in Type 0:
 
 type (=) (t:Type l) (a:t) : t -> Type 0
   refl: a = a
@@ -1461,7 +1466,7 @@ this should not affect typing very much since
 
 so the level of T is not affected.
 
-*** E.g. if (=) is in Type l:
+*** E.g. if (x = y) is in Type l:
 
 type (=) (t:Type l) (a:t) : t -> Type l
   refl: a = a
@@ -1505,6 +1510,21 @@ make sense for "erasable" terms.
 
 Also, by marking "large" elements of inductive definitions as erasable, we'd
 get something similar to preventing strong elimination for them.
+
+E.g. in cast-ultimate.v I had to use axioms like
+
+    EQ_ex : Exists K1 TF1 = Exists K2 TF2 -> (∀F. F K1 TF1 = F K2 TF2)
+
+whose soundness is actually not known.
+With impredicative erasable args we do not need an axiom de define:
+
+    EQ_ex : Exists(K:≡K1) TF1 = Exists(K:≡K2) TF2
+            -> (∀F. F(K:≡K1) TF1 = F(K:≡K2) TF2)
+
+Notice how F only takes an erasable version of K1 and K2, thus
+imposing a constraint on the axiom which might indeed be sufficient to make
+it sound.  Hopefully it's also still sufficient for the cast-ultimate.v proof
+to go through!
 
 ** Universe level of equality
 
@@ -1553,6 +1573,31 @@ Which I guess is comparable to:
    type (~=) (t1:Type l) (a1:t1) (t2:Type l) (Q:t1 = t2) : t2 -> Type l
      refl: a1 ~= (coerce Q a1)
 
+*** "Natural" level via encoding
+
+Let's check the "natural" level of the "eq" encoding:
+
+    eq = λ(l:Level) ≡> λ(T:Type l) ≡> λ(x:T) (y:T) ->
+         (l':Level) ≡> (T':Type l') ≡> (f:T -> T') -> f x -> f y
+    eq x y : Typeω
+
+Ouch!  But if we consider that the level of inductive definitions is
+normally unaffected by the level at which they're eliminated (contrary to
+what happens for the kind of impredicative encoding used here) we could
+treat it more like
+
+    eq = λ(l:Level) ≡> λ(T:Type l) ≡> λ(x:T) (y:T) ->
+         (T':Type 0) ≡> (f:T -> T') -> f x -> f y
+    eq x y : Type l
+
+Which gives us the dreaded "Type (l+1)" if T is "Type l".
+But if x and y are types, we should be able to cut the middle man:
+
+    eq' = λ(l : Level) ≡> λ(x : Type l) (y : Type l) ->
+         (T':Type 0) ≡> (f : Type l -> T') -> f x -> f y
+    eq' x y : Type l
+
+but that doesn't seem to help.
 
 ** Inference
 
@@ -1698,23 +1743,11 @@ sacrificing normalization.
 ** http://albatross-lang.sourceforge.net
 ** Idris's Effects http://eb.host.cs.st-andrews.ac.uk/drafts/dep-eff.pdf
 ** Read
+*** (Co)Iteration for higher-order nested datatypes, Andreas Abel and Ralph Matthes, [Abel03]
 *** Inductive Families Need Not Store Their Indices, Edwin Brady, Conor McBride and James McKinna.
 http://www.cs.st-andrews.ac.uk/~eb/writings/types2003.pdf
 *** A Simplified Suspension Calculus and its Relationship to Other Explicit Substitution Calculi, Andrew Gacek and Gopalan Nadathur
 *** How OCaml type checker works, http://okmij.org/ftp/ML/generalization.html
-* Skip lists
-
-SkipList a
- | Empty
- | Cons (val : a) (next : SkipList a) (skip : Nat) (dest : SkipList a)
-
-At position 2^n, we want skip=2^(n-1)
-At position 2^n+2^(n-1) we want two contradictory things:
-- skip=2^(n-1) to get to the pivotal 2^n (for when we start before
-  2^n+2^(n-1) and need to go past 2^n).
-- skip=2^(n-2) to do the binary search between 2^n+2^(n-1) and 2^n (for when
-  we don't want to go past 2^n, e.g. because we started from before
-  2^(n+1)).
 * Related languages
 ** Idris
 ** F-star (https://www.fstar-lang.org)

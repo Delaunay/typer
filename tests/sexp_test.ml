@@ -36,6 +36,9 @@ let test_sexp_eqv dcode1 dcode2 =
 
 let _ = test_sexp_eqv "((a) ((1.00)))" "a 1.0"
 let _ = test_sexp_eqv "(x + y)" "_+_ x y"
+let _ = test_sexp_eqv "(x := y)" "_:=_ x y"
+let _ = test_sexp_eqv "if A then B else C -> D" "if A then B else (C -> D)"
+let _ = test_sexp_eqv "A : B -> C" "A : (B -> C)"
 let _ = test_sexp_eqv "f __; y" "(f ( __; ) y)"
 let _ = test_sexp_eqv "case e | p1 => e1 | p2 => e2"
                       "case_ ( _|_ e ( _=>_ p1 e1) ( _=>_ p2 e2))"
