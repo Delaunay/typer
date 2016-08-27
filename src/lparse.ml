@@ -443,6 +443,10 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
     (* retrieve function's body *)
     let body, ltp = _lexp_p_infer func ctx (i + 1) in
     let ltp = nosusp ltp in
+    Debug_fun.do_debug (fun () ->
+        prerr_string ("ltp : " ^ Fmt_lexp.string_of_lxp ltp);
+        prerr_string (" body : " ^ Fmt_lexp.string_of_lxp body);
+        prerr_newline ();(););
 
     let rec handle_fun_args largs sargs ltp = match sargs with
       | [] -> largs, ltp
