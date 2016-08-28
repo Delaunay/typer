@@ -124,9 +124,6 @@ let build_var name ctx =
     let type0_idx = senv_lookup name ctx in
         Var((dloc, name), type0_idx)
 
-(* build type0 from ctx *)
-let get_int ctx = build_var "Int" ctx
-
 (* shift all variables by an offset *)
 let senv_lookup name ctx =
   senv_lookup name ctx + !_shift_glob
@@ -146,7 +143,7 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
         (*  Block/String/Integer/Float *)
         | Pimm value -> (Imm(value),
             match value with
-                | Integer _ -> get_int ctx
+                | Integer _ -> type_int
                 | Float _   -> type_float
                 | String _  -> type_string;
                 | _ -> lexp_error tloc "Could not find type";
