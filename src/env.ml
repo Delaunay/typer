@@ -34,12 +34,9 @@ open Util       (* msg_error    *)
 open Fmt        (*  make_title, table util *)
 
 open Sexp
-(* open Lexp       ( *  lexp_print *)
 
 open Elexp
-open Myers
-open Debruijn
-
+module M = Myers
 
 let dloc = dummy_location
 
@@ -56,7 +53,7 @@ type value_type =
     | Vcons of symbol * value_type list
     | Vbuiltin of string
     | Vfloat of float
-    | Closure of string * elexp * (((string option * value_type) ref myers) * (int * int))
+    | Closure of string * elexp * (((string option * value_type) ref M.myers) * (int * int))
     | Vsexp of sexp             (* Values passed to macros.  *)
     (* Unable to eval during macro expansion, only throw if the value is used *)
     | Vdummy
@@ -110,11 +107,11 @@ let value_name v =
 
 (*  Runtime Environ *)
 type env_cell = (string option * value_type) ref
-type runtime_env = (env_cell myers) * (int * int)
+type runtime_env = (env_cell M.myers) * (int * int)
 
-let make_runtime_ctx = (nil, (0, 0))
+let make_runtime_ctx = (M.nil, (0, 0))
 
-let get_rte_size (ctx: runtime_env): int = let (l, _) = ctx in length l
+let get_rte_size (ctx: runtime_env): int = let (l, _) = ctx in M.length l
 
 let is_free_var idx ctx =
     let (l, (osize, _)) = ctx in
@@ -125,7 +122,7 @@ let get_rte_variable (name: string option) (idx: int)
                                 (ctx: runtime_env): value_type =
     let (l, _) = ctx in
     try (
-        let ref_cell = (nth idx l) in
+        let ref_cell = (M.nth idx l) in
         let (tn, x) = !ref_cell in
     match (tn, name) with
         | (Some n1, Some n2) -> (
@@ -154,12 +151,12 @@ let rte_shift vref ctx =
 
 let add_rte_variable name (x: value_type) (ctx: runtime_env): runtime_env =
     let (l, b) = ctx in
-    let lst = (cons (ref (name, x)) l) in
+    let lst = (M.cons (ref (name, x)) l) in
         (lst, b)
 
 let set_rte_variable idx name (lxp: value_type) ctx =
     let (l, _) = ctx in
-    let ref_cell = (nth idx l) in
+    let ref_cell = (M.nth idx l) in
     let (n, _) = !ref_cell in
 
     match (n, name) with
@@ -177,16 +174,16 @@ let set_rte_variable idx name (lxp: value_type) ctx =
 (* it allow us to remove temporary variables when we enter a new scope     * )
 let local_ctx ctx =
     let (l, (_, _)) = ctx in
-    let osize = length l in
+    let osize = M.length l in
         (l, (osize, 0))
 
 let select_n (ctx: runtime_env) n: runtime_env =
     let (l, a) = ctx in
     let r = ref nil in
-    let s = (length l) - 1 in
+    let s = (M.length l) - 1 in
 
     for i = 0 to n - 1 do
-        r := (cons (nth (s - i) l) (!r));
+        r := (M.cons (M.nth (s - i) l) (!r));
     done;
 
     ((!r), a)
@@ -195,7 +192,7 @@ let select_n (ctx: runtime_env) n: runtime_env =
 (*  and create a clean context free of function arguments *)
 let temp_ctx (ctx: runtime_env): runtime_env =
     let (l, (osize, _)) = ctx in
-    let tsize = length l in
+    let tsize = M.length l in
         (* Check if temporary variables are present *)
         if tsize != osize then(
             (* remove them
@@ -214,7 +211,7 @@ let nfirst_rte_var n ctx =
     loop 0 []
 
 let print_myers_list l print_fun =
-    let n = (length l) - 1 in
+    let n = (M.length l) - 1 in
 
     print_string (make_title " ENVIRONMENT ");
     make_rheader [(None, "INDEX");
@@ -225,7 +222,7 @@ let print_myers_list l print_fun =
     print_string "    | ";
         ralign_print_int (n - i) 5;
         print_string " | ";
-        print_fun (nth (n - i) l);
+        print_fun (M.nth (n - i) l);
     done;
     print_string (make_sep '=')
 

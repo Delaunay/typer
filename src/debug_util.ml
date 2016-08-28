@@ -46,7 +46,7 @@ open Lexer
 open Lparse
 open Eval
 module EL = Elexp
-module TC = Typecheck
+module OL = Opslexp
 
 (* definitions *)
 open Grammar
@@ -335,7 +335,7 @@ let main () =
             let cctx = lctx_to_cctx ctx in
             (* run type check *)
             List.iter (fun (_, lxp, _) ->
-                let _ = TC.check cctx lxp in ()) flexps;
+                let _ = OL.check cctx lxp in ()) flexps;
 
             print_string ("    " ^ (make_line '-' 76));
             print_string "\n";));
@@ -347,7 +347,7 @@ let main () =
         (if (get_p_option "lctx") then(
             print_lexp_ctx nctx; print_string "\n"));
 
-        let clean_lxp = EL.clean_toplevel lexps in
+        let clean_lxp = List.map OL.clean_decls lexps in
 
         (* Eval declaration *)
         let rctx = default_rctx in

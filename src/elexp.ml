@@ -34,11 +34,10 @@
 open Sexp (* Sexp type *)
 open Pexp (* Aexplicit *)
 
-module L = Lexp
 module U = Util
 
-type vdef = L.vdef
-type vref = L.vref
+type vdef = U.vdef
+type vref = U.vref
 type label = symbol
 
 module SMap = U.SMap
@@ -61,75 +60,6 @@ type elexp =
     | Type
     (* Inductive takes a slot in the env that is why it need to be here *)
     | Inductive of U.location * label
-
-let rec erase_type (lxp: L.lexp): elexp =
-
-    match lxp with
-        | L.Imm(s)          -> Imm(s)
-        | L.Builtin(v, _)   -> Builtin(v)
-        | L.Var(v)          -> Var(v)
-        | L.Cons(_, s)      -> Cons(s)
-
-        | L.Lambda(kind, vdef, _, body) ->
-            if kind != Aerasable then
-                Lambda(vdef, erase_type body)
-            else
-                erase_type body
-
-        | L.Let(l, decls, body)       ->
-            Let(l, (clean_decls decls), (erase_type body))
-
-        | L.Call(fct, args) ->
-            Call((erase_type fct), (filter_arg_list args))
-
-        | L.Case(l, target, _, _, cases, default) ->
-            Case(l, (erase_type target), (clean_map cases),
-                                         (clean_maybe default))
-
-        | L.Susp(l, s)                -> erase_type (L.push_susp l s)
-
-        (* To be thrown out *)
-        | L.Arrow _                   -> Type
-        | L.SortLevel _               -> Type
-        | L.Sort _                    -> Type
-        (* Still useful to some extend *)
-        | L.Inductive(l, label, _, _) -> Inductive(l, label)
-
-and filter_arg_list lst =
-    let rec filter_arg_list lst acc =
-        match lst with
-            | (kind, lxp)::tl ->
-                let acc = if kind != Aerasable then
-                    (erase_type lxp)::acc else acc in
-                        filter_arg_list tl acc
-            | [] -> List.rev acc in
-        filter_arg_list lst []
-
-and clean_decls decls =
-   List.map (fun (v, lxp, _) -> (v, (erase_type lxp))) decls
-
-(* toplevel is a list of value *)
-and clean_toplevel decls =
-  List.map (fun v -> clean_decls v) decls
-
-and clean_maybe lxp =
-    match lxp with
-        | Some lxp -> Some (erase_type lxp)
-        | None -> None
-
-and clean_map cases =
-    let clean_arg_list lst =
-        let rec clean_arg_list lst acc =
-            match lst with
-                | (kind, var)::tl ->
-                    let acc = if kind != Aerasable then
-                        var::acc else acc in
-                            clean_arg_list tl acc
-                | [] -> List.rev acc in
-        clean_arg_list lst [] in
-
-    SMap.mapi (fun key (l, args, expr) ->
-        (l, (clean_arg_list args), (erase_type expr))) cases
 
 let rec elexp_location e =
     match e with

@@ -35,7 +35,6 @@
 %       Base Types
 % -----------------------------------------------------
 
-Type    = Built-in "Type";
 Int     = Built-in "Int";
 Float   = Built-in "Float";
 String  = Built-in "String";

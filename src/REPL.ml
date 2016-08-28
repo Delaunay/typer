@@ -54,7 +54,7 @@ open Builtin
 
 open Env
 open Debruijn
-module TC = Typecheck
+module OL = Opslexp
 module EL = Elexp
 
 (* how to handle arrow keys ? *)
@@ -124,7 +124,8 @@ let ipexp_parse (sxps: sexp list): (pdecl list * pexp list) =
 
 let ierase_type (lexps: (ldecl list list * lexpr list)) =
     let (ldecls, lexprs) = lexps in
-        (EL.clean_toplevel ldecls), (List.map EL.erase_type  lexprs)
+    (List.map OL.clean_decls ldecls),
+    (List.map OL.erase_type  lexprs)
 
 let ilexp_parse pexps lctx: ((ldecl list list * lexpr list) * lexp_context) =
     let pdecls, pexprs = pexps in
@@ -158,7 +159,7 @@ let _raw_eval f str lctx rctx =
     let nods = sexp_parse_all_to_list default_grammar sxps (Some ";") in
     let pxps = pexp_decls_all nods in
     let lxps, lctx = lexp_p_decls pxps lctx in
-    let elxps = EL.clean_toplevel lxps in
+    let elxps = List.map OL.clean_decls lxps in
     let rctx = eval_decls_toplevel elxps rctx in
         (* This is for consistency with ieval *)
         [], lctx, rctx

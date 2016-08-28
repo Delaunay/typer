@@ -81,13 +81,11 @@ let set_predef name lexp =
 
 (*                Builtin types               *)
 let dloc    = dummy_location
-let slevel0 = SortLevel (SLn 0)
-let slevel1 = SortLevel (SLn 1)
-let type0   = Sort (dloc, Stype slevel0)
-let type1      = Sort (dloc, Stype slevel1)
+let type0   = Sort (dloc, Stype (SortLevel (SLn 0)))
+let type1   = Sort (dloc, Stype (SortLevel (SLn 1)))
+let type2   = Sort (dloc, Stype (SortLevel (SLn 2)))
 let type_omega = Sort (dloc, StypeOmega)
 let type_level = Sort (dloc, StypeLevel)
-let type_level = Builtin ((dloc, "TypeLevel"), type_level)
 
 let op_binary t =  Arrow (Aexplicit, None, t, dloc,
                         Arrow (Aexplicit, None, t, dloc, t))
@@ -236,15 +234,8 @@ let int_eq loc depth args_val ctx =
 
 let sexp_eq loc depth args_val ctx =
     match args_val with
-        | [Vsexp(s1); Vsexp(s2)] -> (
-            match s1, s2 with
-                | Symbol(_, s1), Symbol(_, s2)   -> btyper (s1 = s2)
-                | String(_, s1), String(_, s2)   -> btyper (s1 = s2)
-                | Integer(_, s1), Integer(_, s2) -> btyper (s1 = s2)
-                | Float(_, s1), Float(_, s2)     -> btyper (s1 = s2)
-                | _ -> tfalse)
-        | _ -> builtin_error loc "int_eq expects 2 sexp"
-
+    | [Vsexp (s1); Vsexp (s2)] -> btyper (sexp_equal s1 s2)
+    | _ -> builtin_error loc "sexp_eq expects 2 sexp"
 
 let open_impl loc depth args_val ctx =
 

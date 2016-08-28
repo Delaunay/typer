@@ -48,7 +48,7 @@ open Eval
 open Grammar
 open Builtin
 
-module TC = Typecheck
+module OL = Opslexp
 module EL = Elexp
 module SU = Subst
 
@@ -125,7 +125,6 @@ let build_var name ctx =
         Var((dloc, name), type0_idx)
 
 (* build type0 from ctx *)
-let get_type0 ctx = build_var "Type" ctx
 let get_int ctx = build_var "Int" ctx
 
 (* shift all variables by an offset *)
@@ -184,11 +183,10 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
             let lxp = _type_shift lxp sh in
 
             let v = Arrow(kind, ovar, ltp, tloc, lxp) in
-                v, (get_type0 ctx)
+                v, type0
 
         (* Pinductive *)
         | Pinductive (label, formal_args, ctors) ->
-            let type0 = get_type0 ctx in
             let nctx = ref ctx in
             (* (arg_kind * pvar * pexp option) list *)
             let formal = List.map (fun (kind, var, opxp) ->
@@ -318,7 +316,7 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
                  * Built-in *)
                 | Builtin _ -> e
                 | _ ->
-            (if TC.conv_p inferred_t t then () else debug_msg (
+            (if OL.conv_p inferred_t t then () else debug_msg (
                 print_string "1 exp "; lexp_print e; print_string "\n";
                 print_string "2 inf "; lexp_print inferred_t; print_string "\n";
                 print_string "3 Ann "; lexp_print t; print_string "\n";
@@ -413,7 +411,7 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
       | [] -> largs, ltp
       | (Node (Symbol (_, "_:=_"), [Symbol (_, aname); sarg])) :: sargs
         (* Explicit-implicit argument.  *)
-        -> (match TC.lexp_whnf ltp ctx with
+        -> (match OL.lexp_whnf ltp ctx with
            | Arrow (ak, Some (_, aname'), arg_type, _, ret_type)
                 when aname = aname'
              -> let parg = pexp_parse sarg in
@@ -424,7 +422,7 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
                             "Explicit arg to non-function")
       | sarg :: sargs
         (*  Process Argument *)
-        -> (match TC.lexp_whnf ltp ctx with
+        -> (match OL.lexp_whnf ltp ctx with
            | Arrow (Aexplicit, _, arg_type, _, ret_type)
              -> let parg = pexp_parse sarg in
                let larg = _lexp_p_check parg arg_type ctx i in
@@ -439,7 +437,7 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
 
     let handle_funcall () =
 
-      match TC.lexp_whnf body ctx with
+      match OL.lexp_whnf body ctx with
       | Builtin((_, "Built-in"), _)
         -> (
         (* ------ SPECIAL ------ *)
@@ -476,7 +474,7 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
         (* user defined macro *)
         | false ->(
           (* Get the macro *)
-          let lxp = match TC.lexp_whnf body ctx with
+          let lxp = match OL.lexp_whnf body ctx with
               | Call(Var((_, "Macro_"), _), [(_, fct)]) -> fct
               | lxp ->
                 print_string "\n";
@@ -488,7 +486,7 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
           let arg = olist2tlist_lexp sargs ctx in
 
           let lxp = Call(lxp, [(Aexplicit, arg)]) in
-          let elexp = EL.erase_type lxp in
+          let elexp = OL.erase_type lxp in
           let rctx = (from_lctx ctx 0) in
 
           _global_eval_trace := [];
@@ -644,7 +642,7 @@ and lexp_decls_macro (loc, mname) sargs ctx: (pdecl list * lexp_context) =
         (* build new function *)
         let arg = olist2tlist_lexp sargs ctx in
         let lxp = Call(lxp, [(Aexplicit, arg)]) in
-        let elexp = EL.erase_type lxp in
+        let elexp = OL.erase_type lxp in
         let rctx = (from_lctx ctx 0) in
 
         (* get a list of declaration *)
@@ -931,15 +929,13 @@ let lexp_parse_all p ctx = _lexp_parse_all p ctx 1
  * --------------------------------------------------------- *)
 
 (* Make lxp context with built-in types *)
-let empty_lctx =
-    let lctx = make_lexp_context in
-    let lxp = Builtin((dloc, "Built-in"), type0) in
-      env_extend lctx (dloc, "Built-in") (LetDef lxp) type0
-
-let default_lctx =
+let default_lctx, default_rctx =
 
       (* Empty context *)
       let lctx = make_lexp_context in
+      let lctx = env_extend lctx (dloc, "Type1") (LetDef type1) type2 in
+      let lctx = env_extend lctx (dloc, "Type") (LetDef type0) type1 in
+      (* FIXME: Add builtins directly here.  *)
       let lxp = Builtin((dloc, "Built-in"), type0) in
       let lctx = env_extend lctx (dloc, "Built-in") (LetDef lxp) type0 in
 
@@ -962,7 +958,7 @@ let default_lctx =
       builtin_size := get_size lctx;
 
       (* Once default builtin are set we can populate the predef table *)
-      try
+      let lctx = try
           List.iter (fun name ->
               let idx = senv_lookup name lctx in
               let v = Var((dloc, name), idx) in
@@ -970,30 +966,11 @@ let default_lctx =
       (* -- DONE -- *)
           lctx
       with e ->
-        lctx
-
-
-(* Make runtime context with built-in types *)
-let default_rctx =
-     (* Empty context *)
-      let lctx = make_lexp_context in
-      let lxp = Builtin((dloc, "Built-in"), type0) in
-      let lctx = env_extend lctx (dloc, "Built-in") (LetDef lxp) type0 in
-
-      (* Read BTL files *)
-      let pres = prelex_file (!btl_folder ^ "types.typer") in
-      let sxps = lex default_stt pres in
-      let nods = sexp_parse_all_to_list default_grammar sxps (Some ";") in
-      let pxps = pexp_decls_all nods in
-
-      _parsing_internals := true;
-          let d, lctx = lexp_p_decls pxps lctx in
-      _parsing_internals := false;
-
+        lctx in
       let rctx = make_runtime_ctx in
-      let rctx = eval_decls_toplevel (EL.clean_toplevel d) rctx in
-        _global_eval_trace := [];
-        rctx
+      let rctx = eval_decls_toplevel (List.map OL.clean_decls d) rctx in
+      _global_eval_trace := [];
+      lctx, rctx
 
 (*      String Parsing
  * --------------------------------------------------------- *)
@@ -1023,13 +1000,13 @@ let lexp_decl_str str lctx =
 
 let _eval_expr_str str lctx rctx silent =
     let lxps = lexp_expr_str str lctx in
-    let elxps = List.map EL.erase_type lxps in
+    let elxps = List.map OL.erase_type lxps in
         (eval_all elxps rctx silent)
 
 let eval_expr_str str lctx rctx = _eval_expr_str str lctx rctx false
 
 let eval_decl_str str lctx rctx =
     let lxps, lctx = lexp_decl_str str lctx in
-    let elxps = (EL.clean_toplevel lxps) in
+    let elxps = (List.map OL.clean_decls lxps) in
         (eval_decls_toplevel elxps rctx), lctx
 

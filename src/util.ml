@@ -23,11 +23,21 @@ this program.  If not, see <http://www.gnu.org/licenses/>.  *)
 module SMap
   = Map.Make (struct type t = string let compare = String.compare end)
 
-
 type charpos = int
 type bytepos = int
 type location = { file : string; line : int; column : charpos }
 let dummy_location = {file=""; line=0; column=0}
+
+(*************** DeBruijn indices for variables *********************)
+
+(* Occurrence of a variable's symbol: we use DeBruijn index, and for
+ * debugging purposes, we remember the name that was used in the source
+ * code.  *)
+type vdef = location * string
+type db_index = int             (* DeBruijn index.  *)
+type db_offset = int            (* DeBruijn index offset.  *)
+type db_revindex = int          (* DeBruijn index counting from the root.  *)
+type vref = vdef * db_index
 
 type bottom = | B_o_t_t_o_m_ of bottom
 

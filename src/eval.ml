@@ -40,9 +40,9 @@ open Lexp       (* Varbind *)
 open Elexp
 open Builtin
 open Grammar
-
 open Debruijn
 open Env
+module OL = Opslexp
 
 
 (* eval error are always fatal *)
@@ -107,7 +107,7 @@ let rec _eval lxp ctx i: (value_type) =
 and get_predef_eval name ctx =
   let r = (get_rte_size ctx) - !builtin_size in
   let v = mkSusp (get_predef_raw name) (S.shift r) in
-    _eval (erase_type v) ctx 0
+    _eval (OL.erase_type v) ctx 0
 
 and eval_var ctx lxp v =
     let ((loc, name), idx) = v in
@@ -388,7 +388,7 @@ let from_lctx (ctx: lexp_context) rm: runtime_env =
         let vxp = match exp with
           | Some lxp ->
               let octx = add_rte_variable name Vdummy (!rctx) in
-              let lxp = (erase_type lxp) in
+              let lxp = (OL.erase_type lxp) in
                 (try (eval lxp octx)
                   with e -> elexp_print lxp;
                     print_string "\n"; raise e)

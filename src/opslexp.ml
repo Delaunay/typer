@@ -1,4 +1,4 @@
-(* typecheck.ml --- Check a Lexp expression's type
+(* opslexp.ml --- Operations on Lexps
 
 Copyright (C) 2011-2016  Free Software Foundation, Inc.
 
@@ -28,10 +28,12 @@ module P = Pexp
 (* open Myers *)
 (* open Grammar *)
 open Lexp
+module E = Elexp
+module L = Lexp
 
 (* open Unify *)
 module S = Subst
-module L = List
+(* module L = List *)
 module B = Builtin
 module DB = Debruijn
 
@@ -177,7 +179,7 @@ let rec check ctx e =
   | Susp (e, s) -> check ctx (push_susp e s)
   | Let (_, defs, e)
     -> let tmp_ctx =
-        L.fold_left (fun ctx (v, e, t)
+        List.fold_left (fun ctx (v, e, t)
                      -> (match check ctx t with
                         | Sort (_, Stype _) -> ()
                         | _ -> (U.msg_error "TC" (lexp_location t)
@@ -185,12 +187,12 @@ let rec check ctx e =
                        Myers.cons (0, Some v, ForwardRef, t) ctx)
                     ctx defs in
       let (new_ctx, _) =
-        L.fold_left (fun (ctx,recursion_offset) (v, e, t)
+        List.fold_left (fun (ctx,recursion_offset) (v, e, t)
                      -> let t' = check tmp_ctx e in
                        assert_type e t t';
                        (Myers.cons (recursion_offset, Some v, LetDef e, t) ctx,
                         recursion_offset - 1))
-                    (ctx, L.length defs)
+                    (ctx, List.length defs)
                     defs in
       check new_ctx e
   | Arrow (ak, v, t1, l, t2)
@@ -216,7 +218,7 @@ let rec check ctx e =
               check (Myers.cons (0, Some v, Variable, t) ctx) e))
   | Call (f, args)
     -> let ft = check ctx f in
-      L.fold_left (fun ft (ak,arg)
+      List.fold_left (fun ft (ak,arg)
                    -> let at = check ctx arg in
                      match ft with
                      | Arrow (ak', v, t1, l, t2)
@@ -299,8 +301,8 @@ let rec check ctx e =
                                     :: indtype fargs (start_index - 1) in
            let rec fieldargs fieldtypes =
              match fieldtypes with
-             | [] -> Call (it, indtype fargs (L.length fieldtypes
-                                             + L.length fargs - 1))
+             | [] -> Call (it, indtype fargs (List.length fieldtypes
+                                             + List.length fargs - 1))
              | (ak, vd, ftype) :: fieldtypes
                -> Arrow (ak, vd, ftype, lexp_location ftype,
                                        fieldargs fieldtypes) in
@@ -315,3 +317,71 @@ let rec check ctx e =
                           "Cons of a non-inductive type!";
               B.type_int))
 
+(*********** Type erasure, before evaluation.  *****************)
+
+let rec erase_type (lxp: L.lexp): E.elexp =
+
+    match lxp with
+        | L.Imm(s)          -> E.Imm(s)
+        | L.Builtin(v, _)   -> E.Builtin(v)
+        | L.Var(v)          -> E.Var(v)
+        | L.Cons(_, s)      -> E.Cons(s)
+
+        | L.Lambda(kind, vdef, _, body) ->
+            if kind != P.Aerasable then
+                E.Lambda(vdef, erase_type body)
+            else
+                erase_type body
+
+        | L.Let(l, decls, body)       ->
+            E.Let(l, (clean_decls decls), (erase_type body))
+
+        | L.Call(fct, args) ->
+            E.Call((erase_type fct), (filter_arg_list args))
+
+        | L.Case(l, target, _, _, cases, default) ->
+            E.Case(l, (erase_type target), (clean_map cases),
+                                         (clean_maybe default))
+
+        | L.Susp(l, s)                -> erase_type (L.push_susp l s)
+
+        (* To be thrown out *)
+        | L.Arrow _                   -> E.Type
+        | L.SortLevel _               -> E.Type
+        | L.Sort _                    -> E.Type
+        (* Still useful to some extend *)
+        | L.Inductive(l, label, _, _) -> E.Inductive(l, label)
+
+and filter_arg_list lst =
+    let rec filter_arg_list lst acc =
+        match lst with
+            | (kind, lxp)::tl ->
+                let acc = if kind != P.Aerasable then
+                    (erase_type lxp)::acc else acc in
+                        filter_arg_list tl acc
+            | [] -> List.rev acc in
+        filter_arg_list lst []
+
+and clean_decls decls =
+   List.map (fun (v, lxp, _) -> (v, (erase_type lxp))) decls
+
+and clean_maybe lxp =
+    match lxp with
+        | Some lxp -> Some (erase_type lxp)
+        | None -> None
+
+and clean_map cases =
+    let clean_arg_list lst =
+        let rec clean_arg_list lst acc =
+            match lst with
+                | (kind, var)::tl ->
+                    let acc = if kind != P.Aerasable then
+                        var::acc else acc in
+                            clean_arg_list tl acc
+                | [] -> List.rev acc in
+        clean_arg_list lst [] in
+
+    SMap.mapi (fun key (l, args, expr) ->
+        (l, (clean_arg_list args), (erase_type expr))) cases
+
+    
