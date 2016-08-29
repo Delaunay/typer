@@ -327,11 +327,12 @@ let rec erase_type (lxp: L.lexp): E.elexp =
         | L.Var(v)          -> E.Var(v)
         | L.Cons(_, s)      -> E.Cons(s)
 
-        | L.Lambda(kind, vdef, _, body) ->
-            if kind != P.Aerasable then
-                E.Lambda(vdef, erase_type body)
-            else
-                erase_type body
+        | L.Lambda (P.Aerasable, _, _, body) ->
+          (* The var shouldn't appear in body, basically, but we need
+           * to adjust the debruijn indices of other vars, hence the subst.  *)
+          erase_type (L.push_susp body (S.substitute Builtin.type0))
+        | L.Lambda (_, vdef, _, body) ->
+          E.Lambda (vdef, erase_type body)
 
         | L.Let(l, decls, body)       ->
             E.Let(l, (clean_decls decls), (erase_type body))
@@ -349,7 +350,7 @@ let rec erase_type (lxp: L.lexp): E.elexp =
         | L.Arrow _                   -> E.Type
         | L.SortLevel _               -> E.Type
         | L.Sort _                    -> E.Type
-        (* Still useful to some extend *)
+        (* Still useful to some extent.  *)
         | L.Inductive(l, label, _, _) -> E.Inductive(l, label)
 
 and filter_arg_list lst =
