@@ -96,25 +96,28 @@ tail = lambda a ≡>
 %       Macro
 % -----------------------------------------------------
 
-block_   = Built-in "block_"   ((List Sexp) -> Sexp);
-symbol_  = Built-in "symbol_"  (String      -> Sexp);
-string_  = Built-in "string_"  (String      -> Sexp);
-node_    = Built-in "node_"    (Sexp -> (List Sexp) -> Sexp);
-integer_ = Built-in "integer_" (Int         -> Sexp);
-float_   = Built-in "float_"   (Float       -> Sexp);
+block_   = Built-in "block_"   (List Sexp -> Sexp);
+symbol_  = Built-in "symbol_"  (String    -> Sexp);
+string_  = Built-in "string_"  (String    -> Sexp);
+node_    = Built-in "node_"    (Sexp -> List Sexp -> Sexp);
+integer_ = Built-in "integer_" (Int       -> Sexp);
+float_   = Built-in "float_"   (Float     -> Sexp);
 
 % Macro  : Type;
-Macro  = inductive_ (dMacro) (Macro_ ((List Sexp) -> Sexp));
+Macro  = inductive_ (dMacro) (Macro_ (List Sexp -> Sexp));
 Macro_ = inductive-cons Macro Macro_ ;
 
-sexp_dispatch_ = Built-in "sexp_dispatch_" (Sexp
-    -> (Sexp -> List Sexp -> Sexp)
-    -> (String -> Sexp)
-    -> (String -> Sexp)
-    -> (Int -> Sexp)
-    -> (Float -> Sexp)
-    -> (List Sexp -> Sexp)
-        ->  Sexp);
+sexp_dispatch_ = Built-in "sexp_dispatch_" (
+                              (a : Type) ≡>
+                              Sexp
+                              -> (Sexp -> List Sexp -> a)
+                              -> (String -> a)
+                              -> (String -> a)
+                              -> (Int -> a)
+                              -> (Float -> a)
+                              -> (List Sexp -> a)
+                              -> a
+                          );
 
 % -----------------------------------------------------
 %       Monads
