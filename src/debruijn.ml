@@ -94,11 +94,6 @@ let get_size ctx = let ((n, _), _, _) = ctx in n
 (*  return its current DeBruijn index *)
 let rec senv_lookup (name: string) (ctx: lexp_context): int =
     let ((n, map), _, _) = ctx in
-    (* Debug_fun.do_debug (fun () -> *)
-        (* prerr_string ("<DEBRUIJN.senv_lookup> Map " ^ name ^ "(len = " ^ string_of_int n ^ ")"^ " : [\n"); *)
-        (* StringMap.iter (fun k v -> prerr_string ("\t{" ^ k ^ ", " ^ string_of_int v ^ "},\n")) map; *)
-        (* prerr_string "]\n"; *)
-        (* ()); *)
     let raw_idx =  n - (StringMap.find name map) - 1 in (*
         if raw_idx > (n - csize) then
             raw_idx - rof   (* Shift if the variable is not bound *)
