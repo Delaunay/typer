@@ -332,7 +332,9 @@ let rec push_susp e s =            (* Push a suspension one level down.  *)
                   push_susp e (scompose s' s)
   | (Var _ | Metavar _)
     -> (* U.msg_error "SUSP" (lexp_location e) "¡Susp((meta)var)!"; *)
-      push_susp (mkSusp e s) S.identity
+    if S.identity_p s
+    then e
+    else push_susp (mkSusp e s) S.identity
 
 let nosusp e =                  (* Return `e` without `Susp`.  *)
   match e with
