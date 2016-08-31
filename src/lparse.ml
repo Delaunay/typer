@@ -490,7 +490,7 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
            let ptp = pexp_parse stp in
            let ltp, _ = _lexp_p_infer ptp ctx (i + 1) in
            Builtin((loc, str), ltp), ltp
-                                      
+
         | true, _ ->
           lexp_error loc "Wrong Usage of \"Built-in\"";
           dlxp, dltype
@@ -498,7 +498,7 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
         | false, _ ->
           lexp_error loc "Use of \"Built-in\" in user code";
           dlxp, dltype)
-            
+
       | e ->
         (*  Process Arguments *)
         let largs, ret_type = handle_fun_args [] sargs ltp in
