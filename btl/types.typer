@@ -139,16 +139,16 @@ bind = Built-in "bind" (
 FileHandle = Built-in "FileHandle";
 
 % define operation on file handle
+%% runIO should have type IO Unit -> b -> b
+%% or IO a -> b -> b, which means "run the IO, throw away the result,
+%% and then return the second argument unchanged".  The "dummy" b argument
+%% is actually crucial to make sure the result of runIO is used, otherwise
+%% the whole call would look like a dead function call and could be
+%% optimized away!
 run-io = Built-in "run-io" (
-  %% FIXME: runIO should have type IO Unit -> b -> b
-  %% or IO a -> b -> b, which means "run the IO, throw away the result,
-  %% and then return the second argument unchanged".  The "dummy" b argument
-  %% is actually crucial to make sure the result of runIO is used, otherwise
-  %% the whole call would look like a dead function call and could be
-  %% optimized away!
   (a : Type) ≡>
   (b : Type) ≡>
-    IO a -> (a -> IO b) -> (IO b) -> Unit);
+    IO a -> b -> b);
 
 open  = Built-in "open"  (String -> String -> IO FileHandle);
 write = Built-in "write" (FileHandle -> String -> IO Unit);

@@ -1,0 +1,46 @@
+type-impl = lambda (x : List Sexp) ->
+  % x follow the mask -> (_|_ Nat zero (succ Nat))
+  %               Type name  --^    ^------^ constructors
+
+  % Get expression
+  let expr = head (a := Sexp) x in
+  let sexp_nil = nil (a := Sexp) in
+
+  % Expression is  node_ (symbol_ "|") (list)
+  % we only care about the list bit
+
+  let get-list = (lambda (node : Sexp) ->
+    sexp_dispatch_ (a := List Sexp) node
+      (lambda (op : Sexp) -> (lambda (lst : List Sexp) -> lst)) % Nodes
+      (lambda (str : String)    -> sexp_nil)           % Symbol
+      (lambda (str : String)    -> sexp_nil)           % String
+      (lambda (int : Int)       -> sexp_nil)           % Integer
+      (lambda (float : Float)   -> sexp_nil)           % Float
+      (lambda (lst : List Sexp) -> sexp_nil)) in       % List of Sexp
+
+  let lst = get-list expr in
+
+  let name = head (a := Sexp) lst in
+  let ctor = tail (a := Sexp) lst in
+
+  % Create a forward declaration in case the declaration is recursive
+  let fdecl = node_ (symbol_ "_:_")
+    (cons (a := Sexp) name
+      (cons (a := Sexp) (symbol_ "Type") sexp_nil)) in
+
+  % Create the inductive type definition
+  let inductive = node_ (symbol_ "inductive_")
+    (cons (a := Sexp) (symbol_ "dlabel") ctor) in
+
+  let decl = node_ (symbol_ "_=_")
+    (cons (a := Sexp) name
+      (cons (a := Sexp) inductive sexp_nil)) in
+
+    cons (a := Sexp) fdecl
+    (cons (a := Sexp) decl sexp_nil);
+
+type_ = Macro_ type-impl;
+
+type Nat
+  | zero
+  | succ Nat;

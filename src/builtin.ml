@@ -56,28 +56,44 @@ let predef_name = [
     "True";
     "False";
     "Bool";
+    "Macro";
 ]
 
 let builtin_size = ref 0
 
-let predef_map : predef_table =
+let default_predef_map : predef_table =
     (* add predef name, expr will be populated when parsing *)
     List.fold_left (fun m name ->
         SMap.add name (ref None) m) SMap.empty predef_name
 
+let predef_map = ref default_predef_map
+
 let get_predef_raw (name: string) : lexp =
-    match !(SMap.find name predef_map) with
+    match !(SMap.find name (!predef_map)) with
         | Some exp -> exp
         | None -> builtin_error dloc "Try to access an empty predefined"
 
-let get_predef name ctx =
-  let r = (get_size ctx) - !builtin_size in
-  let v = mkSusp (get_predef_raw name) (S.shift r) in
-    v
+let get_predef_option (name: string) ctx =
+  let r = (get_size ctx) - !builtin_size - 1 in
+    match !(SMap.find name (!predef_map)) with
+        | Some exp -> Some (mkSusp exp (S.shift r))
+        | None -> None
 
+let get_predef (name: string) ctx =
+  let r = (get_size ctx) - !builtin_size - 1 in
+  let p = get_predef_raw name in
+    (mkSusp p (S.shift r))
 
 let set_predef name lexp =
-    SMap.find name predef_map := lexp
+    SMap.find name (!predef_map) := lexp
+
+let dump_predef () =
+  let _ = SMap.iter (fun key item ->
+    print_string key; print_string " ";
+    let _ = match !item with
+      | Some lxp -> lexp_print lxp
+      | None -> print_string "None"; in
+    print_string "\n") !predef_map in ()
 
 (*                Builtin types               *)
 let dloc    = dummy_location
@@ -164,13 +180,11 @@ let olist2tlist_rte lst =
 (* Typer list to Ocaml list *)
 let rec tlist2olist acc expr =
     match expr with
-        | Vcons((_, "cons"), [hd; tl]) ->
-            tlist2olist (hd::acc) tl
+        | Vcons((_, "cons"), [hd; tl]) -> tlist2olist (hd::acc) tl
         | Vcons((_, "nil"), []) -> List.rev acc
         | _ ->
             print_string (value_name expr); print_string "\n";
             value_print expr;
-
             builtin_error dloc "List conversion failure'"
 
 let make_node loc depth args_val ctx    =
@@ -312,6 +326,8 @@ let has_attribute_impl loc largs ctx ftype =
       | _ -> builtin_error loc "has-attribute expects two arguments" in
 
   let b = has_property ctx (vi, vn) (ai, an) in
+
+
 
   let rvar = if b then get_predef "True" ctx else get_predef "False" ctx in
     rvar, (get_predef "Bool" ctx)

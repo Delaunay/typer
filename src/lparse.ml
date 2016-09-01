@@ -446,7 +446,7 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
            let ptp = pexp_parse stp in
            let ltp, _ = _lexp_p_infer ptp ctx (i + 1) in
            Builtin((loc, str), ltp), ltp
-                                      
+
         | true, _ ->
           lexp_error loc "Wrong Usage of \"Built-in\"";
           dlxp, dltype
@@ -454,65 +454,71 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
         | false, _ ->
           lexp_error loc "Use of \"Built-in\" in user code";
           dlxp, dltype)
-            
+
       | e ->
         (*  Process Arguments *)
         let largs, ret_type = handle_fun_args [] sargs ltp in
         Call (body, List.rev largs), ret_type in
 
-    let handle_macro_call (loc, name) =
-        (* check for builtin *)
-      match is_builtin_macro name with
-        | true ->
-          let pargs = List.map pexp_parse sargs in
-          let largs = _lexp_parse_all pargs ctx i in
-            (get_macro_impl loc name) loc largs ctx ltp
+    let handle_macro_call () =
+        (* Get the macro *)
+        let lxp = match OL.lexp_whnf body ctx with
+            | Call(Var((_, "Macro_"), _), [(_, fct)]) -> fct
+            | lxp ->
+              print_string "\n";
+              print_string (lexp_to_string lxp); print_string "\n";
+              lexp_print lxp; print_string "\n";
+              lexp_fatal loc "Macro is ill formed" in
 
-        (* user defined macro *)
-        | false ->(
-          (* Get the macro *)
-          let lxp = match OL.lexp_whnf body ctx with
-              | Call(Var((_, "Macro_"), _), [(_, fct)]) -> fct
-              | lxp ->
-                print_string "\n";
-                print_string (lexp_to_string lxp); print_string "\n";
-                lexp_print lxp; print_string "\n";
-                lexp_fatal loc "Macro is ill formed" in
+        (* Build function to be called *)
+        let arg = olist2tlist_lexp sargs ctx in
 
-          (* Build function to be called *)
-          let arg = olist2tlist_lexp sargs ctx in
+        let lxp = Call(lxp, [(Aexplicit, arg)]) in
+        let elexp = OL.erase_type lxp in
+        let rctx = (from_lctx ctx 0) in
 
-          let lxp = Call(lxp, [(Aexplicit, arg)]) in
-          let elexp = OL.erase_type lxp in
-          let rctx = (from_lctx ctx 0) in
+        _global_eval_trace := [];
 
-          _global_eval_trace := [];
+        let vxp = try eval elexp rctx
+          with e ->
+            print_eval_trace ();
+            raise e in
 
-          let vxp = try eval elexp rctx
-            with e ->
-              print_eval_trace ();
-              raise e in
+          let sxp = match vxp with
+              | Vsexp(sxp) -> sxp
+              (* Those are sexp converted by the eval function *)
+              | Vint(i)    -> Integer(dloc, i)
+              | Vstring(s) -> String(dloc, s)
+              | Vfloat(f)  -> Float(dloc, f)
+              (* I have vdum here WHY *)
+              | v -> debug_msg (value_print v);
+                  lexp_fatal loc "Macro_ expects '(List Sexp) -> Sexp'" in
 
-            let sxp = match vxp with
-                | Vsexp(sxp) -> sxp
-                (* Those are sexp converted by the eval function *)
-                | Vint(i)    -> Integer(dloc, i)
-                | Vstring(s) -> String(dloc, s)
-                | Vfloat(f)  -> Float(dloc, f)
-                (* I have vdum here WHY *)
-                | v -> debug_msg (value_print v);
-                    lexp_fatal loc "Macro_ expects '(List Sexp) -> Sexp'" in
+        let pxp = pexp_parse sxp in
+            _lexp_p_infer pxp ctx (i + 1)  in
 
-          let pxp = pexp_parse sxp in
-              _lexp_p_infer pxp ctx (i + 1))  in
+    (* This is the builtin Macro type *)
+    let macro_type = match get_predef_option "Macro" ctx with
+      | Some lxp -> lxp
+      (* When type.typer is being parsed and the predef is not yet
+       * available                                                  *)
+      | None -> dltype     in
 
     (* determine function type *)
     match func, ltp with
-    (* FIXME: Rather than check a var name, define a builtin for it.  *)
-    (* FIXME: Don't force func to be a Pvar.  *)
-    | (Pvar (l, n), Var((_, "Macro"), _)) -> handle_macro_call (l, n)
-    (* FIXME: Handle special-forms here as well!  *)
-    | _ -> handle_funcall ()
+      | macro, _ when OL.conv_p ltp macro_type -> (
+        match macro with
+          (* Special form *)
+          | Pvar(l, name) when is_builtin_macro name ->
+            let pargs = List.map pexp_parse sargs in
+            let largs = _lexp_parse_all pargs ctx i in
+              (get_macro_impl loc name) loc largs ctx ltp
+
+          (* true macro *)
+          | _ -> handle_macro_call ())
+
+      (* FIXME: Handle special-forms here as well!  *)
+      | _ -> handle_funcall ()
 
 
 (*  Read a pattern and create the equivalent representation *)
@@ -645,6 +651,8 @@ and lexp_decls_macro (loc, mname) sargs ctx: (pdecl list * lexp_context) =
         (* get a list of declaration *)
         let decls = eval elexp rctx in
 
+        value_print decls; print_string "\n";
+
         (* convert typer list to ocaml *)
         let decls = tlist2olist [] decls in
 
@@ -652,7 +660,10 @@ and lexp_decls_macro (loc, mname) sargs ctx: (pdecl list * lexp_context) =
         let decls = List.map (fun g ->
           match g with
             | Vsexp(sxp) -> sxp
-            | _ -> lexp_fatal loc "Macro expects sexp list") decls in
+            | _ ->
+              print_string ((value_name g) ^ " : ");
+              value_print g; print_string "\n";
+              lexp_fatal loc "Macro expects sexp list") decls in
 
         (* read as pexp_declaraton *)
           pexp_decls_all decls, ctx)
@@ -788,7 +799,7 @@ and _lexp_rec_decl decls ctx i =
       | Ldecl ((l, s), Some pxp, None) ->
           let lxp, ltp = lexp_p_infer pxp vctx in
           lst := ((l, s), lxp, ltp)::!lst;
-          (* replace forward ref by its true value *)
+            (* replace forward ref by its true value *)
             replace_by vctx s (n - !i, Some (l, s), LetDef lxp, ltp)
 
       (* lexp check *)
@@ -963,6 +974,7 @@ let default_lctx, default_rctx =
       (* -- DONE -- *)
           lctx
       with e ->
+        lexp_warning dloc "Predef not found";
         lctx in
       let rctx = make_runtime_ctx in
       let rctx = eval_decls_toplevel (List.map OL.clean_decls d) rctx in
