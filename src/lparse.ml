@@ -351,10 +351,7 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
                       let print_lxp str =
                         print_string (Fmt_lexp.colored_string_of_lxp str Fmt_lexp.str_yellow Fmt_lexp.str_magenta) in
                       Debug_fun.do_debug (fun () ->
-                          prerr_string ("0 pxp " ^ Fmt_lexp.string_of_pexp p);
-                          prerr_newline ();
-                          print_lexp_ctx ctx;
-                          prerr_newline ();
+                          prerr_endline ("0 pxp " ^ Fmt_lexp.string_of_pexp p);
                           ());
                       print_string "1 exp "; (print_lxp e); print_string "\n";
                       print_string "2 inf "; (print_lxp inferred_t); print_string "\n";
@@ -445,8 +442,11 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
     let body, ltp = _lexp_p_infer func ctx (i + 1) in
     let ltp = nosusp ltp in
     Debug_fun.do_debug (fun () ->
-        prerr_string ("ltp : " ^ Fmt_lexp.string_of_lxp ltp);
-        prerr_string (" body : " ^ Fmt_lexp.string_of_lxp body);
+        prerr_endline ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>";
+        prerr_endline ("ltp : " ^ Fmt_lexp.string_of_lxp ltp);
+        prerr_endline ("body : " ^ Fmt_lexp.string_of_lxp body);
+        prerr_endline (string_of_int (List.length sargs) ^ " args");
+        prerr_endline "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<";
         prerr_newline ();(););
 
     let rec handle_fun_args largs sargs ltp = match sargs with
