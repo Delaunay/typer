@@ -268,8 +268,9 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
             lexp_case None (loc, target, patterns) ctx i
 
         | Pmetavar _ -> (let meta = mkMetavar () (*TODO *)
+                         and type_ = mkMetavar ()
                          in lexp_warning dloc "<LEXP_P_INFER>(Pmetavar case) Check output : may be wrong lexp/type returned";
-                         (meta, meta) (* FIXME pretty sure that's not should be returned*))
+                         (meta, type_) (* FIXME return the right type *))
 
         | Phastype (_, pxp, ptp) ->
             let ltp, _ = lexp_infer ptp ctx in
