@@ -433,7 +433,8 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
                             "Explicit arg to non-function") in
 
     let handle_funcall () =
-
+      (* Here we use lexp_whnf on actual code, but it's OK
+       * because we only use the result when it's a "predefined constant".  *)
       match OL.lexp_whnf body ctx with
       | Builtin((_, "Built-in"), _)
         -> (
@@ -455,13 +456,15 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
           lexp_error loc "Use of \"Built-in\" in user code";
           dlxp, dltype)
 
-      | e ->
+      | _ ->
         (*  Process Arguments *)
         let largs, ret_type = handle_fun_args [] sargs ltp in
         Call (body, List.rev largs), ret_type in
 
     let handle_macro_call () =
-        (* Get the macro *)
+        (* FIXME: We shouldn't look at `body` here at all:
+         * Instead, we should pass `body` (along with `arg`) to
+         * a `typer__expand_macro` function predefined in types.typer.  *)
         let lxp = match OL.lexp_whnf body ctx with
             | Call(Var((_, "Macro_"), _), [(_, fct)]) -> fct
             | lxp ->
