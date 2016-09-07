@@ -34,17 +34,8 @@ open Grammar
 (* open Unify *)
 module S = Subst
 
-(*************** DeBruijn indices for variables *********************)
-
-(* Occurrence of a variable's symbol: we use DeBruijn index, and for
- * debugging purposes, we remember the name that was used in the source
- * code.  *)
-type vdef = U.location * string
-type db_index = int             (* DeBruijn index.  *)
-type db_offset = int            (* DeBruijn index offset.  *)
-type db_revindex = int          (* DeBruijn index counting from the root.  *)
-type vref = vdef * db_index
-
+type vdef = U.vdef
+type vref = U.vref
 
 type label = symbol
 

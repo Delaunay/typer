@@ -44,7 +44,7 @@ quote' = lambda (x : List Sexp) ->
     let target = head Sexp x;
         tl = tail Sexp x;
 
-        rhd = sexp_dispatch_ target
+        rhd = sexp_dispatch_ (a := Sexp) target
             node symbol string integer float block;
 
         rtl = case tl

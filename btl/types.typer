@@ -35,7 +35,6 @@
 %       Base Types
 % -----------------------------------------------------
 
-Type    = Built-in "Type";
 Int     = Built-in "Int";
 Float   = Built-in "Float";
 String  = Built-in "String";
@@ -72,22 +71,22 @@ List = inductive_ (dList (a : Type)) (nil) (cons a (List a));
 nil = inductive-cons List nil;
 cons = inductive-cons List cons;
 
-length : (a : Type) => List a -> Int;
-length = lambda a =>
+length : (a : Type) ≡> List a -> Int;
+length = lambda a ≡>
   lambda xs ->
     case xs
       | nil => 0
       | cons hd tl => (1 + (length(a := a) tl));
 
-head : (a : Type) => List a -> a;
-head = lambda a =>
+head : (a : Type) ≡> List a -> a;
+head = lambda a ≡>
   lambda xs ->
     case xs
       | nil => nil
       | cons hd tl => hd;
 
-tail : (a : Type) => List a -> List a;
-tail = lambda a =>
+tail : (a : Type) ≡> List a -> List a;
+tail = lambda a ≡>
   lambda xs ->
     case xs
       | nil => nil
@@ -97,25 +96,28 @@ tail = lambda a =>
 %       Macro
 % -----------------------------------------------------
 
-block_   = Built-in "block_"   ((List Sexp) -> Sexp);
-symbol_  = Built-in "symbol_"  (String      -> Sexp);
-string_  = Built-in "string_"  (String      -> Sexp);
-node_    = Built-in "node_"    (Sexp -> (List Sexp) -> Sexp);
-integer_ = Built-in "integer_" (Int         -> Sexp);
-float_   = Built-in "float_"   (Float       -> Sexp);
+block_   = Built-in "block_"   (List Sexp -> Sexp);
+symbol_  = Built-in "symbol_"  (String    -> Sexp);
+string_  = Built-in "string_"  (String    -> Sexp);
+node_    = Built-in "node_"    (Sexp -> List Sexp -> Sexp);
+integer_ = Built-in "integer_" (Int       -> Sexp);
+float_   = Built-in "float_"   (Float     -> Sexp);
 
 % Macro  : Type;
-Macro  = inductive_ (dMacro) (Macro_ ((List Sexp) -> Sexp));
+Macro  = inductive_ (dMacro) (Macro_ (List Sexp -> Sexp));
 Macro_ = inductive-cons Macro Macro_ ;
 
-sexp_dispatch_ = Built-in "sexp_dispatch_" (Sexp
-    -> (Sexp -> List Sexp -> Sexp)
-    -> (String -> Sexp)
-    -> (String -> Sexp)
-    -> (Int -> Sexp)
-    -> (Float -> Sexp)
-    -> (List Sexp -> Sexp)
-        ->  Sexp);
+sexp_dispatch_ = Built-in "sexp_dispatch_" (
+                              (a : Type) ≡>
+                              Sexp
+                              -> (Sexp -> List Sexp -> a)
+                              -> (String -> a)
+                              -> (String -> a)
+                              -> (Int -> a)
+                              -> (Float -> a)
+                              -> (List Sexp -> a)
+                              -> a
+                          );
 
 % -----------------------------------------------------
 %       Monads
@@ -137,6 +139,12 @@ bind = Built-in "bind" (
 FileHandle = Built-in "FileHandle";
 
 % define operation on file handle
+%% runIO should have type IO Unit -> b -> b
+%% or IO a -> b -> b, which means "run the IO, throw away the result,
+%% and then return the second argument unchanged".  The "dummy" b argument
+%% is actually crucial to make sure the result of runIO is used, otherwise
+%% the whole call would look like a dead function call and could be
+%% optimized away!
 run-io = Built-in "run-io" (
   %% FIXME: runIO should have type IO Unit -> b -> b
   %% or IO a -> b -> b, which means "run the IO, throw away the result,
@@ -146,7 +154,7 @@ run-io = Built-in "run-io" (
   %% optimized away!
   (a : Type) ≡>
   (b : Type) ≡>
-    IO a -> (a -> IO b) -> (IO b) -> Unit);
+    IO a -> b -> b);
 
 open  = Built-in "open"  (String -> String -> IO FileHandle);
 write = Built-in "write" (FileHandle -> String -> IO Unit);

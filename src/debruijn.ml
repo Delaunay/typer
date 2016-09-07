@@ -100,23 +100,15 @@ let rec senv_lookup (name: string) (ctx: lexp_context): int =
         else *)
         raw_idx
 
-(*  We first add variable into our map. Later on, we will add them into
- *  the environment. The reason for this is that the type info is
- *  known after lexp parsing which need the index fist *)
-let senv_add_var (loc, name) ctx =
-    let ((n, map), e, f) = ctx in
-    (try let _ = senv_lookup name ctx in
-         debruijn_warning loc ("Variable Shadowing " ^ name);
-     with Not_found -> ());
-    let nmap = StringMap.add name n map in
-    ((n + 1, nmap), e, f)
-
-let env_add_var_info var (ctx: lexp_context) =
-    let (a, env, f) = ctx in
-        (a, cons (var) env, f)
-
 let env_extend (ctx: lexp_context) (def: vdef) (v: varbind) (t: lexp) =
-    env_add_var_info (1, Some def, v, t) (senv_add_var def ctx)
+  let (loc, name) = def in
+  let ((n, map), env, f) = ctx in
+  (try let _ = senv_lookup name ctx in
+       debruijn_warning loc ("Variable Shadowing " ^ name);
+   with Not_found -> ());
+  let nmap = StringMap.add name n map in
+  (* FIXME: Why a db_offset of 1?  *)
+  ((n + 1, nmap), cons (1, Some def, v, t) env, f)
 
 
 let _name_error loc estr str =

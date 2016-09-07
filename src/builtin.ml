@@ -56,38 +56,52 @@ let predef_name = [
     "True";
     "False";
     "Bool";
+    "Macro";
 ]
 
 let builtin_size = ref 0
 
-let predef_map : predef_table =
+let default_predef_map : predef_table =
     (* add predef name, expr will be populated when parsing *)
     List.fold_left (fun m name ->
         SMap.add name (ref None) m) SMap.empty predef_name
 
+let predef_map = ref default_predef_map
+
 let get_predef_raw (name: string) : lexp =
-    match !(SMap.find name predef_map) with
+    match !(SMap.find name (!predef_map)) with
         | Some exp -> exp
         | None -> builtin_error dloc "Try to access an empty predefined"
 
-let get_predef name ctx =
-  let r = (get_size ctx) - !builtin_size in
-  let v = mkSusp (get_predef_raw name) (S.shift r) in
-    v
+let get_predef_option (name: string) ctx =
+  let r = (get_size ctx) - !builtin_size - 1 in
+    match !(SMap.find name (!predef_map)) with
+        | Some exp -> Some (mkSusp exp (S.shift r))
+        | None -> None
 
+let get_predef (name: string) ctx =
+  let r = (get_size ctx) - !builtin_size - 1 in
+  let p = get_predef_raw name in
+    (mkSusp p (S.shift r))
 
 let set_predef name lexp =
-    SMap.find name predef_map := lexp
+    SMap.find name (!predef_map) := lexp
+
+let dump_predef () =
+  let _ = SMap.iter (fun key item ->
+    print_string key; print_string " ";
+    let _ = match !item with
+      | Some lxp -> lexp_print lxp
+      | None -> print_string "None"; in
+    print_string "\n") !predef_map in ()
 
 (*                Builtin types               *)
 let dloc    = dummy_location
-let slevel0 = SortLevel (SLn 0)
-let slevel1 = SortLevel (SLn 1)
-let type0   = Sort (dloc, Stype slevel0)
-let type1      = Sort (dloc, Stype slevel1)
+let type0   = Sort (dloc, Stype (SortLevel (SLn 0)))
+let type1   = Sort (dloc, Stype (SortLevel (SLn 1)))
+let type2   = Sort (dloc, Stype (SortLevel (SLn 2)))
 let type_omega = Sort (dloc, StypeOmega)
 let type_level = Sort (dloc, StypeLevel)
-let type_level = Builtin ((dloc, "TypeLevel"), type_level)
 
 let op_binary t =  Arrow (Aexplicit, None, t, dloc,
                         Arrow (Aexplicit, None, t, dloc, t))
@@ -166,13 +180,11 @@ let olist2tlist_rte lst =
 (* Typer list to Ocaml list *)
 let rec tlist2olist acc expr =
     match expr with
-        | Vcons((_, "cons"), [hd; tl]) ->
-            tlist2olist (hd::acc) tl
+        | Vcons((_, "cons"), [hd; tl]) -> tlist2olist (hd::acc) tl
         | Vcons((_, "nil"), []) -> List.rev acc
         | _ ->
             print_string (value_name expr); print_string "\n";
-            value_print expr; print_newline ();
-
+            value_print expr;
             builtin_error dloc "List conversion failure'"
 
 let make_node loc depth args_val ctx    =
@@ -236,15 +248,8 @@ let int_eq loc depth args_val ctx =
 
 let sexp_eq loc depth args_val ctx =
     match args_val with
-        | [Vsexp(s1); Vsexp(s2)] -> (
-            match s1, s2 with
-                | Symbol(_, s1), Symbol(_, s2)   -> btyper (s1 = s2)
-                | String(_, s1), String(_, s2)   -> btyper (s1 = s2)
-                | Integer(_, s1), Integer(_, s2) -> btyper (s1 = s2)
-                | Float(_, s1), Float(_, s2)     -> btyper (s1 = s2)
-                | _ -> tfalse)
-        | _ -> builtin_error loc "int_eq expects 2 sexp"
-
+    | [Vsexp (s1); Vsexp (s2)] -> btyper (sexp_equal s1 s2)
+    | _ -> builtin_error loc "sexp_eq expects 2 sexp"
 
 let open_impl loc depth args_val ctx =
 
@@ -321,6 +326,8 @@ let has_attribute_impl loc largs ctx ftype =
       | _ -> builtin_error loc "has-attribute expects two arguments" in
 
   let b = has_property ctx (vi, vn) (ai, an) in
+
+
 
   let rvar = if b then get_predef "True" ctx else get_predef "False" ctx in
     rvar, (get_predef "Bool" ctx)
