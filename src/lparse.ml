@@ -453,7 +453,7 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
       | [] -> largs, ltp
       | (Node (Symbol (_, "_:=_"), [Symbol (_, aname); sarg])) :: sargs
         (* Explicit-implicit argument.  *)
-        -> (match OL.lexp_whnf ltp ctx with
+        -> (match OL.lexp_whnf ltp ctx meta_ctx with
            | Arrow (ak, Some (_, aname'), arg_type, _, ret_type)
                 when aname = aname'
              -> let parg = pexp_parse sarg in
@@ -464,7 +464,7 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
                             "Explicit arg to non-function")
       | sarg :: sargs
         (*  Process Argument *)
-        -> (match OL.lexp_whnf ltp ctx with
+        -> (match OL.lexp_whnf ltp ctx meta_ctx with
            | Arrow (Aexplicit, _, arg_type, _, ret_type)
              -> let parg = pexp_parse sarg in
                let larg = _lexp_p_check parg arg_type ctx i in
@@ -514,7 +514,7 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
         (* FIXME: We shouldn't look at `body` here at all:
          * Instead, we should pass `body` (along with `arg`) to
          * a `typer__expand_macro` function predefined in types.typer.  *)
-        let lxp = match OL.lexp_whnf body ctx with
+        let lxp = match OL.lexp_whnf body ctx meta_ctx with
             | Call(Var((_, "Macro_"), _), [(_, fct)]) -> fct
             | lxp ->
               print_string "\n";
