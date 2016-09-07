@@ -112,12 +112,13 @@ and conv_p e1 e2 = conv_p' S.identity S.identity e1 e2
  * - Not a Case (Cons _).
  * - Not a Call (MetaSet, ..).
  *)
-let rec lexp_whnf e ctx = match e with
+let rec lexp_whnf e ctx meta_ctx = match e with
   | Var v -> (match DB.env_lookup_expr ctx v with
              | None -> e
              (* FIXME: We shouldn't do this blindly for recursive definitions!  *)
-             | Some e' -> lexp_whnf e' ctx)
-  | Susp (e, s) -> lexp_whnf (push_susp e s) ctx
+             | Some e' -> lexp_whnf e' ctx meta_ctx)
+  | Susp (e, s) -> lexp_whnf (push_susp e s) ctx meta_ctx
+  | Metavar (idx, _, _) -> lexp_whnf (Unification.VMap.find idx meta_ctx) ctx meta_ctx
   (* FIXME: Obviously incomplete!  *)
   | e -> e
 

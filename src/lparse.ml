@@ -426,6 +426,7 @@ and lexp_case (rtype: lexp option) (loc, target, patterns) ctx i =
 (*  Identify Call Type and return processed call *)
 and lexp_call (func: pexp) (sargs: sexp list) ctx i =
     let loc = pexp_location func in
+    let meta_ctx, _ = !global_substitution in
 
     let from_lctx ctx = try (from_lctx ctx)
         with e ->(
@@ -453,7 +454,7 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
       | [] -> largs, ltp
       | (Node (Symbol (_, "_:=_"), [Symbol (_, aname); sarg])) :: sargs
         (* Explicit-implicit argument.  *)
-        -> (match TC.lexp_whnf ltp ctx with
+        -> (match TC.lexp_whnf ltp ctx meta_ctx with
            | Arrow (ak, Some (_, aname'), arg_type, _, ret_type)
                 when aname = aname'
              -> let parg = pexp_parse sarg in
@@ -464,7 +465,7 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
                             "Explicit arg to non-function")
       | sarg :: sargs
         (*  Process Argument *)
-        -> (match TC.lexp_whnf ltp ctx with
+        -> (match TC.lexp_whnf ltp ctx meta_ctx with
            | Arrow (Aexplicit, _, arg_type, _, ret_type)
              -> let parg = pexp_parse sarg in
                let larg = _lexp_p_check parg arg_type ctx i in
@@ -474,12 +475,16 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
                             sexp_print sarg; print_string "\n";
                        lexp_fatal (sexp_location sarg)
                                   "Expected non-explicit arg"
-           | _ -> lexp_fatal (sexp_location sarg)
+           | e -> Debug_fun.do_debug (fun () ->
+               print_endline ("<>explicit arg : " ^ Fmt_lexp.string_of_lxp ltp);
+               print_endline ("<>explicit res : " ^ Fmt_lexp.string_of_lxp e);
+               ());
+           lexp_fatal (sexp_location sarg)
                             "Explicit arg to non-function") in
 
     let handle_funcall () =
 
-      match TC.lexp_whnf body ctx with
+      match TC.lexp_whnf body ctx meta_ctx with
       | Builtin((_, "Built-in"), _)
         -> (
         (* ------ SPECIAL ------ *)
@@ -516,7 +521,7 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
         (* user defined macro *)
         | false ->(
           (* Get the macro *)
-          let lxp = match TC.lexp_whnf body ctx with
+          let lxp = match TC.lexp_whnf body ctx meta_ctx with
               | Call(Var((_, "Macro_"), _), [(_, fct)]) -> fct
               | lxp ->
                 print_string "\n";
