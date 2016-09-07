@@ -191,8 +191,9 @@ let make_node loc depth args_val ctx    =
 
     let op, tlist = match args_val with
         | [Vsexp(op); lst] -> op, lst
-        | _ -> builtin_error loc
-            "node_ expects one 'Sexp' and one 'List Sexp'" in
+        | op::_  ->
+          builtin_error loc
+            ("node_ expects one 'Sexp' got " ^ (value_name op))  in
 
     (* value_print tlist; print_string "\n"; *)
 

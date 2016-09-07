@@ -375,6 +375,29 @@ let _ = (add_test "EVAL" "List" (fun () ->
 ))
 
 
+let _ = (add_test "EVAL" "Monads" (fun () ->
+    reset_eval_trace ();
+
+    let dcode = "
+      c = bind (a := Type) (b := Type) (open \"./_build/w_file.txt\" \"w\")
+        (lambda (f : FileHandle) ->
+          write f \"Hello2\");
+
+    " in
+
+    let rctx, lctx = eval_decl_str dcode lctx rctx in
+
+    let rcode = "run-io (a := Type) (b := Unit) c Unit" in
+
+    (* Eval defined lambda *)
+    let ret = eval_expr_str rcode lctx rctx in
+        (* Expect a 3 results *)
+        match ret with
+            | [v] -> success ()
+            | _ -> failure ()
+))
+
+
 (* run all tests *)
 let _ = run_all ()
 

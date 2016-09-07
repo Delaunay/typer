@@ -1,0 +1,10 @@
+%
+% Int index inconsistency
+% ------------------------------
+sqr = lambda (x : Int) -> x * x;
+v = sqr 2;
+
+sqr2 : Int -> Int;
+sqr2 = lambda x -> x * x;
+
+v2 = sqr2 2;

@@ -651,8 +651,6 @@ and lexp_decls_macro (loc, mname) sargs ctx: (pdecl list * lexp_context) =
         (* get a list of declaration *)
         let decls = eval elexp rctx in
 
-        value_print decls; print_string "\n";
-
         (* convert typer list to ocaml *)
         let decls = tlist2olist [] decls in
 
