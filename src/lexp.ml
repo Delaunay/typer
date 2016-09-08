@@ -511,6 +511,26 @@ let debug_ppctx   = ref (false, 0, true, true , false, 4, true)
 let rec lexp_print e = _lexp_print (!debug_ppctx) e
 and _lexp_print ctx e = print_string (_lexp_to_str ctx e)
 
+(*)
+type print_context2 = int SMap.t
+
+let default_print_context =
+  List.fold (fun map (key, v) -> SMap.add key v map)
+    [
+      (* true options *)
+      ("pretty",        1);
+      ("print_type",    1);
+      ("print_dbi",     1);
+      ("indent_size",   2);
+      ("color",         1);
+      ("separate_decl", 1);
+
+      (* State information *)
+      ("indent_level",  0);
+      ("previous node", 0)
+    ]
+    SMap.empty *)
+
 (*  Print a lexp into its typer equivalent                              *)
 (*  Depending on the print_context the output can be correct typer code *)
 (*  This function will be very useful when debugging generated code     *)
