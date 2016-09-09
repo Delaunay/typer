@@ -171,7 +171,7 @@ let rec lexp_whnf e ctx meta_ctx =
       | Cons (_, (_, name)) -> reduce name []
       | Call (Cons (_, (_, name)), aargs) -> reduce name aargs
       | e' -> Case (l, e', bt, rt, branches, default))
-  | Metavar (idx, _, _) -> lexp_whnf (Unification.VMap.find idx meta_ctx) ctx meta_ctx
+  | Metavar (idx, _, _) -> lexp_whnf (L.VMap.find idx meta_ctx) ctx meta_ctx
   | e -> e
 
 

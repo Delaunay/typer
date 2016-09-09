@@ -131,7 +131,7 @@ let get_type0 ctx = build_var "Type" ctx
 let get_int ctx = build_var "Int" ctx
 
 (* :-( *)
-let global_substitution = ref (Unif.empty_subst, [])
+let global_substitution = ref (empty_subst, [])
 
 let mkMetavar () = let meta = Unif.create_metavar ()
   in let name = "__Metavar_" ^ (string_of_int meta)

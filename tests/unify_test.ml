@@ -152,9 +152,9 @@ let generate_testable (_: lexp list) : ((lexp * lexp * result) list) =
   ::(input_lambda2 , input_lambda3 , Constraint)
   ::(input_lambda3 , input_lambda3 , Equivalent)
 
-  ::(input_arrow2  , input_int_4   , Unification) (* changes in lexp_p_infer & lexp_p_check *)
-  ::(input_arrow2  , input_induct  , Unification) (* changed the "output" of lexp_decl_str*)
-  ::(input_arrow2  , input_case    , Constraint)  (* which changed the type of the Lexp*)
+  ::(input_arrow2  , input_int_4   , Unification)
+  ::(input_arrow2  , input_induct  , Unification)
+  ::(input_arrow2  , input_case    , Constraint)
   ::(input_arrow2  , input_case2   , Constraint)
   ::(input_arrow2  , input_let     , Constraint)
   ::(input_arrow2  , input_induct  , Unification)
@@ -178,7 +178,7 @@ let test_input (lxp1: lexp) (lxp2: lexp) (subst: substitution): unif_res =
   | Some (_, [])                      -> (Unification, res, lxp1, lxp2)
   | Some _                            -> (Constraint, res, lxp1, lxp2)
   | None                              -> (Nothing, res, lxp1, lxp2)
-  in clear_indent (); tmp
+  in tmp
 
 let check (lxp1: lexp ) (lxp2: lexp ) (res: result) (subst: substitution ): bool =
   let r, _, _, _ = test_input lxp1 lxp2 subst

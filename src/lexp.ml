@@ -95,6 +95,11 @@ type varbind =
   | ForwardRef
   | LetDef of lexp
 
+module VMap = Map.Make (struct type t = int let compare = compare end)
+type substitution = lexp VMap.t
+type constraints  = (lexp * lexp) list
+let empty_subst = (VMap.empty)
+
 (********* Helper functions to use the Subst operations  *********)
 (* This basically "ties the knot" between Subst and Lexp.
  * Maybe it would be cleaner to just move subst.ml into lexp.ml
