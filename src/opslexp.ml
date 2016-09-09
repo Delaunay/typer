@@ -118,7 +118,16 @@ and conv_p e1 e2 = conv_p' S.identity S.identity e1 e2
  * but only on *types*.  If you must use it on code, be sure to use its
  * return value as little as possible since WHNF will inherently introduce
  * call-by-name behavior.  *)
-let rec lexp_whnf e ctx meta_ctx = match e with
+let rec lexp_whnf e ctx meta_ctx =
+  Debug_fun.do_debug (fun () ->
+      prerr_endline ("[StackTrace] ------------------------------------------");
+      prerr_endline ("[StackTrace] let lexp_whnf e ctx meta_ctx");
+      prerr_endline ("[StackTrace] e        = " ^ Fmt_lexp.string_of_lxp e);
+      prerr_endline ("[StackTrace] ctx      = ???");
+      prerr_endline ("[StackTrace] meta_ctx = ???");
+      prerr_endline ("[StackTrace] ------------------------------------------");
+      ());
+  match e with
   (* | Let (_, defs, body) -> FIXME!!  Need recursive substitutions!  *)
   | Var v -> (match DB.env_lookup_expr ctx v with
              | None -> e

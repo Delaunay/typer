@@ -441,15 +441,15 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
     (* retrieve function's body *)
     let body, ltp = _lexp_p_infer func ctx (i + 1) in
     let ltp = nosusp ltp in
-    Debug_fun.do_debug (fun () ->
-        prerr_endline ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>";
-        prerr_endline ("ltp : " ^ Fmt_lexp.string_of_lxp ltp);
-        prerr_endline ("body : " ^ Fmt_lexp.string_of_lxp body);
-        prerr_endline (string_of_int (List.length sargs) ^ " args");
-        prerr_endline "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<";
-        prerr_newline ();(););
 
-    let rec handle_fun_args largs sargs ltp = match sargs with
+    let rec handle_fun_args largs sargs ltp =
+    Debug_fun.do_debug (fun () ->
+        print_endline ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>";
+        print_lexp_ctx ctx;
+        flush stdout;
+        prerr_endline "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<";
+        print_newline ();(););
+      match sargs with
       | [] -> largs, ltp
       | (Node (Symbol (_, "_:=_"), [Symbol (_, aname); sarg])) :: sargs
         (* Explicit-implicit argument.  *)
@@ -460,8 +460,12 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
                let larg = _lexp_p_check parg arg_type ctx i in
                handle_fun_args ((ak, larg) :: largs) sargs
                                (L.mkSusp ret_type (S.substitute larg))
-           | _ -> lexp_fatal (sexp_location sarg)
-                            "Explicit arg to non-function")
+           | e -> Debug_fun.do_debug (fun () ->
+               print_endline ("<>explicit arg : " ^ Fmt_lexp.string_of_lxp ltp);
+               print_endline ("<>explicit res : " ^ Fmt_lexp.string_of_lxp e);
+               ());
+           lexp_fatal (sexp_location sarg)
+                            ("Explicit-implicit arg " ^ aname ^ " to non-function"))
       | sarg :: sargs
         (*  Process Argument *)
         -> (match OL.lexp_whnf ltp ctx meta_ctx with
@@ -507,7 +511,12 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
 
       | e ->
         (*  Process Arguments *)
-        let largs, ret_type = handle_fun_args [] sargs ltp in
+        let largs, ret_type = try handle_fun_args [] sargs ltp
+          with Internal_error m -> print_string ( ( Fmt_lexp.string_of_lxp e ) ^ "---\n" );
+            List.iter (fun s ->  Sexp.sexp_print s; print_newline () ) sargs;
+            print_endline (">>>" ^ Fmt_lexp.string_of_lxp ltp);
+            raise (Internal_error m)
+        in
         Call (body, List.rev largs), ret_type in
 
     let handle_macro_call () =
@@ -1060,6 +1069,15 @@ let lexp_decl_str str lctx =
 (* Because we cant include lparse in eval.ml *)
 
 let _eval_expr_str str lctx rctx silent =
+  Debug_fun.do_debug (fun () ->
+      prerr_endline ("[StackTrace] ------------------------------------------");
+      prerr_endline ("[StackTrace] let _eval_expr_str str lctx rctx silent");
+      prerr_endline ("[StackTrace] str = " ^ str);
+      prerr_endline ("[StackTrace] lctx = ???");
+      prerr_endline ("[StackTrace] rctx = ???");
+      prerr_endline ("[StackTrace] silent = " ^ string_of_bool silent);
+      prerr_endline ("[StackTrace] ------------------------------------------");
+    ());
     let lxps = lexp_expr_str str lctx in
     let elxps = List.map OL.erase_type lxps in
         (eval_all elxps rctx silent)

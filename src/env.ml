@@ -129,6 +129,17 @@ let get_rte_variable (name: string option) (idx: int)
             if n1 = n2 then
                 x
             else (
+    Debug_fun.do_debug (fun () ->
+        prerr_endline ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>";
+        prerr_endline "get_rte_variable";
+        prerr_endline ("idx = " ^ (string_of_int idx));
+        prerr_endline ("rte_size = " ^ (string_of_int (get_rte_size ctx)));
+        prerr_endline ("name = " ^ n2);
+        prerr_endline ("tname = " ^ n1);
+        prerr_endline "Callstack";
+        prerr_endline (Printexc.raw_backtrace_to_string (Printexc.get_callstack 20));
+        prerr_endline "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<";
+        prerr_newline ();(););
             env_error dloc
                 ("Variable lookup failure. Expected: \"" ^
                 n2 ^ "[" ^ (string_of_int idx) ^ "]" ^ "\" got \"" ^ n1 ^ "\"")))
@@ -143,6 +154,8 @@ let rte_shift vref ctx =
     let (_, (osize, _)) = ctx in    (* number of variable declared outside *)
     let csize = get_rte_size ctx in (* current size                        *)
     let offset = csize - osize in
+    Debug_fun.do_debug (fun () ->
+        prerr_endline (">>> offset        " ^ (string_of_int offset) ^ " (" ^ (string_of_int csize)^ " - " ^ (string_of_int osize) ^ ")"); ());
     let ((loc, name), idx) = vref in
     (* check if variable is free *)
     let offset = if idx > offset then offset else 0 in
