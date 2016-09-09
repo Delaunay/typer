@@ -3,10 +3,11 @@ open Lexp
 open Util
 module S = Subst
 
-(** Provide inverse function for computing the inverse of a substitution
-*)
+(** Provide inverse function for computing the inverse of a substitution *)
 
 (* Transformation *)
+
+(** Convenience types and variables *)
 
 type inter_subst = lexp list (* Intermediate between "tree"-like substitution and fully flattened subsitution *)
 
@@ -14,25 +15,29 @@ let dummy_var = Var((dummy_location, "DummyVar"), -1)
 
 type substIR = ((int * int) list * int)
 
-(* toIr + flattenIr + to_list *)
-(* TODO : find better name ?*)
+(** Transform a substitution to a more linear substitution
+ * makes the inversion easier
+ * Example of result : ((new_idx, old_position)::..., shift)*)
 let transfo (s: lexp S.subst) : substIR option =
   let rec transfo (s: lexp S.subst) (off_acc: int) (idx: int): substIR option =
-    let valueOf (v: lexp): int =
+    let indexOf (v: lexp): int = (* Helper : return the index of a variabble *)
       match v with
       | Var (_, v) -> v
       | _          -> assert false
-    in let shiftVar (var: lexp) (offset: int): int = valueOf (mkSusp var (S.shift offset))
-    in match s with
+    in
+    let shiftVar (var: lexp) (offset: int): int =
+      indexOf (mkSusp var (S.shift offset)) (* Helper : shift the index of a var *)
+    in
+    match s with
     | S.Cons (Var _ as v, s) ->
       (match transfo s off_acc (idx + 1) with
        | Some (tail, off) -> let newVar = shiftVar v off_acc
-         in if newVar >= off then None
+         in if newVar >= off then None (* Error *)
          else Some (((shiftVar v off_acc), idx)::tail, off)
         | None             -> None)
     | S.Shift (s, offset) -> transfo s (offset + off_acc) idx
-    | S.Identity          -> Some ([], off_acc)
-    | _                   -> None
+    | S.Identity          -> Some ([], off_acc) (* End of recursion *)
+    | _                   -> None (* Error *)
   in transfo s 0 0
 
 (* Inverse *)
@@ -55,17 +60,17 @@ let mkVar (idx: int): lexp = Var((U.dummy_location, ""), idx)
     @param acc   recursion accumulator
 *)
 let fill (l: (int * int) list) (nbVar: int) (shift: int): lexp S.subst option =
-  let rec genDummyVar (beg_: int) (end_: int) (l: lexp S.subst): lexp S.subst =
+  let rec genDummyVar (beg_: int) (end_: int) (l: lexp S.subst): lexp S.subst = (* Create the filler variables *)
     if beg_ < end_
     then S.cons (mkVar (nbVar + 1)) (genDummyVar (beg_ + 1) end_ l)
     else l
   in
-  let fill_before (l: (int * int) list) (s: lexp S.subst) (nbVar: int): lexp S.subst option =
+  let fill_before (l: (int * int) list) (s: lexp S.subst) (nbVar: int): lexp S.subst option = (* Fill if the first var is not 0 *)
     match l with
     | []                      -> Some (genDummyVar 0 nbVar S.identity)
     | (i1, v1)::_ when i1 > 0 -> Some (genDummyVar 0 i1 s)
     | _                       -> Some s
-  in let rec fill_after (l: (int * int) list) (nbVar: int) (shift: int): lexp S.subst option =
+  in let rec fill_after (l: (int * int) list) (nbVar: int) (shift: int): lexp S.subst option = (* Fill gaps *)
     match l with
     | (idx1, val1)::(idx2, val2)::tail when (idx1 = idx2)     -> None
 
