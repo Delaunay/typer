@@ -17,12 +17,14 @@ let rec string_of_subst s =
   | S.Shift (s2, shift)        -> "(" ^ string_of_subst s2 ^ ") ↑^" ^ string_of_int shift
   | S.Identity                 -> "Id"
 
+(* result look more like ocaml code *)
 and ocaml_string_of_subst s =
   match s with
   | S.Cons (l, s2) -> "Cons(" ^ string_of_lxp l ^ ", "  ^ ocaml_string_of_subst s2 ^ ")"
   | S.Shift (s2, shift)      -> "Shift(" ^ ocaml_string_of_subst s2 ^ ", " ^ string_of_int shift ^ ")"
   | S.Identity               -> "Identity"
 
+(* Same as ocaml_string_of_subst but prettier *)
 and pp_ocaml_string_of_subst s =
   let rec pp_ocaml_string_of_subst s i =
     match s with
