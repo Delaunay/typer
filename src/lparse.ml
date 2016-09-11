@@ -306,6 +306,9 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
             let lxp, _ = lexp_case (Some t) (loc, target, patterns) ctx i in
                 lxp
 
+        (* handle pcall here * )
+        | Pcall (fname, _args) -> *)
+
         | _ -> let (e, inferred_t) = _lexp_p_infer p ctx (i + 1) in
             e (*
             match e with
@@ -401,7 +404,9 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
      *  Anonymous   : lambda                                                  *)
 
     (* retrieve function's body *)
+
     let body, ltp = _lexp_p_infer func ctx (i + 1) in
+    (* pexp_print func; print_string "\t";  lexp_print ltp; print_string "\n"; *)
     let ltp = nosusp ltp in
 
     let rec handle_fun_args largs sargs ltp = match sargs with
@@ -429,7 +434,9 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
                             sexp_print sarg; print_string "\n";
                        lexp_fatal (sexp_location sarg)
                                   "Expected non-explicit arg"
-           | _ -> lexp_fatal (sexp_location sarg)
+           | t ->
+            lexp_print t; print_string "\n";
+            lexp_fatal (sexp_location sarg)
                             "Explicit arg to non-function") in
 
     let handle_funcall () =
@@ -483,7 +490,7 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
               | Vstring(s) -> String(dloc, s)
               | Vfloat(f)  -> Float(dloc, f)
               (* I have vdum here WHY *)
-              | v -> debug_msg (value_print v);
+              | v -> debug_msg (value_print v); print_string "\n";
                   lexp_fatal loc "Macro_ expects '(List Sexp) -> Sexp'" in
 
         let pxp = pexp_parse sxp in
@@ -498,10 +505,12 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
 
     (* determine function type *)
     match func, ltp with
+      (* FIXME: this branch is never used because of missing shift somewhere *)
+      (* while special form have a type macro this does not recognize them as such *)
       | macro, _ when OL.conv_p ltp macro_type -> (
         match macro with
-          (* Special form *)
           | Pvar(l, name) when is_builtin_macro name ->
+            print_string name;
             let pargs = List.map pexp_parse sargs in
             let largs = _lexp_parse_all pargs ctx i in
               (get_macro_impl loc name) loc largs ctx ltp
@@ -512,6 +521,21 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
       (* FIXME: Handle special-forms here as well!  *)
       | _ -> handle_funcall ()
 
+(* return the inductive type declaration from the constructor *)
+and lexp_get_inductive_type loc ctor_name ctx : (string * lexp option) =
+  let cons_idx = senv_lookup ctor_name ctx in
+  let cons = match env_lookup_expr ctx ((loc, ctor_name), cons_idx) with
+    | Some lxp -> lxp
+    | None -> lexp_warning loc ("constructor \"" ^ ctor_name ^ "\" not found"); dltype in
+
+  (* get inductive type index *)
+  match cons with
+    | Cons(((_, name), idx), _) ->
+      (* get inductive type declaration *)
+      name, env_lookup_expr ctx ((loc, name), idx + cons_idx)
+
+    | _ -> lexp_warning loc (ctor_name ^ " is not a constructor");
+         "", None
 
 (*  Read a pattern and create the equivalent representation *)
 and lexp_read_pattern pattern exp target ctx:
@@ -541,33 +565,68 @@ and lexp_read_pattern pattern exp target ctx:
                     (name, loc, []), nctx)
 
         | Ppatcons (ctor_name, args) ->
-            let (loc, name) = ctor_name in
+            let (loc, cons_name) = ctor_name in
+
+            (* We need the constructor type info *)
+            let inductive_name, inductive_ref = match lexp_get_inductive_type loc cons_name ctx with
+              | name, Some lxp -> name, lxp
+              | _ -> "", dltype in
+
+            (*get cons argument types *)
+            let cons_args = match inductive_ref with
+              | Inductive(_, _, _, map) -> try SMap.find cons_name map
+                with Not_found -> lexp_warning loc
+                  (inductive_name ^ " does not hold a " ^ cons_name ^ " constructor"); []
+              | _ -> [] in
+
+            (* remove non explicit argument *)
+            let rec remove_nexplicit args acc =
+              match args with
+                | [] -> List.rev acc
+                | (Aexplicit, _, ltp)::tl -> remove_nexplicit tl (ltp::acc)
+                | hd::tl -> remove_nexplicit tl acc in
+
+            let cons_args = remove_nexplicit cons_args [] in
 
             (* read pattern args *)
-            let args, nctx = lexp_read_pattern_args args ctx in
-                (name, loc, args), nctx
+            let args, nctx = lexp_read_pattern_args args cons_args ctx in
+                (cons_name, loc, args), nctx
 
 (*  Read patterns inside a constructor *)
-and lexp_read_pattern_args args ctx:
+and lexp_read_pattern_args args (args_type : lexp list) ctx:
                    (((arg_kind * vdef option) list) * lexp_context)=
 
-    let rec loop args acc ctx =
-        match args with
-            | [] -> (List.rev acc), ctx
-            | hd::tl -> (
+    let length_type = List.length args_type in
+    let length_pat = List.length args in
+
+    let make_list elem size =
+      let rec loop i acc =
+        if i < size then loop (i + 1) (elem::acc) else acc
+        in loop 0 [] in
+
+    let args_type = if length_type != length_pat then
+      make_list dltype length_pat else args_type in
+
+    (if length_type != length_pat then lexp_warning dloc "Size Mismatch");
+
+    let rec loop args args_type acc ctx =
+        match args, args_type with
+            | [], _ -> (List.rev acc), ctx
+            | hd::tl, ltp::type_tl -> (
                 let (_, pat) = hd in
                 match pat with
                     (* Nothing to do *)
-                    | Ppatany (loc) -> loop tl ((Aexplicit, None)::acc) ctx
+                    | Ppatany (loc) -> loop tl type_tl ((Aexplicit, None)::acc) ctx
                     | Ppatvar ((loc, name) as var) ->
+                        (* FIXME dltype does not cut it here *)
                         (*  Add var *)
-                        let nctx = env_extend ctx var Variable dltype in
+                        let nctx = env_extend ctx var Variable ltp in
                         let nacc = (Aexplicit, Some var)::acc in
-                            loop tl nacc nctx
+                            loop tl type_tl nacc nctx
                     | _ -> lexp_error dloc "Constructor inside a Constructor";
-                           loop tl ((Aexplicit, None)::acc) ctx)
+                           loop tl type_tl ((Aexplicit, None)::acc) ctx)
 
-    in loop args [] ctx
+    in loop args args_type [] ctx
 
 (*  Parse inductive type definition.  *)
 and lexp_parse_inductive ctors ctx i =

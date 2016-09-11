@@ -72,7 +72,7 @@ let predef_map = ref default_predef_map
 let get_predef_raw (name: string) : lexp =
     match !(SMap.find name (!predef_map)) with
         | Some exp -> exp
-        | None -> builtin_error dloc "Try to access an empty predefined"
+        | None -> builtin_error dloc ("\""^ name ^ "\" was not predefined")
 
 let get_predef_option (name: string) ctx =
   let r = (get_size ctx) - !builtin_size - 1 in
@@ -158,8 +158,8 @@ let make_symbol loc depth args_val ctx  =
 
 (* lexp Imm list *)
 let olist2tlist_lexp lst ctx =
-    let tcons =  get_predef "cons" ctx in
-    let tnil  =  get_predef "nil" ctx in
+    let tcons = get_predef "cons" ctx in
+    let tnil  = get_predef "nil" ctx in
 
     let rlst = List.rev lst in
         List.fold_left (fun tail elem ->

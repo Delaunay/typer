@@ -236,7 +236,6 @@ and typer_builtins_impl = [
     ("run-io"        , run_io);
     ("read"          , read_impl);
     ("write"         , write_impl);
-    ("expand_macro_" , expand_macro_impl)
 ]
 
 and expand_macro_impl loc depth (args_val : value_type list) ctx =

@@ -107,7 +107,10 @@ float_   = Built-in "float_"   (Float     -> Sexp);
 Macro  = inductive_ (dMacro) (Macro_ (List Sexp -> Sexp));
 Macro_ = inductive-cons Macro Macro_ ;
 
-expand_macro_ = Built-in "expand_macro_"   (Macro -> List Sexp -> Sexp);
+% expand_macro_ =  Built-in "expand_macro_"   (Macro -> List Sexp -> Sexp);
+expand_macro_ : Macro -> List Sexp -> Sexp;
+expand_macro_ m args = case m
+  | Macro_ f => (f args);
 
 sexp_dispatch_ = Built-in "sexp_dispatch_" (
                               (a : Type) ≡>

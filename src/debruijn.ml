@@ -144,8 +144,7 @@ let env_lookup_expr ctx (v : vref): lexp option =
   let (r, _, lxp, _) =  _env_lookup ctx v in
   match lxp with
   | LetDef lxp -> Some (L.push_susp lxp (S.shift (idx + 1 - r)))
-  (* FIXME: why Sort here?  *)
-  | _ -> None     
+  | _ -> None
 
 let env_lookup_by_index index (ctx: lexp_context): env_elem =
     (Myers.nth index (_get_env ctx))
