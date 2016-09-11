@@ -462,27 +462,16 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
         Call (body, List.rev largs), ret_type in
 
     let handle_macro_call () =
-        (* FIXME: We shouldn't look at `body` here at all:
-         * Instead, we should pass `body` (along with `arg`) to
-         * a `typer__expand_macro` function predefined in types.typer.  *)
-        let lxp = match OL.lexp_whnf body ctx with
-            | Call(Var((_, "Macro_"), _), [(_, fct)]) -> fct
-            | lxp ->
-              print_string "\n";
-              print_string (lexp_to_string lxp); print_string "\n";
-              lexp_print lxp; print_string "\n";
-              lexp_fatal loc "Macro is ill formed" in
-
         (* Build function to be called *)
-        let arg = olist2tlist_lexp sargs ctx in
-
-        let lxp = Call(lxp, [(Aexplicit, arg)]) in
-        let elexp = OL.erase_type lxp in
+        let macro_expand = get_predef "expand_macro_" ctx in
+        let args = [(Aexplicit, body); (Aexplicit, (olist2tlist_lexp sargs ctx))] in
+        let macro = Call(macro_expand, args) in
+        let emacro = OL.erase_type macro in
         let rctx = (from_lctx ctx 0) in
 
         _global_eval_trace := [];
 
-        let vxp = try eval elexp rctx
+        let vxp = try eval emacro rctx
           with e ->
             print_eval_trace ();
             raise e in

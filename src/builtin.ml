@@ -57,6 +57,7 @@ let predef_name = [
     "False";
     "Bool";
     "Macro";
+    "expand_macro_";
 ]
 
 let builtin_size = ref 0
@@ -80,7 +81,7 @@ let get_predef_option (name: string) ctx =
         | None -> None
 
 let get_predef (name: string) ctx =
-  let r = (get_size ctx) - !builtin_size - 1 in
+  let r = (get_size ctx) - !builtin_size - 0 in
   let p = get_predef_raw name in
     (mkSusp p (S.shift r))
 
@@ -157,12 +158,8 @@ let make_symbol loc depth args_val ctx  =
 
 (* lexp Imm list *)
 let olist2tlist_lexp lst ctx =
-    (* Get Constructor *)
-    let considx = senv_lookup "cons" ctx in
-    let nilidx  = senv_lookup  "nil" ctx in
-
-    let tcons = Var((dloc, "cons"), considx) in
-    let tnil  = Var((dloc,  "nil"),  nilidx) in
+    let tcons =  get_predef "cons" ctx in
+    let tnil  =  get_predef "nil" ctx in
 
     let rlst = List.rev lst in
         List.fold_left (fun tail elem ->
