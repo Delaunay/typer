@@ -323,14 +323,11 @@ let rec push_susp e s =            (* Push a suspension one level down.  *)
   (* Susp should never appear around Var/Susp/Metavar because mkSusp
    * pushes the subst into them eagerly.  IOW if there's a Susp(Var..)
    * or Susp(Metavar..) it's because some chunk of code should use mkSusp
-   * rather than Susp.  *)
-  | Susp (e,s') -> (* U.msg_error "SUSP" (lexp_location e) "¡Susp(Susp)!"; *)
-                  push_susp e (scompose s' s)
-  | (Var _ | Metavar _)
-    -> (* U.msg_error "SUSP" (lexp_location e) "¡Susp((meta)var)!"; *)
-    if S.identity_p s
-    then e
-    else push_susp (mkSusp e s) S.identity
+   * rather than Susp.
+   * But we still have to handle them here, since push_susp is called
+   * in many other cases than just when we bump into a Susp.  *)
+  | Susp (e,s') -> push_susp e (scompose s' s)
+  | (Var _ | Metavar _) -> nosusp (mkSusp e s)
 
 let nosusp e =                  (* Return `e` without `Susp`.  *)
   match e with

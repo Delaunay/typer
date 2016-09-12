@@ -126,9 +126,10 @@ let build_var name ctx =
     let type0_idx = senv_lookup name ctx in
         Var((dloc, name), type0_idx)
 
-(* build type0 from ctx *)
-let get_type0 ctx = build_var "Type" ctx
-let get_int ctx = build_var "Int" ctx
+(* FIXME: We need to keep track of the type of metavars.  We could keep it
+ * in the `Metavar` constructor of the `lexp` type, but that's risky (it could
+ * be difficult to make sure it's the same for all occurrences of that
+ * metavar).  *)
 
 (* :-( *)
 let global_substitution = ref (empty_subst, [])
@@ -313,13 +314,12 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
             | lxp -> (unify_with_arrow lxp kind subst)
         in
         let nctx = env_extend ctx var Variable ltp in
-        let lbody = _lexp_p_check body lbtp nctx (i + 1) in Lambda(kind, var, ltp, lbody)
+        let lbody = _lexp_p_check body lbtp nctx (i + 1) in
+        Lambda(kind, var, ltp, lbody)
 
     in
-    let subst, _ = !global_substitution
-    in
-    let lexp_infer p ctx = _lexp_p_infer p ctx (i + 1)
-    in
+    let subst, _ = !global_substitution in
+    let lexp_infer p ctx = _lexp_p_infer p ctx (i + 1) in
     match p with
         (* This case cannot be inferred *)
         | Plambda (kind, var, None, body) ->(infer_lambda_body kind var body subst)
