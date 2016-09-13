@@ -230,7 +230,9 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
             (*  An inductive type named type_name must be in the environment *)
             try let idx = senv_lookup type_name ctx in
                 (*  Check if the constructor exists *)
-                let Some idt = env_lookup_expr ctx (vr, idx) in
+                let idt = match env_lookup_expr ctx (vr, idx) with
+                  | Some idt -> idt
+                  | None -> lexp_fatal loc ("expression " ^ type_name ^ " not found") in
 
                 (* make Base type *)
                 let inductive_type = Var((loc, type_name), idx) in
@@ -404,9 +406,7 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
      *  Anonymous   : lambda                                                  *)
 
     (* retrieve function's body *)
-
     let body, ltp = _lexp_p_infer func ctx (i + 1) in
-    (* pexp_print func; print_string "\t";  lexp_print ltp; print_string "\n"; *)
     let ltp = nosusp ltp in
 
     let rec handle_fun_args largs sargs ltp = match sargs with
@@ -574,9 +574,9 @@ and lexp_read_pattern pattern exp target ctx:
 
             (*get cons argument types *)
             let cons_args = match inductive_ref with
-              | Inductive(_, _, _, map) -> try SMap.find cons_name map
+              | Inductive(_, _, _, map) -> (try SMap.find cons_name map
                 with Not_found -> lexp_warning loc
-                  (inductive_name ^ " does not hold a " ^ cons_name ^ " constructor"); []
+                  (inductive_name ^ " does not hold a " ^ cons_name ^ " constructor"); [])
               | _ -> [] in
 
             (* remove non explicit argument *)
@@ -618,13 +618,13 @@ and lexp_read_pattern_args args (args_type : lexp list) ctx:
                     (* Nothing to do *)
                     | Ppatany (loc) -> loop tl type_tl ((Aexplicit, None)::acc) ctx
                     | Ppatvar ((loc, name) as var) ->
-                        (* FIXME dltype does not cut it here *)
                         (*  Add var *)
                         let nctx = env_extend ctx var Variable ltp in
                         let nacc = (Aexplicit, Some var)::acc in
                             loop tl type_tl nacc nctx
                     | _ -> lexp_error dloc "Constructor inside a Constructor";
                            loop tl type_tl ((Aexplicit, None)::acc) ctx)
+            | _ -> typer_unreachable "unreachable branch"
 
     in loop args args_type [] ctx
 
@@ -671,6 +671,7 @@ and lexp_decls_macro (loc, mname) sargs ctx: (pdecl list * lexp_context) =
   (* get stored function *)
   let lxp = match lxp with
     | Some (Call(Var((_, "Macro_"), _), [(_, fct)])) -> fct
+    | None -> lexp_fatal loc "expression does not exist"
     | Some lxp -> print_string "\n";
       print_string (lexp_to_string lxp); print_string "\n";
       lexp_print lxp; print_string "\n";

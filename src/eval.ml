@@ -238,26 +238,6 @@ and typer_builtins_impl = [
     ("write"         , write_impl);
 ]
 
-and expand_macro_impl loc depth (args_val : value_type list) ctx =
-  (*  (expand_macro_ my_macro arg type)  *)
-
-  let macro_expr, macro_args, macro_type = match args_val with
-    | [macro_expr; args] -> macro_expr, args, None
-    | [macro_expr; args; macro_type] -> macro_expr, args, Some macro_type
-    | _ -> eval_error loc "expand_macro_ expects two arguments" in
-
-  (* macro_expr *)
-  let macro_fct, ctx = match macro_expr with
-    | Vcons((_, "Macro_"), [Closure(n, elxp, ctx)]) -> elxp, ctx
-    | _ -> eval_error loc "expand_macro_ expects a Macro_ as first argument" in
-
-  (* add aguments to context *)
-  let macro_ctx = add_rte_variable None macro_args ctx in
-
-  (* eval macro, should return a Vsexp *)
-    _eval macro_fct macro_ctx depth
-
-
 and bind_impl loc depth args_val ctx =
 
   let io, cb = match args_val with
