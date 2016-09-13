@@ -397,6 +397,23 @@ let _ = (add_test "EVAL" "Monads" (fun () ->
             | _ -> failure ()
 ))
 
+(*
+let test_eval_eqv decl run expected_result =
+  add_test "EVAL" dcode1 (fun () ->
+
+    let rctx, lctx = eval_decl_str decl lctx rctx in
+
+    let result = eval_expr_str rcode lctx rctx
+    let expected_result = eval_expr_str expected_result lctx rctx
+
+      if sexp_eq_list result expected_result
+      then success ()
+      else (
+        value_print (List.hd s1);
+        value_print (List.hd s2);
+        failure ()))
+
+*)
 
 (* run all tests *)
 let _ = run_all ()
