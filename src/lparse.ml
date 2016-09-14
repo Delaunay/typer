@@ -67,7 +67,6 @@ let lexp_fatal = msg_fatal "LPARSE"
 let _global_lexp_ctx = ref make_lexp_context
 let _global_lexp_trace = ref []
 let _parsing_internals = ref false
-let _shift_glob = ref 0
 let btl_folder = ref "./btl/"
 
 (* merged declaration, allow us to process declaration in multiple pass *)
@@ -83,6 +82,22 @@ let _type_shift tp i =
     match tp with
         | Var(v, idx) -> Var(v, idx)
         | expr -> expr
+
+let ctx_define (ctx: lexp_context) var lxp ltype =
+  let (_, cctx, _) = ctx in
+  if OL.conv_p ltype (OL.check cctx lxp) then
+    env_extend ctx var (LetDef lxp) ltype
+  else
+    (print_string "¡¡ctx_define error!!\n";
+     lexp_print lxp;
+     print_string " !: ";
+     lexp_print ltype;
+     print_string "\nbecause\n";
+     lexp_print (OL.check cctx lxp);
+     print_string " != ";
+     lexp_print ltype;
+     print_string "\n";
+     lexp_fatal (let (l,_) = var in l) "TC error")
 
 (*  The main job of lexp (currently) is to determine variable name (index)
  *  and to regroup type specification with their variable
@@ -123,10 +138,6 @@ let _type_shift tp i =
 let build_var name ctx =
     let type0_idx = senv_lookup name ctx in
         Var((dloc, name), type0_idx)
-
-(* shift all variables by an offset *)
-let senv_lookup name ctx =
-  senv_lookup name ctx + !_shift_glob
 
 let rec lexp_p_infer (p : pexp) (ctx : lexp_context): lexp * ltype =
     _lexp_p_infer p ctx 1
@@ -413,7 +424,7 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
       | [] -> largs, ltp
       | (Node (Symbol (_, "_:=_"), [Symbol (_, aname); sarg])) :: sargs
         (* Explicit-implicit argument.  *)
-        -> (match OL.lexp_whnf ltp ctx with
+        -> (match OL.lexp_whnf ltp (ectx_to_lctx ctx) with
            | Arrow (ak, Some (_, aname'), arg_type, _, ret_type)
                 when aname = aname'
              -> let parg = pexp_parse sarg in
@@ -424,7 +435,7 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
                             "Explicit arg to non-function")
       | sarg :: sargs
         (*  Process Argument *)
-        -> (match OL.lexp_whnf ltp ctx with
+        -> (match OL.lexp_whnf ltp (ectx_to_lctx ctx) with
            | Arrow (Aexplicit, _, arg_type, _, ret_type)
              -> let parg = pexp_parse sarg in
                let larg = _lexp_p_check parg arg_type ctx i in
@@ -442,7 +453,7 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
     let handle_funcall () =
       (* Here we use lexp_whnf on actual code, but it's OK
        * because we only use the result when it's a "predefined constant".  *)
-      match OL.lexp_whnf body ctx with
+      match OL.lexp_whnf body (ectx_to_lctx ctx) with
       | Builtin((_, "Built-in"), _)
         -> (
         (* ------ SPECIAL ------ *)
@@ -555,13 +566,13 @@ and lexp_read_pattern pattern exp target ctx:
                 (* name is defined but is not a constructor  *)
                 (* it technically could be ... (expr option) *)
                 (* What about Var -> Cons ?                  *)
-                | _ -> let nctx = env_extend ctx var (LetDef target) dltype in
+                | _ -> let nctx = ctx_define ctx var target dltype in
                       (name, loc, []), nctx)
 
             (* would it not make a default match too? *)
             with Not_found ->
                 (* Create a variable containing target *)
-                let nctx = env_extend ctx var (LetDef target) dltype in
+                let nctx = ctx_define ctx var target dltype in
                     (name, loc, []), nctx)
 
         | Ppatcons (ctor_name, args) ->
@@ -821,7 +832,7 @@ and _lexp_decls decls ctx i: ((vdef * lexp * ltype) list list * lexp_context) =
       (List.rev !all), ctx
 
 and _lexp_rec_decl decls ctx i =
-  (* parse a groupe of mutually recursive definition
+  (* parse a group of mutually recursive definitions
    * i.e let decl parsing *)
 
   (* to compute recursive offset *)
@@ -829,8 +840,8 @@ and _lexp_rec_decl decls ctx i =
   let lst = ref [] in
 
   (* add all elements to the environment *)
-  let tctx = List.fold_left (fun vctx expr ->
-    match expr with
+  let tctx = List.fold_left (fun vctx decl ->
+    match decl with
       | Ldecl((l, s), _, None) ->
         env_extend vctx (l, s) ForwardRef dltype
 
@@ -842,9 +853,9 @@ and _lexp_rec_decl decls ctx i =
         lexp_fatal dloc "use lexp_decl_macro to parse macro decls") ctx decls in
 
   let i = ref 0 in
-  let ctx = List.fold_left (fun vctx expr ->
+  let ctx = List.fold_left (fun vctx decl ->
     i := !i + 1;
-    match expr with
+    match decl with
       (* lexp infer *)
       | Ldecl ((l, s), Some pxp, None) ->
           let lxp, ltp = lexp_p_infer pxp vctx in
@@ -991,11 +1002,11 @@ let default_lctx, default_rctx =
 
       (* Empty context *)
       let lctx = make_lexp_context in
-      let lctx = env_extend lctx (dloc, "Type1") (LetDef type1) type2 in
-      let lctx = env_extend lctx (dloc, "Type") (LetDef type0) type1 in
+      let lctx = ctx_define lctx (dloc, "Type1") type1 type2 in
+      let lctx = ctx_define lctx (dloc, "Type") type0 type1 in
       (* FIXME: Add builtins directly here.  *)
       let lxp = Builtin((dloc, "Built-in"), type0) in
-      let lctx = env_extend lctx (dloc, "Built-in") (LetDef lxp) type0 in
+      let lctx = ctx_define lctx (dloc, "Built-in") lxp type0 in
 
       (* Read BTL files *)
       let pres = prelex_file (!btl_folder ^ "types.typer") in
