@@ -1,46 +1,122 @@
+% build a declaration
+% var-name = value-expr;
+make-decl : Sexp -> Sexp -> Sexp;
+make-decl var-name value-expr =
+  node_ (symbol_ "_=_")
+    (cons (a := Sexp) var-name
+      (cons (a := Sexp) value-expr (nil (a := Sexp))));
+
+% build inductive-cons
+% ctor-name = inductive-cons type-name ctor-name;
+make-cons : Sexp -> Sexp -> Sexp;
+make-cons ctor-name type-name =
+  make-decl ctor-name
+    (node_ (symbol_ "inductive-cons")
+      (cons (a := Sexp) type-name
+        (cons (a := Sexp) ctor-name (nil (a := Sexp)))));
+
+% buil type annotation
+% var-name : type-expr;
+make-ann : Sexp -> Sexp -> Sexp;
+make-ann var-name type-expr =
+  node_ (symbol_ "_:_")
+    (cons (a := Sexp) var-name
+      (cons (a := Sexp) type-expr (nil (a := Sexp))));
+
+
 type-impl = lambda (x : List Sexp) ->
   % x follow the mask -> (_|_ Nat zero (succ Nat))
   %               Type name  --^    ^------^ constructors
 
+  let sexp_nil = (nil (a := Sexp)) in
+
+  % Return a list contained inside a node sexp
+  let get-list : Sexp -> List Sexp;
+      get-list node = sexp_dispatch_ (a := List Sexp) node
+        (lambda op lst -> lst)    % Nodes
+        (lambda _ -> sexp_nil)    % Symbol
+        (lambda _ -> sexp_nil)    % String
+        (lambda _ -> sexp_nil)    % Integer
+        (lambda _ -> sexp_nil)    % Float
+        (lambda _ -> sexp_nil) in % List of Sexp
+
+  % Get a name from a sexp
+  %   - (name t) -> name
+  %   - name -> name
+  let get-name : Sexp -> Sexp;
+      get-name sxp =
+        sexp_dispatch_ (a := Sexp) sxp
+          (lambda op lst -> get-name op)   % Nodes
+          (lambda str    -> symbol_ str)   % Symbol
+          (lambda _ -> symbol_ "error")    % String
+          (lambda _ -> symbol_ "error")    % Integer
+          (lambda _ -> symbol_ "error")    % Float
+          (lambda _ -> symbol_ "error") in % List of Sexp
+
   % Get expression
   let expr = head (a := Sexp) x in
-  let sexp_nil = nil (a := Sexp) in
 
   % Expression is  node_ (symbol_ "|") (list)
   % we only care about the list bit
-
-  let get-list = (lambda (node : Sexp) ->
-    sexp_dispatch_ (a := List Sexp) node
-      (lambda (op : Sexp) -> (lambda (lst : List Sexp) -> lst)) % Nodes
-      (lambda (str : String)    -> sexp_nil)           % Symbol
-      (lambda (str : String)    -> sexp_nil)           % String
-      (lambda (int : Int)       -> sexp_nil)           % Integer
-      (lambda (float : Float)   -> sexp_nil)           % Float
-      (lambda (lst : List Sexp) -> sexp_nil)) in       % List of Sexp
-
   let lst = get-list expr in
 
-  let name = head (a := Sexp) lst in
-  let ctor = tail (a := Sexp) lst in
+  % head is (node_ type-name (arg list))
+  let name = head (a := Sexp) lst;
+      ctor = tail (a := Sexp) lst in
 
-  % Create a forward declaration in case the declaration is recursive
-  let fdecl = node_ (symbol_ "_:_")
-    (cons (a := Sexp) name
-      (cons (a := Sexp) (symbol_ "Type") sexp_nil)) in
+  let type-name = get-name name in
 
   % Create the inductive type definition
   let inductive = node_ (symbol_ "inductive_")
-    (cons (a := Sexp) (symbol_ "dlabel") ctor) in
+    (cons (a := Sexp) name ctor) in
 
-  let decl = node_ (symbol_ "_=_")
-    (cons (a := Sexp) name
-      (cons (a := Sexp) inductive sexp_nil)) in
+  % Create a forward declaration in case the declaration is recursive
+  % let fdecl = make-ann type-name (symbol_ "Type") in
+  let decl  = make-decl type-name inductive in
 
-    cons (a := Sexp) fdecl
-    (cons (a := Sexp) decl sexp_nil);
+  % Add constructors
+  let ctors =
+   let for-each : List Sexp -> List Sexp -> List Sexp;
+       for-each ctr acc = case ctr
+        | cons hd tl => (
+          let acc2 = cons (a := Sexp)  (make-cons (get-name hd) type-name) acc in
+            for-each tl acc2)
+        | nil => acc
+      in for-each ctor (nil (a := Sexp)) in
+
+  % return decls
+  %   cons (a := Sexp) fdecl     % Forward declaration
+    (cons (a := Sexp) decl       % inductive type declaration
+                      ctors);    % constructor declarations
+
 
 type_ = Macro_ type-impl;
 
-type Nat
-  | zero
-  | succ Nat;
+% (type_ (_|_ (Either t1 t2) (either-first t1) (either-second t2)))
+type Either t1 t2
+  | either-first t1
+  | either-second t2;
+
+type Pair t1 t2
+  | pair t1 t2;
+
+type Point t
+  | point (x : t) (y : t);
+
+get-first : (a : Type) => (b : Type) => Pair -> a;
+get-second : (a : Type) => (b : Type) => Pair -> b;
+
+get-first p = case p | pair a b => a;
+get-second p = case p | pair a b => b;
+
+get-x : (a : Type) => Point -> a;
+get-y : (a : Type) => Point -> a;
+get-x p = case p | point x y => x;
+get-y p = case p | point x y => y;
+
+
+% transformed to:
+% Nat : Type;
+% Nat = inductive_ (Nat) (succ Nat) (zero);
+% zero = inductive-cons Nat zero;
+% succ = inductive-cons Nat succ;

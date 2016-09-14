@@ -39,6 +39,21 @@ module DB = Debruijn
 
 let conv_erase = true              (* If true, conv ignores erased terms. *)
 
+(* Lexp context *)
+
+type lexp_context = DB.env_type
+
+let lookup_type (ctx : lexp_context) vref =
+  let (_, i) = vref in
+  let (_, _, _, t) = Myers.nth i ctx in
+  mkSusp t (S.shift (i + 1))
+
+let lookup_value (ctx : lexp_context) vref =
+  let (_, i) = vref in
+  match Myers.nth i ctx with
+  | (o, _, LetDef v, _) -> Some (push_susp v (S.shift (i + 1 - o)))
+  | _ -> None
+
 (********* Testing if two types are "convertible" aka "equivalent"  *********)
 
 let rec conv_arglist_p s1 s2 args1 args2 : bool =
@@ -56,7 +71,7 @@ and conv_p' (s1:lexp S.subst) (s2:lexp S.subst) e1 e2 : bool =
     | (Imm (Float (_, i1)), Imm (Float (_, i2))) -> i1 = i2
     | (Imm (String (_, i1)), Imm (String (_, i2))) -> i1 = i2
     | (SortLevel (sl1), SortLevel (sl2)) -> sl1 == sl2
-    | (Sort (_, s1), Sort (_, s2)) -> s1 == s2
+    | (Sort (_, s1), Sort (_, s2)) -> s1 = s2
     | (Builtin ((_, s1), _), Builtin ((_, s2), _)) -> s1 == s2
     (* BEWARE: When we'll make expand let-defined vars here, we'll have to
      * be careful not to introduce infinite-recursion.  *)
@@ -118,7 +133,7 @@ and conv_p e1 e2 = conv_p' S.identity S.identity e1 e2
  * but only on *types*.  If you must use it on code, be sure to use its
  * return value as little as possible since WHNF will inherently introduce
  * call-by-name behavior.  *)
-let rec lexp_whnf e ctx meta_ctx =
+let rec lexp_whnf e (ctx : lexp_context) meta_ctx =
   Debug_fun.do_debug (fun () ->
       prerr_endline ("[StackTrace] ------------------------------------------");
       prerr_endline ("[StackTrace] let lexp_whnf e ctx meta_ctx");
@@ -129,7 +144,7 @@ let rec lexp_whnf e ctx meta_ctx =
       ());
   match e with
   (* | Let (_, defs, body) -> FIXME!!  Need recursive substitutions!  *)
-  | Var v -> (match DB.env_lookup_expr ctx v with
+  | Var v -> (match lookup_value ctx v with
              | None -> e
              (* We can do this blindly even for recursive definitions!
               * IOW the risk of inf-looping should only show up when doing
@@ -178,17 +193,6 @@ let rec lexp_whnf e ctx meta_ctx =
 (********* Testing if a lexp is properly typed  *********)
 
 
-let lookup_type ctx vref =
-  let (_, i) = vref in
-  let (_, _, _, t) = Myers.nth i ctx in
-  mkSusp t (S.shift (i + 1))
-
-let lookup_value ctx vref =
-  let (_, i) = vref in
-  match Myers.nth i ctx with
-  | (o, _, LetDef v, _) -> Some (push_susp v (S.shift (i + 1 - o)))
-  | _ -> None
-
 let assert_type e t t' =
   if conv_p t t' then ()
   else U.msg_error "TC" (lexp_location e) "Type mismatch"; ()
@@ -212,7 +216,7 @@ let rec check ctx e =
   match e with
   | Imm (Float (_, _)) -> B.type_float
   | Imm (Integer (_, _)) -> B.type_int
-  | Imm (Epsilon|Block (_, _, _)|Symbol _|String (_, _)|Node (_, _))
+  | Imm (Epsilon | Block (_, _, _) | Symbol _ | String (_, _) | Node (_, _))
     -> (U.msg_error "TC" (lexp_location e) "Unsupported immediate value!";
        B.type_int)
   | SortLevel (_) -> B.type_level

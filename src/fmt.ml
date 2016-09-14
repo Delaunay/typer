@@ -137,6 +137,20 @@ let print_first n l f =
                 else () in
     loop 0 l
 
+let print_last n l f =
+  let len = List.length l in
+  let start = if (len - n) < 0 then 0 else (len - n) in
+
+  let rec loop i l =
+    match l with
+      | [] -> ()
+      | hd::tl ->
+        if (len > n) && (i <= start) then loop (i + 1) tl
+        else ((f i hd); loop (i + 1) tl) in
+
+        loop 0 l
+
+
 (* Colors *)
 let red     = "\x1b[31m"
 let green   = "\x1b[32m"

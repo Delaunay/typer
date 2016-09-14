@@ -69,7 +69,6 @@ let lexp_fatal = msg_fatal "LPARSE"
 let _global_lexp_ctx = ref make_lexp_context
 let _global_lexp_trace = ref []
 let _parsing_internals = ref false
-let _shift_glob = ref 0
 let btl_folder = ref "./btl/"
 
 (* merged declaration, allow us to process declaration in multiple pass *)
@@ -85,6 +84,22 @@ let _type_shift tp i =
     match tp with
         | Var(v, idx) -> Var(v, idx)
         | expr -> expr
+
+let ctx_define (ctx: lexp_context) var lxp ltype =
+  let (_, cctx, _) = ctx in
+  if OL.conv_p ltype (OL.check cctx lxp) then
+    env_extend ctx var (LetDef lxp) ltype
+  else
+    (print_string "¡¡ctx_define error!!\n";
+     lexp_print lxp;
+     print_string " !: ";
+     lexp_print ltype;
+     print_string "\nbecause\n";
+     lexp_print (OL.check cctx lxp);
+     print_string " != ";
+     lexp_print ltype;
+     print_string "\n";
+     lexp_fatal (let (l,_) = var in l) "TC error")
 
 (*  The main job of lexp (currently) is to determine variable name (index)
  *  and to regroup type specification with their variable
@@ -137,10 +152,6 @@ let global_substitution = ref (empty_subst, [])
 let mkMetavar () = let meta = Unif.create_metavar ()
   in let name = "__Metavar_" ^ (string_of_int meta)
   in Metavar (meta, S.Identity, (Util.dummy_location, name))
-
-(* shift all variables by an offset *)
-let senv_lookup name ctx =
-  senv_lookup name ctx + !_shift_glob
 
 let rec lexp_p_infer (p : pexp) (ctx : lexp_context): lexp * ltype =
     _lexp_p_infer p ctx 1
@@ -228,7 +239,9 @@ and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
             (*  An inductive type named type_name must be in the environment *)
             try let idx = senv_lookup type_name ctx in
                 (*  Check if the constructor exists *)
-                let Some idt = env_lookup_expr ctx (vr, idx) in
+                let idt = match env_lookup_expr ctx (vr, idx) with
+                  | Some idt -> idt
+                  | None -> lexp_fatal loc ("expression " ^ type_name ^ " not found") in
 
                 (* make Base type *)
                 let inductive_type = Var((loc, type_name), idx) in
@@ -336,6 +349,9 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
         | Pcase (loc, target, patterns) ->
             let lxp, _ = lexp_case (Some t) (loc, target, patterns) ctx i in
                 lxp
+
+        (* handle pcall here * )
+        | Pcall (fname, _args) -> *)
 
         | _ -> (let (e, inferred_t) = _lexp_p_infer p ctx (i + 1) in
             (* e *)
@@ -453,7 +469,7 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
       | [] -> largs, ltp
       | (Node (Symbol (_, "_:=_"), [Symbol (_, aname); sarg])) :: sargs
         (* Explicit-implicit argument.  *)
-        -> (match OL.lexp_whnf ltp ctx meta_ctx with
+        -> (match OL.lexp_whnf ltp (ectx_to_lctx ctx) meta_ctx with
            | Arrow (ak, Some (_, aname'), arg_type, _, ret_type)
                 when aname = aname'
              -> let parg = pexp_parse sarg in
@@ -468,7 +484,7 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
                             ("Explicit-implicit arg " ^ aname ^ " to non-function"))
       | sarg :: sargs
         (*  Process Argument *)
-        -> (match OL.lexp_whnf ltp ctx meta_ctx with
+        -> (match OL.lexp_whnf ltp (ectx_to_lctx ctx) meta_ctx with
            | Arrow (Aexplicit, _, arg_type, _, ret_type)
              -> let parg = pexp_parse sarg in
                let larg = _lexp_p_check parg arg_type ctx i in
@@ -488,7 +504,7 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
     let handle_funcall () =
       (* Here we use lexp_whnf on actual code, but it's OK
        * because we only use the result when it's a "predefined constant".  *)
-      match OL.lexp_whnf body ctx meta_ctx with
+      match OL.lexp_whnf body (ectx_to_lctx ctx) meta_ctx with
       | Builtin((_, "Built-in"), _)
         -> (
         (* ------ SPECIAL ------ *)
@@ -520,27 +536,16 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
         Call (body, List.rev largs), ret_type in
 
     let handle_macro_call () =
-        (* FIXME: We shouldn't look at `body` here at all:
-         * Instead, we should pass `body` (along with `arg`) to
-         * a `typer__expand_macro` function predefined in types.typer.  *)
-        let lxp = match OL.lexp_whnf body ctx meta_ctx with
-            | Call(Var((_, "Macro_"), _), [(_, fct)]) -> fct
-            | lxp ->
-              print_string "\n";
-              print_string (lexp_to_string lxp); print_string "\n";
-              lexp_print lxp; print_string "\n";
-              lexp_fatal loc "Macro is ill formed" in
-
         (* Build function to be called *)
-        let arg = olist2tlist_lexp sargs ctx in
-
-        let lxp = Call(lxp, [(Aexplicit, arg)]) in
-        let elexp = OL.erase_type lxp in
+        let macro_expand = get_predef "expand_macro_" ctx in
+        let args = [(Aexplicit, body); (Aexplicit, (olist2tlist_lexp sargs ctx))] in
+        let macro = Call(macro_expand, args) in
+        let emacro = OL.erase_type macro in
         let rctx = (from_lctx ctx 0) in
 
         _global_eval_trace := [];
 
-        let vxp = try eval elexp rctx
+        let vxp = try eval emacro rctx
           with e ->
             print_eval_trace ();
             raise e in
@@ -552,7 +557,7 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
               | Vstring(s) -> String(dloc, s)
               | Vfloat(f)  -> Float(dloc, f)
               (* I have vdum here WHY *)
-              | v -> debug_msg (value_print v);
+              | v -> debug_msg (value_print v); print_string "\n";
                   lexp_fatal loc "Macro_ expects '(List Sexp) -> Sexp'" in
 
         let pxp = pexp_parse sxp in
@@ -567,10 +572,12 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
 
     (* determine function type *)
     match func, ltp with
+      (* FIXME: this branch is never used because of missing shift somewhere *)
+      (* while special form have a type macro this does not recognize them as such *)
       | macro, _ when OL.conv_p ltp macro_type -> (
         match macro with
-          (* Special form *)
           | Pvar(l, name) when is_builtin_macro name ->
+            print_string name;
             let pargs = List.map pexp_parse sargs in
             let largs = _lexp_parse_all pargs ctx i in
               (get_macro_impl loc name) loc largs ctx ltp
@@ -581,6 +588,21 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
       (* FIXME: Handle special-forms here as well!  *)
       | _ -> handle_funcall ()
 
+(* return the inductive type declaration from the constructor *)
+and lexp_get_inductive_type loc ctor_name ctx : (string * lexp option) =
+  let cons_idx = senv_lookup ctor_name ctx in
+  let cons = match env_lookup_expr ctx ((loc, ctor_name), cons_idx) with
+    | Some lxp -> lxp
+    | None -> lexp_warning loc ("constructor \"" ^ ctor_name ^ "\" not found"); dltype in
+
+  (* get inductive type index *)
+  match cons with
+    | Cons(((_, name), idx), _) ->
+      (* get inductive type declaration *)
+      name, env_lookup_expr ctx ((loc, name), idx + cons_idx)
+
+    | _ -> lexp_warning loc (ctor_name ^ " is not a constructor");
+         "", None
 
 (*  Read a pattern and create the equivalent representation *)
 and lexp_read_pattern pattern exp target ctx:
@@ -600,43 +622,78 @@ and lexp_read_pattern pattern exp target ctx:
                 (* name is defined but is not a constructor  *)
                 (* it technically could be ... (expr option) *)
                 (* What about Var -> Cons ?                  *)
-                | _ -> let nctx = env_extend ctx var (LetDef target) dltype in
+                | _ -> let nctx = ctx_define ctx var target dltype in
                       (name, loc, []), nctx)
 
             (* would it not make a default match too? *)
             with Not_found ->
                 (* Create a variable containing target *)
-                let nctx = env_extend ctx var (LetDef target) dltype in
+                let nctx = ctx_define ctx var target dltype in
                     (name, loc, []), nctx)
 
         | Ppatcons (ctor_name, args) ->
-            let (loc, name) = ctor_name in
+            let (loc, cons_name) = ctor_name in
+
+            (* We need the constructor type info *)
+            let inductive_name, inductive_ref = match lexp_get_inductive_type loc cons_name ctx with
+              | name, Some lxp -> name, lxp
+              | _ -> "", dltype in
+
+            (*get cons argument types *)
+            let cons_args = match inductive_ref with
+              | Inductive(_, _, _, map) -> (try SMap.find cons_name map
+                with Not_found -> lexp_warning loc
+                  (inductive_name ^ " does not hold a " ^ cons_name ^ " constructor"); [])
+              | _ -> [] in
+
+            (* remove non explicit argument *)
+            let rec remove_nexplicit args acc =
+              match args with
+                | [] -> List.rev acc
+                | (Aexplicit, _, ltp)::tl -> remove_nexplicit tl (ltp::acc)
+                | hd::tl -> remove_nexplicit tl acc in
+
+            let cons_args = remove_nexplicit cons_args [] in
 
             (* read pattern args *)
-            let args, nctx = lexp_read_pattern_args args ctx in
-                (name, loc, args), nctx
+            let args, nctx = lexp_read_pattern_args args cons_args ctx in
+                (cons_name, loc, args), nctx
 
 (*  Read patterns inside a constructor *)
-and lexp_read_pattern_args args ctx:
+and lexp_read_pattern_args args (args_type : lexp list) ctx:
                    (((arg_kind * vdef option) list) * lexp_context)=
 
-    let rec loop args acc ctx =
-        match args with
-            | [] -> (List.rev acc), ctx
-            | hd::tl -> (
+    let length_type = List.length args_type in
+    let length_pat = List.length args in
+
+    let make_list elem size =
+      let rec loop i acc =
+        if i < size then loop (i + 1) (elem::acc) else acc
+        in loop 0 [] in
+
+    let args_type = if length_type != length_pat then
+      make_list dltype length_pat else args_type in
+
+    (if length_type != length_pat then lexp_warning dloc "Size Mismatch");
+
+    let rec loop args args_type acc ctx =
+        match args, args_type with
+            | [], _ -> (List.rev acc), ctx
+            | hd::tl, ltp::type_tl -> (
                 let (_, pat) = hd in
                 match pat with
                     (* Nothing to do *)
-                    | Ppatany (loc) -> loop tl ((Aexplicit, None)::acc) ctx
+                    | Ppatany (loc) -> loop tl type_tl ((Aexplicit, None)::acc) ctx
                     | Ppatvar ((loc, name) as var) ->
                         (*  Add var *)
-                        let nctx = env_extend ctx var Variable dltype in
+                        let nctx = env_extend ctx var Variable ltp in
                         let nacc = (Aexplicit, Some var)::acc in
-                            loop tl nacc nctx
+                            loop tl type_tl nacc nctx
                     | _ -> lexp_error dloc "Constructor inside a Constructor";
-                           loop tl ((Aexplicit, None)::acc) ctx)
+                           loop tl type_tl ((Aexplicit, None)::acc) ctx)
+            | _ -> typer_unreachable "unreachable branch"
 
-    in loop args [] ctx
+    in loop args args_type [] ctx
 
 (*  Parse inductive type definition.  *)
 and lexp_parse_inductive ctors ctx i =
@@ -681,6 +738,7 @@ and lexp_decls_macro (loc, mname) sargs ctx: (pdecl list * lexp_context) =
   (* get stored function *)
   let lxp = match lxp with
     | Some (Call(Var((_, "Macro_"), _), [(_, fct)])) -> fct
+    | None -> lexp_fatal loc "expression does not exist"
     | Some lxp -> print_string "\n";
       print_string (lexp_to_string lxp); print_string "\n";
       lexp_print lxp; print_string "\n";
@@ -711,8 +769,6 @@ and lexp_decls_macro (loc, mname) sargs ctx: (pdecl list * lexp_context) =
 
         (* get a list of declaration *)
         let decls = eval elexp rctx in
-
-        value_print decls; print_string "\n";
 
         (* convert typer list to ocaml *)
         let decls = tlist2olist [] decls in
@@ -832,7 +888,7 @@ and _lexp_decls decls ctx i: ((vdef * lexp * ltype) list list * lexp_context) =
       (List.rev !all), ctx
 
 and _lexp_rec_decl decls ctx i =
-  (* parse a groupe of mutually recursive definition
+  (* parse a group of mutually recursive definitions
    * i.e let decl parsing *)
 
   (* to compute recursive offset *)
@@ -840,8 +896,8 @@ and _lexp_rec_decl decls ctx i =
   let lst = ref [] in
 
   (* add all elements to the environment *)
-  let tctx = List.fold_left (fun vctx expr ->
-    match expr with
+  let tctx = List.fold_left (fun vctx decl ->
+    match decl with
       | Ldecl((l, s), _, None) ->
         env_extend vctx (l, s) ForwardRef dltype
 
@@ -853,9 +909,9 @@ and _lexp_rec_decl decls ctx i =
         lexp_fatal dloc "use lexp_decl_macro to parse macro decls") ctx decls in
 
   let i = ref 0 in
-  let ctx = List.fold_left (fun vctx expr ->
+  let ctx = List.fold_left (fun vctx decl ->
     i := !i + 1;
-    match expr with
+    match decl with
       (* lexp infer *)
       | Ldecl ((l, s), Some pxp, None) ->
           let lxp, ltp = lexp_p_infer pxp vctx in
@@ -1002,11 +1058,11 @@ let default_lctx, default_rctx =
 
       (* Empty context *)
       let lctx = make_lexp_context in
-      let lctx = env_extend lctx (dloc, "Type1") (LetDef type1) type2 in
-      let lctx = env_extend lctx (dloc, "Type") (LetDef type0) type1 in
+      let lctx = ctx_define lctx (dloc, "Type1") type1 type2 in
+      let lctx = ctx_define lctx (dloc, "Type") type0 type1 in
       (* FIXME: Add builtins directly here.  *)
       let lxp = Builtin((dloc, "Built-in"), type0) in
-      let lctx = env_extend lctx (dloc, "Built-in") (LetDef lxp) type0 in
+      let lctx = ctx_define lctx (dloc, "Built-in") lxp type0 in
 
       (* Read BTL files *)
       let pres = prelex_file (!btl_folder ^ "types.typer") in

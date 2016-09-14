@@ -264,19 +264,19 @@ and bind_impl loc depth args_val ctx =
 
   let io, cb = match args_val with
     | [io; callback] -> io, callback
-    | _ -> builtin_error loc "bind expects two arguments" in
+    | _ -> eval_error loc "bind expects two arguments" in
 
   (* build Vcommand from io function *)
   let cmd = match io with
     | Vcommand (cmd) -> cmd
-    | _ -> builtin_error loc "bind first arguments must be a monad" in
+    | _ -> eval_error loc "bind first arguments must be a monad" in
 
   (* bind returns another Vcommand *)
   Vcommand (fun () ->
     (* get callback *)
     let body, ctx = match cb with
       | Closure(_, body, ctx) -> body, ctx
-      | _ -> builtin_error loc "A Closure was expected" in
+      | _ -> eval_error loc "A Closure was expected" in
 
     (* run given command *)
     let underlying = cmd () in
@@ -291,11 +291,11 @@ and run_io loc depth args_val ctx =
 
   let io, ltp = match args_val with
     | [io; ltp] -> io, ltp
-    | _ -> builtin_error loc "run-io expects 2 arguments" in
+    | _ -> eval_error loc "run-io expects 2 arguments" in
 
   let cmd = match io with
     | Vcommand (cmd) -> cmd
-    | _ -> builtin_error loc "run-io expects a monad as first argument" in
+    | _ -> eval_error loc "run-io expects a monad as first argument" in
 
   (* run given command *)
   let _ = cmd () in

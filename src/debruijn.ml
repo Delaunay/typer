@@ -61,6 +61,7 @@ type property_env = property_elem PropertyMap.t
 
 (* easier to debug with type annotations *)
 type env_elem = (int * vdef option * varbind * ltype)
+(* FIXME: This is the *lexp context*.  *)
 type env_type = env_elem myers
 
 type db_idx  = int (* DeBruijn index.  *)
@@ -72,7 +73,14 @@ type scope = db_ridx StringMap.t  (*  Map<String, db_ridx>*)
 type senv_length = int  (* it is not the map true length *)
 type senv_type = senv_length * scope
 
+(* FIXME: This is the *elaboration context* (i.e. a context that holds
+ * a lexp context plus some side info.  *)
 type lexp_context = senv_type * env_type * property_env
+type elab_context = lexp_context
+
+(* Extract the lexp context from the context used during elaboration.  *)
+let ectx_to_lctx (ectx : elab_context) : env_type =
+  let (_, lctx, _) = ectx in lctx
 
 (*  internal definitions
  * ---------------------------------- *)
@@ -107,9 +115,20 @@ let env_extend (ctx: lexp_context) (def: vdef) (v: varbind) (t: lexp) =
        debruijn_warning loc ("Variable Shadowing " ^ name);
    with Not_found -> ());
   let nmap = StringMap.add name n map in
-  (* FIXME: Why a db_offset of 1?  *)
-  ((n + 1, nmap), cons (1, Some def, v, t) env, f)
+  ((n + 1, nmap), cons (0, Some def, v, t) env, f)
 
+let ectx_extend_rec (ctx: elab_context) (defs: (vdef * lexp * ltype) list) =
+  List.fold_left
+    (fun (ctx, recursion_offset) (def, e, t) ->
+      let (loc, name) = def in
+      let ((n, map), env, f) = ctx in
+      (try let _ = senv_lookup name ctx in
+           debruijn_warning loc ("Variable Shadowing " ^ name);
+       with Not_found -> ());
+      let nmap = StringMap.add name n map in
+      ((n + 1, nmap), cons (recursion_offset, Some def, LetDef e, t) env, f),
+      recursion_offset - 1)
+    (ctx, List.length defs) defs
 
 let _name_error loc estr str =
     if estr = str then () else
@@ -144,7 +163,6 @@ let env_lookup_expr ctx (v : vref): lexp option =
   let (r, _, lxp, _) =  _env_lookup ctx v in
   match lxp with
   | LetDef lxp -> Some (L.push_susp lxp (S.shift (idx + 1 - r)))
-  (* FIXME: why Sort here?  *)
   | _ -> None
 
 let env_lookup_by_index index (ctx: lexp_context): env_elem =

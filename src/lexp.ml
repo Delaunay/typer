@@ -121,6 +121,7 @@ and slookup s l v = S.lookup (fun l i -> Var (l, i))
                              s l v
 let ssink = S.sink (fun l i -> Var (l, i))
 
+
 (**** The builtin elements ****)
 (*
 let builtins =
@@ -329,7 +330,7 @@ let rec push_susp e s =            (* Push a suspension one level down.  *)
   | Susp (e,s') -> push_susp e (scompose s' s)
   | (Var _ | Metavar _) -> nosusp (mkSusp e s)
 
-let nosusp e =                  (* Return `e` without `Susp`.  *)
+and nosusp e =                  (* Return `e` without `Susp`.  *)
   match e with
     | Susp(e, s) -> push_susp e s
     | _ -> e
@@ -495,6 +496,71 @@ let lexp_print e = sexp_print (pexp_unparse (lexp_unparse e))
 *)
 
 
+(* ugly printing (sexp_print (pexp_unparse (lexp_to_pexp e))) *)
+let rec lexp_to_pexp lxp =
+  match lxp with
+    | Susp _ as e -> lexp_to_pexp (nosusp e)
+    | Imm (sexp) -> Pimm (sexp)
+    | Builtin ((loc, name), _) -> Pvar((loc, name))
+    | Var ((loc, name), _) -> Pvar((loc, name))
+    | Cons (((iloc, iname), idx), ctor) -> Pcons((iloc, iname), ctor)
+    | Lambda (kind, vdef, ltp, body) ->
+      Plambda(kind, vdef, Some (lexp_to_pexp ltp), lexp_to_pexp body)
+    | Arrow (arg_kind, vdef, ltp1, loc, ltp2) ->
+       Parrow(arg_kind, vdef, lexp_to_pexp ltp1, loc, lexp_to_pexp ltp2)
+
+    | Let (loc, ldecls, body) ->
+      (* (vdef * lexp * ltype) list *)
+      let pdecls = List.fold_left (fun acc (vdef, lxp, ltp) ->
+        Ptype(vdef, lexp_to_pexp ltp)::Pexpr(vdef, lexp_to_pexp lxp)::acc) [] ldecls in
+          Plet (loc, pdecls, lexp_to_pexp body)
+
+    | Call(lxp, largs) -> (* (arg_kind * lexp) list *)
+      let pargs = List.map (fun (kind, elem) -> lexp_to_pexp elem) largs in
+      let sargs = List.map (fun elem -> pexp_unparse elem) pargs in
+        Pcall(lexp_to_pexp lxp, sargs)
+
+    | Inductive(loc, label, lfargs, ctor) ->
+      (* (arg_kind * vdef * ltype) list *)
+      (* (arg_kind * pvar * pexp option) list *)
+      let pfargs = List.map (fun (kind, vdef, ltp) ->
+        (kind, vdef, Some (lexp_to_pexp ltp))) lfargs in
+
+      (* ((arg_kind * vdef option * ltype) list) SMap.t *)
+      (* (symbol * (arg_kind * pvar option * pexp) list) list *)
+      let ctor = List.map (fun (str, largs) ->
+        let pargs = List.map (fun (kind, var, ltp) ->
+          match var with
+            | Some (loc, name) -> (kind, Some (loc, name), lexp_to_pexp ltp)
+            | None             -> (kind, None, lexp_to_pexp ltp)) largs
+          in ((loc, str), pargs)
+          ) (SMap.bindings ctor)
+        in Pinductive(label, pfargs, ctor)
+
+    | Case (loc, target, tltp, bltp, branches, default) ->
+      let pbranch = List.map (fun (str, (loc, args, bch)) ->
+        match args with
+          | [] -> Ppatvar (loc, str), lexp_to_pexp bch
+          | _  ->
+            let pat_args = List.map (fun (kind, vdef) ->
+              match vdef with
+                | Some vdef -> Some (kind, vdef), Ppatvar(vdef)
+                | None -> None, Ppatany(loc)) args
+              in Ppatcons ((loc, str), pat_args), lexp_to_pexp bch
+        ) (SMap.bindings branches) in
+
+      let pbranch = match default with
+        | Some dft -> (Ppatany(loc), lexp_to_pexp dft)::pbranch
+        | None -> pbranch
+        in Pcase (loc, lexp_to_pexp target, pbranch)
+
+  (*
+   | SortLevel of sort_level
+   | Sort of U.location * sort *)
+
+    | _ as e -> Pimm (String(lexp_location e, "Type"))
+
+
 (*
  *      Printing
  * --------------------- *)
@@ -514,8 +580,28 @@ let pretty_ppctx  = ref (true , 0, true, false, true,  4, true)
 let compact_ppctx = ref (false, 0, true, false, true,  4, false)
 let debug_ppctx   = ref (false, 0, true, true , false, 4, true)
 
-let rec lexp_print e = _lexp_print (!debug_ppctx) e
+let rec lexp_print e =  _lexp_print (!debug_ppctx) e
 and _lexp_print ctx e = print_string (_lexp_to_str ctx e)
+
+(*
+type print_context2 = int SMap.t
+
+let default_print_context =
+  List.fold (fun map (key, v) -> SMap.add key v map)
+    [
+      (* true options *)
+      ("pretty",        1);
+      ("print_type",    1);
+      ("print_dbi",     1);
+      ("indent_size",   2);
+      ("color",         1);
+      ("separate_decl", 1);
+
+      (* State information *)
+      ("indent_level",  0);
+      ("previous node", 0)
+    ]
+    SMap.empty *)
 
 (*  Print a lexp into its typer equivalent                              *)
 (*  Depending on the print_context the output can be correct typer code *)
@@ -525,8 +611,6 @@ and _lexp_print ctx e = print_string (_lexp_to_str ctx e)
 (* It might be better to use a Buffer. *)
 and lexp_to_str exp = _lexp_to_str (!debug_ppctx) exp
 
-(* FIXME: We don't want lexp_to_str, instead we want lexp_to_pexp (aka
- * "unparse"), which we can then combine with pexp_to_sexp, etc...  *)
 and _lexp_to_str ctx exp =
     (* create a string instead of printing *)
 

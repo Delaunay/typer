@@ -112,7 +112,7 @@ let print_trace name max elem_to_string print_elem trace =
     print_string (Fmt.make_sep '-');
 
     let racc = List.rev trace in
-        Fmt.print_first max racc (fun j (i, l, g) ->
+        Fmt.print_last max racc (fun j (i, l, g) ->
             print_string "    ["; print_loc l; print_string "] ";
             Fmt._print_ct_tree i; print_string "+- ";
             print_string (elem_to_string g); print_string ": ";
