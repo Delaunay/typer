@@ -911,7 +911,7 @@ and print_lexp_ctx (ctx : elab_context) =
 
     (* it is annoying to print according to StringMap order *)
     (* let's use myers list order *)
-    let rec extract_names (lst: env_type) acc =
+    let rec extract_names (lst: lexp_context) acc =
         match lst with
             | Mnil-> acc
             | Mcons (hd, tl, _, _) ->

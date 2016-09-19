@@ -37,7 +37,6 @@ open Lexp
 module L = Lexp
 open Myers
 open Fmt
-(*open Typecheck  env_elem and env_type *)
 
 module S = Subst
 
@@ -62,7 +61,7 @@ type property_env = property_elem PropertyMap.t
 (* easier to debug with type annotations *)
 type env_elem = (int * vdef option * varbind * ltype)
 (* FIXME: This is the *lexp context*.  *)
-type env_type = env_elem myers
+type lexp_context = env_elem myers
 
 type db_idx  = int (* DeBruijn index.  *)
 type db_ridx = int (* DeBruijn reverse index (i.e. counting from the root).  *)
@@ -75,10 +74,10 @@ type senv_type = senv_length * scope
 
 (* This is the *elaboration context* (i.e. a context that holds
  * a lexp context plus some side info.  *)
-type elab_context = senv_type * env_type * property_env
+type elab_context = senv_type * lexp_context * property_env
 
 (* Extract the lexp context from the context used during elaboration.  *)
-let ectx_to_lctx (ectx : elab_context) : env_type =
+let ectx_to_lctx (ectx : elab_context) : lexp_context =
   let (_, lctx, _) = ectx in lctx
 
 (*  internal definitions
@@ -87,7 +86,7 @@ let ectx_to_lctx (ectx : elab_context) : env_type =
 let _make_scope = StringMap.empty
 let _make_senv_type = (0, _make_scope)
 let _make_myers = nil
-let _get_env(ctx: elab_context): env_type = let (_, ev, _) = ctx in ev
+let _get_env(ctx: elab_context): lexp_context = let (_, ev, _) = ctx in ev
 
 (*  Public methods: DO USE
  * ---------------------------------- *)

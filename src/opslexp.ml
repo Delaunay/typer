@@ -41,14 +41,12 @@ let conv_erase = true              (* If true, conv ignores erased terms. *)
 
 (* Lexp context *)
 
-type lexp_context = DB.env_type
-
-let lookup_type (ctx : lexp_context) vref =
+let lookup_type (ctx : DB.lexp_context) vref =
   let (_, i) = vref in
   let (_, _, _, t) = Myers.nth i ctx in
   mkSusp t (S.shift (i + 1))
 
-let lookup_value (ctx : lexp_context) vref =
+let lookup_value (ctx : DB.lexp_context) vref =
   let (_, i) = vref in
   match Myers.nth i ctx with
   | (o, _, LetDef v, _) -> Some (push_susp v (S.shift (i + 1 - o)))
@@ -133,7 +131,7 @@ and conv_p e1 e2 = conv_p' S.identity S.identity e1 e2
  * but only on *types*.  If you must use it on code, be sure to use its
  * return value as little as possible since WHNF will inherently introduce
  * call-by-name behavior.  *)
-let rec lexp_whnf e (ctx : lexp_context) = match e with
+let rec lexp_whnf e (ctx : DB.lexp_context) = match e with
   (* | Let (_, defs, body) -> FIXME!!  Need recursive substitutions!  *)
   | Var v -> (match lookup_value ctx v with
              | None -> e
