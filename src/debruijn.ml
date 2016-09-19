@@ -35,7 +35,7 @@
 open Util
 open Lexp
 module L = Lexp
-open Myers
+module M = Myers
 open Fmt
 
 module S = Subst
@@ -61,7 +61,7 @@ type property_env = property_elem PropertyMap.t
 (* easier to debug with type annotations *)
 type env_elem = (int * vdef option * varbind * ltype)
 (* FIXME: This is the *lexp context*.  *)
-type lexp_context = env_elem myers
+type lexp_context = env_elem M.myers
 
 type db_idx  = int (* DeBruijn index.  *)
 type db_ridx = int (* DeBruijn reverse index (i.e. counting from the root).  *)
@@ -85,7 +85,7 @@ let ectx_to_lctx (ectx : elab_context) : lexp_context =
 
 let _make_scope = StringMap.empty
 let _make_senv_type = (0, _make_scope)
-let _make_myers = nil
+let _make_myers = M.nil
 let _get_env(ctx: elab_context): lexp_context = let (_, ev, _) = ctx in ev
 
 (*  Public methods: DO USE
@@ -106,6 +106,16 @@ let rec senv_lookup (name: string) (ctx: elab_context): int =
         else *)
         raw_idx
 
+let lexp_ctx_cons (ctx : lexp_context) offset d v t =
+  assert (offset >= 0 &&
+            (ctx = M.nil ||
+               let (previous_offset, _, _, _) = M.car ctx in
+               previous_offset >= 0 && previous_offset <= 1 + offset));
+  M.cons (offset, d, v, t) ctx
+
+let lctx_extend (ctx : lexp_context) (def: vdef) (v: varbind) (t: lexp) =
+  lexp_ctx_cons ctx 0 (Some def) v t
+
 let env_extend (ctx: elab_context) (def: vdef) (v: varbind) (t: lexp) =
   let (loc, name) = def in
   let ((n, map), env, f) = ctx in
@@ -113,9 +123,21 @@ let env_extend (ctx: elab_context) (def: vdef) (v: varbind) (t: lexp) =
        debruijn_warning loc ("Variable Shadowing " ^ name);
    with Not_found -> ());
   let nmap = StringMap.add name n map in
-  ((n + 1, nmap), cons (0, Some def, v, t) env, f)
+  ((n + 1, nmap),
+   lexp_ctx_cons env 0 (Some def) v t,
+   f)
+
+let lctx_extend_rec (ctx : lexp_context) (defs: (vdef * lexp * ltype) list) =
+  let (ctx, _) =
+    List.fold_left
+      (fun (ctx, recursion_offset) (def, e, t) ->
+        lexp_ctx_cons ctx recursion_offset (Some def) (LetDef e) t,
+        recursion_offset - 1)
+      (ctx, List.length defs) defs in
+  ctx
 
 let ectx_extend_rec (ctx: elab_context) (defs: (vdef * lexp * ltype) list) =
+  (* FIXME: Use lctx_extend_rec!  *)
   List.fold_left
     (fun (ctx, recursion_offset) (def, e, t) ->
       let (loc, name) = def in
@@ -124,7 +146,9 @@ let ectx_extend_rec (ctx: elab_context) (defs: (vdef * lexp * ltype) list) =
            debruijn_warning loc ("Variable Shadowing " ^ name);
        with Not_found -> ());
       let nmap = StringMap.add name n map in
-      ((n + 1, nmap), cons (recursion_offset, Some def, LetDef e, t) env, f),
+      ((n + 1, nmap),
+       lexp_ctx_cons env recursion_offset (Some def) (LetDef e) t,
+       f),
       recursion_offset - 1)
     (ctx, List.length defs) defs
 
@@ -174,17 +198,17 @@ let replace_by ctx name by =
   (* lookup and replace *)
   let rec replace_by' ctx by acc =
     match ctx with
-      | Mnil -> debruijn_error dummy_location
+      | M.Mnil -> debruijn_error dummy_location
             ("Replace error. This expression does not exist: " ^  name)
-      | Mcons((_, None, _, _) as elem, tl1, i, tl2) ->
+      | M.Mcons((_, None, _, _) as elem, tl1, i, tl2) ->
           (* Skip some elements if possible *)
           if idx <= i then replace_by' tl1 by (elem::acc)
           else replace_by' tl2 by (elem::acc)
             (* replace_by' tl1 by (elem::acc) *)
 
-      | Mcons((_, Some (b, n), _, _) as elem, tl1, i, tl2) ->
+      | M.Mcons((_, Some (b, n), _, _) as elem, tl1, i, tl2) ->
         if n = name then
-          (cons by tl1), acc
+          (M.cons by tl1), acc
         else
           (* Skip some elements if possible *)
           if idx <= i then replace_by' tl1 by (elem::acc)
@@ -193,7 +217,7 @@ let replace_by ctx name by =
 
   let nenv, decls = replace_by' env by [] in
   (* add old declarations *)
-  let nenv = List.fold_left (fun ctx elem -> cons elem ctx) nenv decls in
+  let nenv = List.fold_left (fun ctx elem -> M.cons elem ctx) nenv decls in
     (a, nenv, b)
 
 (* -------------------------------------------------------------------------- *)
