@@ -73,10 +73,9 @@ type scope = db_ridx StringMap.t  (*  Map<String, db_ridx>*)
 type senv_length = int  (* it is not the map true length *)
 type senv_type = senv_length * scope
 
-(* FIXME: This is the *elaboration context* (i.e. a context that holds
+(* This is the *elaboration context* (i.e. a context that holds
  * a lexp context plus some side info.  *)
-type lexp_context = senv_type * env_type * property_env
-type elab_context = lexp_context
+type elab_context = senv_type * env_type * property_env
 
 (* Extract the lexp context from the context used during elaboration.  *)
 let ectx_to_lctx (ectx : elab_context) : env_type =
@@ -88,19 +87,19 @@ let ectx_to_lctx (ectx : elab_context) : env_type =
 let _make_scope = StringMap.empty
 let _make_senv_type = (0, _make_scope)
 let _make_myers = nil
-let _get_env(ctx: lexp_context): env_type = let (_, ev, _) = ctx in ev
+let _get_env(ctx: elab_context): env_type = let (_, ev, _) = ctx in ev
 
 (*  Public methods: DO USE
  * ---------------------------------- *)
 
-let make_lexp_context = (_make_senv_type, _make_myers, PropertyMap.empty)
+let make_elab_context = (_make_senv_type, _make_myers, PropertyMap.empty)
 
 let get_roffset ctx = let (_, _, (_, rof)) = ctx in rof
 
 let get_size ctx = let ((n, _), _, _) = ctx in n
 
 (*  return its current DeBruijn index *)
-let rec senv_lookup (name: string) (ctx: lexp_context): int =
+let rec senv_lookup (name: string) (ctx: elab_context): int =
     let ((n, map), _, _) = ctx in
     let raw_idx =  n - (StringMap.find name map) - 1 in (*
         if raw_idx > (n - csize) then
@@ -108,7 +107,7 @@ let rec senv_lookup (name: string) (ctx: lexp_context): int =
         else *)
         raw_idx
 
-let env_extend (ctx: lexp_context) (def: vdef) (v: varbind) (t: lexp) =
+let env_extend (ctx: elab_context) (def: vdef) (v: varbind) (t: lexp) =
   let (loc, name) = def in
   let ((n, map), env, f) = ctx in
   (try let _ = senv_lookup name ctx in
@@ -165,7 +164,7 @@ let env_lookup_expr ctx (v : vref): lexp option =
   | LetDef lxp -> Some (L.push_susp lxp (S.shift (idx + 1 - r)))
   | _ -> None
 
-let env_lookup_by_index index (ctx: lexp_context): env_elem =
+let env_lookup_by_index index (ctx: elab_context): env_elem =
     (Myers.nth index (_get_env ctx))
 
 (* replace an expression by another *)
@@ -204,7 +203,7 @@ let replace_by ctx name by =
 
 
 let add_property ctx (var_i, var_n) (att_i, att_n) (prop: lexp)
-    : lexp_context =
+    : elab_context =
 
   let (a, b, property_map) = ctx in
   let n = get_size ctx in

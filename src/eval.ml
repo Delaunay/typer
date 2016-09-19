@@ -374,11 +374,12 @@ let eval_all lxps rctx silent =
 let maybe s = match s with Some v -> v | _ -> ""
 
 (* build a rctx from a lctx, rm is used to ignore the last 'rm' elements *)
-let from_lctx (ctx: lexp_context) rm: runtime_env =
+let from_lctx (ctx: elab_context) rm: runtime_env =
     let ((n, _), env, _) = ctx in
     let n = n - 1 in
     let rctx = ref make_runtime_ctx in
 
+    (* FIXME: Why not use Myers.map (Myers.nthcdr) ?  *)
     for i = 0 to (n - rm) do
         let name, exp = match (Myers.nth (n - i) env) with
           | (_, Some (_, name), LetDef exp, _) -> Some name, Some exp

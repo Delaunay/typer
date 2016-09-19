@@ -326,7 +326,7 @@ let main () =
           print_string "\n"));
 
         (* get typecheck context *)
-        let lctx_to_cctx (lctx: lexp_context) =
+        let lctx_to_cctx (lctx: elab_context) =
           let (_, env, _) = ctx in env in
 
         (if (get_p_option "typecheck") then(

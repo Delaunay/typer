@@ -64,7 +64,7 @@ let lexp_warning = msg_warning "LPARSE"
 let lexp_error = msg_error "LPARSE"
 let lexp_fatal = msg_fatal "LPARSE"
 
-let _global_lexp_ctx = ref make_lexp_context
+let _global_lexp_ctx = ref make_elab_context
 let _global_lexp_trace = ref []
 let _parsing_internals = ref false
 let btl_folder = ref "./btl/"
@@ -83,7 +83,7 @@ let _type_shift tp i =
         | Var(v, idx) -> Var(v, idx)
         | expr -> expr
 
-let ctx_define (ctx: lexp_context) var lxp ltype =
+let ctx_define (ctx: elab_context) var lxp ltype =
   let (_, cctx, _) = ctx in
   if OL.conv_p ltype (OL.check cctx lxp) then
     env_extend ctx var (LetDef lxp) ltype
@@ -102,7 +102,7 @@ let ctx_define (ctx: lexp_context) var lxp ltype =
 (*  The main job of lexp (currently) is to determine variable name (index)
  *  and to regroup type specification with their variable
  *
- *  lexp_context is composed of two environment: senv and env.
+ *  elab_context is composed of two environment: senv and env.
  *  the senv environment is used to find the correct debruijn index
  *  while the env environment is used to save variable information.
  *  the env environment look a lot like the runtime environment that will be
@@ -139,10 +139,10 @@ let build_var name ctx =
     let type0_idx = senv_lookup name ctx in
         Var((dloc, name), type0_idx)
 
-let rec lexp_p_infer (p : pexp) (ctx : lexp_context): lexp * ltype =
+let rec lexp_p_infer (p : pexp) (ctx : elab_context): lexp * ltype =
     _lexp_p_infer p ctx 1
 
-and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
+and _lexp_p_infer (p : pexp) (ctx : elab_context) i: lexp * ltype =
 
     let lexp_infer p ctx = _lexp_p_infer p ctx (i + 1) in
     let tloc = pexp_location p in
@@ -292,10 +292,10 @@ and lexp_let_decls decls (body: lexp) ctx i =
     List.fold_left (fun lxp decls ->
       Let(dloc, decls, lxp)) body decls
 
-and lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context): lexp =
+and lexp_p_check (p : pexp) (t : ltype) (ctx : elab_context): lexp =
   _lexp_p_check p t ctx 1
 
-and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
+and _lexp_p_check (p : pexp) (t : ltype) (ctx : elab_context) i: lexp =
     let tloc = pexp_location p in
 
     _global_lexp_ctx := ctx;
@@ -550,7 +550,7 @@ and lexp_get_inductive_type loc ctor_name ctx : (string * lexp option) =
 
 (*  Read a pattern and create the equivalent representation *)
 and lexp_read_pattern pattern exp target ctx:
-          ((string * location * (arg_kind * vdef option) list) * lexp_context) =
+          ((string * location * (arg_kind * vdef option) list) * elab_context) =
 
     match pattern with
         | Ppatany (loc) ->            (* Catch all expression nothing to do  *)
@@ -605,7 +605,7 @@ and lexp_read_pattern pattern exp target ctx:
 
 (*  Read patterns inside a constructor *)
 and lexp_read_pattern_args args (args_type : lexp list) ctx:
-                   (((arg_kind * vdef option) list) * lexp_context)=
+                   (((arg_kind * vdef option) list) * elab_context)=
 
     let length_type = List.length args_type in
     let length_pat = List.length args in
@@ -667,7 +667,7 @@ and lexp_parse_inductive ctors ctx i =
 
 (* Macro declaration handling, return a list of declarations
  * to be processed *)
-and lexp_decls_macro (loc, mname) sargs ctx: (pdecl list * lexp_context) =
+and lexp_decls_macro (loc, mname) sargs ctx: (pdecl list * elab_context) =
   (* lookup for mname_  *)
   let idx = try senv_lookup mname ctx
     with Not_found ->
@@ -809,7 +809,7 @@ and lexp_detect_recursive pdecls =
       (List.rev !decls)
 
 
-and _lexp_decls decls ctx i: ((vdef * lexp * ltype) list list * lexp_context) =
+and _lexp_decls decls ctx i: ((vdef * lexp * ltype) list list * elab_context) =
   (* detect mutually recursive def and merge definition *)
   let decls = lexp_detect_recursive decls in
   let all = ref [] in
@@ -884,7 +884,7 @@ and _lexp_rec_decl decls ctx i =
 and lexp_decls_toplevel decls ctx =
   _lexp_decls decls ctx 1
 
-and _lexp_parse_all (p: pexp list) (ctx: lexp_context) i : lexp list =
+and _lexp_parse_all (p: pexp list) (ctx: elab_context) i : lexp list =
 
     let rec loop (plst: pexp list) ctx (acc: lexp list) =
         match plst with
@@ -895,7 +895,7 @@ and _lexp_parse_all (p: pexp list) (ctx: lexp_context) i : lexp list =
     (loop p ctx [])
 
 (*  Print context  *)
-and print_lexp_ctx (ctx : lexp_context) =
+and print_lexp_ctx (ctx : elab_context) =
     let ((n, map), env, f) = ctx in
 
     print_string (make_title " LEXP CONTEXT ");
@@ -1001,7 +1001,7 @@ let lexp_parse_all p ctx = _lexp_parse_all p ctx 1
 let default_lctx, default_rctx =
 
       (* Empty context *)
-      let lctx = make_lexp_context in
+      let lctx = make_elab_context in
       let lctx = ctx_define lctx (dloc, "Type1") type1 type2 in
       let lctx = ctx_define lctx (dloc, "Type") type0 type1 in
       (* FIXME: Add builtins directly here.  *)
@@ -1047,7 +1047,7 @@ let default_lctx, default_rctx =
 
 (* Lexp helper *)
 let _lexp_expr_str (str: string) (tenv: token_env)
-            (grm: grammar) (limit: string option) (ctx: lexp_context) =
+            (grm: grammar) (limit: string option) (ctx: elab_context) =
     let pxps = _pexp_expr_str str tenv grm limit in
         lexp_parse_all pxps ctx
 
