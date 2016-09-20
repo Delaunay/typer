@@ -44,6 +44,8 @@ let env_error loc msg =
     msg_error "ENV" loc msg;
     raise (internal_error msg)
 
+let env_warning loc msg = msg_warning "ENV" loc msg
+
 let str_idx idx = "[" ^ (string_of_int idx) ^ "]"
 
 
@@ -61,6 +63,37 @@ type value_type =
     | Vout of out_channel
     | Vcommand of (unit -> value_type)
 
+
+let rec value_equal a b =
+  match a, b with
+    | Vint(i1), Vint(i2)         -> i1 = i2
+    | Vstring(s1), Vstring(s2)   -> s1 = s2
+    | Vbuiltin(s1), Vbuiltin(s2) -> s1 = s2
+    | Vfloat(f1), Vfloat(f2)     -> f1 = f2
+    | Vsexp(a), Vsexp(b)         -> sexp_equal a b
+    | Vin (c1), Vin(c2)          -> c1 = c2
+    | Vout (c1), Vout(c2)        -> c2 = c2
+    | Vcommand (f1), Vcommand(f2)-> f1 = f2
+    | Vdummy, Vdummy             ->
+      env_warning dloc "Vdummy"; true
+
+    | Closure(s1, b1, ctx1), Closure(s2, b2, ctx2) ->
+      env_warning dloc "Closure";
+      if (s1 != s2) then false else true
+
+    | Vcons((_, ct1), a1), Vcons((_, ct2), a2) ->
+      if (ct1 != ct2) then false else
+        not (List.exists2
+          (fun a b -> not (value_equal a b)) a1 a2)
+
+    | _ -> false
+
+let rec value_eq_list a b =
+  match a, b with
+    | [], [] -> true
+    | v1::vv1, v2::vv2 ->
+      value_equal v1 v2 && value_eq_list vv1 vv2
+    | _ -> false
 
 let rec value_print (vtp: value_type) =
     match vtp with
