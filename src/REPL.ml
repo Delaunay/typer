@@ -127,7 +127,7 @@ let ierase_type (lexps: (ldecl list list * lexpr list)) =
     (List.map OL.clean_decls ldecls),
     (List.map OL.erase_type  lexprs)
 
-let ilexp_parse pexps lctx: ((ldecl list list * lexpr list) * lexp_context) =
+let ilexp_parse pexps lctx: ((ldecl list list * lexpr list) * elab_context) =
     let pdecls, pexprs = pexps in
     let ldecls, lctx = lexp_p_decls pdecls lctx in
     let lexprs = lexp_parse_all pexprs lctx in

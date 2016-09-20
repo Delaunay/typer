@@ -35,9 +35,8 @@
 open Util
 open Lexp
 module L = Lexp
-open Myers
+module M = Myers
 open Fmt
-(*open Typecheck  env_elem and env_type *)
 
 module S = Subst
 
@@ -62,7 +61,7 @@ type property_env = property_elem PropertyMap.t
 (* easier to debug with type annotations *)
 type env_elem = (int * vdef option * varbind * ltype)
 (* FIXME: This is the *lexp context*.  *)
-type env_type = env_elem myers
+type lexp_context = env_elem M.myers
 
 type db_idx  = int (* DeBruijn index.  *)
 type db_ridx = int (* DeBruijn reverse index (i.e. counting from the root).  *)
@@ -73,13 +72,12 @@ type scope = db_ridx StringMap.t  (*  Map<String, db_ridx>*)
 type senv_length = int  (* it is not the map true length *)
 type senv_type = senv_length * scope
 
-(* FIXME: This is the *elaboration context* (i.e. a context that holds
+(* This is the *elaboration context* (i.e. a context that holds
  * a lexp context plus some side info.  *)
-type lexp_context = senv_type * env_type * property_env
-type elab_context = lexp_context
+type elab_context = senv_type * lexp_context * property_env
 
 (* Extract the lexp context from the context used during elaboration.  *)
-let ectx_to_lctx (ectx : elab_context) : env_type =
+let ectx_to_lctx (ectx : elab_context) : lexp_context =
   let (_, lctx, _) = ectx in lctx
 
 (*  internal definitions
@@ -87,20 +85,20 @@ let ectx_to_lctx (ectx : elab_context) : env_type =
 
 let _make_scope = StringMap.empty
 let _make_senv_type = (0, _make_scope)
-let _make_myers = nil
-let _get_env(ctx: lexp_context): env_type = let (_, ev, _) = ctx in ev
+let _make_myers = M.nil
+let _get_env(ctx: elab_context): lexp_context = let (_, ev, _) = ctx in ev
 
 (*  Public methods: DO USE
  * ---------------------------------- *)
 
-let make_lexp_context = (_make_senv_type, _make_myers, PropertyMap.empty)
+let make_elab_context = (_make_senv_type, _make_myers, PropertyMap.empty)
 
 let get_roffset ctx = let (_, _, (_, rof)) = ctx in rof
 
 let get_size ctx = let ((n, _), _, _) = ctx in n
 
 (*  return its current DeBruijn index *)
-let rec senv_lookup (name: string) (ctx: lexp_context): int =
+let rec senv_lookup (name: string) (ctx: elab_context): int =
     let ((n, map), _, _) = ctx in
     let raw_idx =  n - (StringMap.find name map) - 1 in (*
         if raw_idx > (n - csize) then
@@ -108,16 +106,41 @@ let rec senv_lookup (name: string) (ctx: lexp_context): int =
         else *)
         raw_idx
 
-let env_extend (ctx: lexp_context) (def: vdef) (v: varbind) (t: lexp) =
+let lexp_ctx_cons (ctx : lexp_context) offset d v t =
+  assert (offset >= 0 &&
+            (ctx = M.nil ||
+               let (previous_offset, _, _, _) = M.car ctx in
+               previous_offset >= 0 && previous_offset <= 1 + offset));
+  M.cons (offset, d, v, t) ctx
+
+let lctx_extend (ctx : lexp_context) (def: vdef) (v: varbind) (t: lexp) =
+  lexp_ctx_cons ctx 0 (Some def) v t
+
+
+let env_extend_rec r (ctx: elab_context) (def: vdef) (v: varbind) (t: lexp) =
   let (loc, name) = def in
   let ((n, map), env, f) = ctx in
   (try let _ = senv_lookup name ctx in
        debruijn_warning loc ("Variable Shadowing " ^ name);
    with Not_found -> ());
   let nmap = StringMap.add name n map in
-  ((n + 1, nmap), cons (0, Some def, v, t) env, f)
+  ((n + 1, nmap),
+   lexp_ctx_cons env r (Some def) v t,
+   f)
+
+let env_extend (ctx: elab_context) (def: vdef) (v: varbind) (t: lexp) = env_extend_rec 0 ctx def v t
+
+let lctx_extend_rec (ctx : lexp_context) (defs: (vdef * lexp * ltype) list) =
+  let (ctx, _) =
+    List.fold_left
+      (fun (ctx, recursion_offset) (def, e, t) ->
+        lexp_ctx_cons ctx recursion_offset (Some def) (LetDef e) t,
+        recursion_offset - 1)
+      (ctx, List.length defs) defs in
+  ctx
 
 let ectx_extend_rec (ctx: elab_context) (defs: (vdef * lexp * ltype) list) =
+  (* FIXME: Use lctx_extend_rec!  *)
   List.fold_left
     (fun (ctx, recursion_offset) (def, e, t) ->
       let (loc, name) = def in
@@ -126,7 +149,9 @@ let ectx_extend_rec (ctx: elab_context) (defs: (vdef * lexp * ltype) list) =
            debruijn_warning loc ("Variable Shadowing " ^ name);
        with Not_found -> ());
       let nmap = StringMap.add name n map in
-      ((n + 1, nmap), cons (recursion_offset, Some def, LetDef e, t) env, f),
+      ((n + 1, nmap),
+       lexp_ctx_cons env recursion_offset (Some def) (LetDef e) t,
+       f),
       recursion_offset - 1)
     (ctx, List.length defs) defs
 
@@ -165,7 +190,7 @@ let env_lookup_expr ctx (v : vref): lexp option =
   | LetDef lxp -> Some (L.push_susp lxp (S.shift (idx + 1 - r)))
   | _ -> None
 
-let env_lookup_by_index index (ctx: lexp_context): env_elem =
+let env_lookup_by_index index (ctx: elab_context): env_elem =
     (Myers.nth index (_get_env ctx))
 
 (* replace an expression by another *)
@@ -176,17 +201,17 @@ let replace_by ctx name by =
   (* lookup and replace *)
   let rec replace_by' ctx by acc =
     match ctx with
-      | Mnil -> debruijn_error dummy_location
+      | M.Mnil -> debruijn_error dummy_location
             ("Replace error. This expression does not exist: " ^  name)
-      | Mcons((_, None, _, _) as elem, tl1, i, tl2) ->
+      | M.Mcons((_, None, _, _) as elem, tl1, i, tl2) ->
           (* Skip some elements if possible *)
           if idx <= i then replace_by' tl1 by (elem::acc)
           else replace_by' tl2 by (elem::acc)
             (* replace_by' tl1 by (elem::acc) *)
 
-      | Mcons((_, Some (b, n), _, _) as elem, tl1, i, tl2) ->
+      | M.Mcons((_, Some (b, n), _, _) as elem, tl1, i, tl2) ->
         if n = name then
-          (cons by tl1), acc
+          (M.cons by tl1), acc
         else
           (* Skip some elements if possible *)
           if idx <= i then replace_by' tl1 by (elem::acc)
@@ -195,7 +220,7 @@ let replace_by ctx name by =
 
   let nenv, decls = replace_by' env by [] in
   (* add old declarations *)
-  let nenv = List.fold_left (fun ctx elem -> cons elem ctx) nenv decls in
+  let nenv = List.fold_left (fun ctx elem -> M.cons elem ctx) nenv decls in
     (a, nenv, b)
 
 (* -------------------------------------------------------------------------- *)
@@ -204,7 +229,7 @@ let replace_by ctx name by =
 
 
 let add_property ctx (var_i, var_n) (att_i, att_n) (prop: lexp)
-    : lexp_context =
+    : elab_context =
 
   let (a, b, property_map) = ctx in
   let n = get_size ctx in

@@ -75,7 +75,7 @@ let get_predef_raw (name: string) : lexp =
         | None -> builtin_error dloc ("\""^ name ^ "\" was not predefined")
 
 let get_predef_option (name: string) ctx =
-  let r = (get_size ctx) - !builtin_size - 1 in
+  let r = (get_size ctx) - !builtin_size - 0 in
     match !(SMap.find name (!predef_map)) with
         | Some exp -> Some (mkSusp exp (S.shift r))
         | None -> None
@@ -369,7 +369,7 @@ let builtin_macro = [
 ]
 
 type macromap =
-  (location -> lexp list -> lexp_context -> lexp -> (lexp * lexp)) SMap.t
+  (location -> lexp list -> elab_context -> lexp -> (lexp * lexp)) SMap.t
 
 let macro_impl_map : macromap =
   List.fold_left (fun map (name, funct) ->

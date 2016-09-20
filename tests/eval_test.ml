@@ -70,7 +70,7 @@ let _ = test_eval_eqv_named
 
   "a = 10; b = a; c = b; d = c;"
 
-  "d" (* == *)  "10"
+  "d" (* == *) "10"
 
 (*      Let
  * ------------------------ *)
@@ -92,7 +92,7 @@ let _ = test_eval_eqv_named
   "sqr : Int -> Int;
    sqr = lambda x -> x * x;"
 
-  "(sqr 4);" (* == *) "16"
+  "sqr 4;" (* == *) "16"
 
 let _ = test_eval_eqv_named
   "Nested Lambda"
@@ -103,7 +103,7 @@ let _ = test_eval_eqv_named
    cube : Int -> Int;
    cube = lambda x -> x * (sqr x);"
 
-  "(cube 4)" (* == *) "64"
+  "cube 4" (* == *) "64"
 
 
 (*      Cases + Inductive types
@@ -130,7 +130,7 @@ let _ = test_eval_eqv_named
       | ctr2 l => 2
       | _ => 3;"
 
-  "(test_fun a); (test_fun b); (test_fun c)"
+  "test_fun a; test_fun b; test_fun c"
 
   "1; 2; 3"
 
@@ -156,11 +156,11 @@ let _ = test_eval_eqv_named
   "Inductive::Recursive Call"
 
   (nat_decl ^ "
-   one = (succ zero);
-   two = (succ one);
-   three = (succ two);")
+   one = succ zero;
+   two = succ one;
+   three = succ two;")
 
-  "(to-num zero); (to-num one); (to-num two);"
+  "to-num zero; to-num one; to-num two;"
 
   "0; 1; 2"
 
@@ -168,9 +168,9 @@ let _ = test_eval_eqv_named
   "Inductive::Nat Plus"
 
   (nat_decl ^ "
-   one = (succ zero);
-   two = (succ one);
-   three = (succ two);
+   one = succ zero;
+   two = succ one;
+   three = succ two;
 
    plus : Nat -> Nat -> Nat;
    plus = lambda (x : Nat) -> lambda (y : Nat) -> case x
@@ -187,9 +187,9 @@ let _ = test_eval_eqv_named
   "Mutually Recursive Definition"
 
   (nat_decl ^ "
-   one = (succ zero);
-   two = (succ one);
-   three = (succ two);
+   one = succ zero;
+   two = succ one;
+   three = succ two;
 
    even : Nat -> Int;
    odd = lambda (n : Nat) -> case n
@@ -200,7 +200,7 @@ let _ = test_eval_eqv_named
       | zero => 1
       | succ y => (odd y);")
 
-  "(odd one); (even one); (odd two); (even two);"
+  "odd one; even one; odd two; even two;"
 
   "1; 0; 0; 1"
 
@@ -212,9 +212,9 @@ let _ = test_eval_eqv_named
    add = lambda x y -> (x + y);
 
    inc : Int -> Int;
-   inc = (add 1);"
+   inc = add 1;"
 
-  "(inc 1); (inc 2); (inc 3);"
+  "inc 1; inc 2; inc 3;"
 
   "2; 3; 4"
 
