@@ -369,7 +369,7 @@ let builtin_macro = [
 ]
 
 type macromap =
-  (location -> lexp list -> lexp_context -> lexp -> (lexp * lexp)) SMap.t
+  (location -> lexp list -> elab_context -> lexp -> (lexp * lexp)) SMap.t
 
 let macro_impl_map : macromap =
   List.fold_left (fun map (name, funct) ->

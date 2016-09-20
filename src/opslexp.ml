@@ -41,14 +41,12 @@ let conv_erase = true              (* If true, conv ignores erased terms. *)
 
 (* Lexp context *)
 
-type lexp_context = DB.env_type
-
-let lookup_type (ctx : lexp_context) vref =
+let lookup_type (ctx : DB.lexp_context) vref =
   let (_, i) = vref in
   let (_, _, _, t) = Myers.nth i ctx in
   mkSusp t (S.shift (i + 1))
 
-let lookup_value (ctx : lexp_context) vref =
+let lookup_value (ctx : DB.lexp_context) vref =
   let (_, i) = vref in
   match Myers.nth i ctx with
   | (o, _, LetDef v, _) -> Some (push_susp v (S.shift (i + 1 - o)))
@@ -133,7 +131,7 @@ and conv_p e1 e2 = conv_p' S.identity S.identity e1 e2
  * but only on *types*.  If you must use it on code, be sure to use its
  * return value as little as possible since WHNF will inherently introduce
  * call-by-name behavior.  *)
-let rec lexp_whnf e (ctx : lexp_context) = match e with
+let rec lexp_whnf e (ctx : DB.lexp_context) = match e with
   (* | Let (_, defs, body) -> FIXME!!  Need recursive substitutions!  *)
   | Var v -> (match lookup_value ctx v with
              | None -> e
@@ -225,24 +223,19 @@ let rec check ctx e =
   | Let (_, defs, e)
     -> let tmp_ctx =
         List.fold_left (fun ctx (v, e, t)
-                     -> (match check ctx t with
-                        | Sort (_, Stype _) -> ()
-                        | _ -> (U.msg_error "TC" (lexp_location t)
-                                           "Def type is not a type!"; ()));
-                       Myers.cons (0, Some v, ForwardRef, t) ctx)
-                    ctx defs in
-      let (new_ctx, _) =
-        List.fold_left (fun (ctx,recursion_offset) (v, e, t)
-                     -> let t' = check tmp_ctx e in
-                       assert_type e t t';
-                       (Myers.cons (recursion_offset, Some v, LetDef e, t) ctx,
-                        recursion_offset - 1))
-                    (ctx, List.length defs)
-                    defs in
+                        -> (match check ctx t with
+                           | Sort (_, Stype _) -> ()
+                           | _ -> (U.msg_error "TC" (lexp_location t)
+                                              "Def type is not a type!"; ()));
+                          DB.lctx_extend ctx v ForwardRef t)
+                       ctx defs in
+      let _ = List.iter (fun (v, e, t) -> assert_type e t (check tmp_ctx e))
+                        defs in
+      let new_ctx = DB.lctx_extend_rec ctx defs in
       check new_ctx e
   | Arrow (ak, v, t1, l, t2)
     -> (let k1 = check ctx t1 in
-       let k2 = check (Myers.cons (0, v, Variable, t1) ctx) t2 in
+       let k2 = check (DB.lexp_ctx_cons ctx 0 v Variable t1) t2 in
        match k1, k2 with
        | (Sort (_, s1), Sort (_, s2))
          -> Sort (l, sort_compose l s1 s2)
@@ -260,7 +253,7 @@ let rec check ctx e =
        Arrow (ak, Some v, t, l,
               (* FIXME: If ak is Aerasable, make sure the var only appears
                * in type annotations.  *)
-              check (Myers.cons (0, Some v, Variable, t) ctx) e))
+              check (DB.lctx_extend ctx v Variable t) e))
   | Call (f, args)
     -> let ft = check ctx f in
       List.fold_left (fun ft (ak,arg)
@@ -289,7 +282,7 @@ let rec check ctx e =
             Arrow (ak, Some v, t, lexp_location t,
                    (* FIXME: `sort_compose` doesn't do what we want!  *)
                    arg_loop args (sort_compose l s s')
-                            (Myers.cons (0, Some v, Variable, t) ctx)) in
+                            (DB.lctx_extend ctx v Variable t)) in
       let tct = arg_loop args (Stype (SortLevel (SLn 0))) ctx in
       (* FIXME: Check cases!  *)
       tct
@@ -319,7 +312,8 @@ let rec check ctx e =
                  (* FIXME: If ak is Aerasable, make sure the var only
                   * appears in type annotations.  *)
                  | (ak, vdef)::vdefs, (ak', vdef', ftype)::fieldtypes
-                   -> mkctx (Myers.cons (0, vdef, Variable, mkSusp ftype s) ctx)
+                   -> mkctx (DB.lexp_ctx_cons ctx 0
+                                             vdef Variable (mkSusp ftype s))
                            (S.cons (Var ((match vdef with Some vd -> vd
                                                         | None -> (l, "_")),
                                          0)) s)
