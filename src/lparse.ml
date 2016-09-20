@@ -516,8 +516,14 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
 
     (* determine function type *)
     match func, ltp with
-      (* FIXME: this branch is never used because of missing shift somewhere *)
-      (* while special form have a type macro this does not recognize them as such *)
+      (* This is a work around for the bug described below *)
+      | Pvar(l, name), _ when is_builtin_macro name ->
+        let pargs = List.map pexp_parse sargs in
+        let largs = _lexp_parse_all pargs ctx i in
+          (get_macro_impl loc name) loc largs ctx ltp
+
+      (* FIXME: the branch 'builtin macro' is never used because of missing shift somewhere *)
+      (* while special forms have a type macro this does not recognize them as such *)
       | macro, _ when OL.conv_p ltp macro_type -> (
         match macro with
           | Pvar(l, name) when is_builtin_macro name ->
