@@ -108,7 +108,7 @@ and conv_p' (s1:lexp S.subst) (s2:lexp S.subst) e1 e2 : bool =
           | _,_ -> false in
         l1 == l2 && conv_args s1 s2 args1 args2
         && SMap.equal (conv_fields s1 s2) cases1 cases2
-    | (Cons (v1, l1), Cons (v2, l2)) -> l1 == l2 && conv_p (Var v1) (Var v2)
+    | (Cons (t1, l1), Cons (t2, l2)) -> l1 == l2 && conv_p t1 t2
     (* FIXME: Various missing cases, such as Let, Case, and beta-reduction.  *)
     | (_, _) -> false
 
@@ -329,9 +329,9 @@ let rec check ctx e =
            | _ -> ())
        | _,_ -> U.msg_error "TC" l "Case on a non-inductive type!");
       ret
-  | Cons (vr, (_, name))
-    -> (match lookup_value ctx vr with
-       | Some (Inductive (l, _, fargs, constructors) as it)
+  | Cons (t, (_, name))
+    -> (match lexp_whnf t ctx with
+       | Inductive (l, _, fargs, constructors) as it
          -> let fieldtypes = SMap.find name constructors in
            let rec indtype fargs start_index =
              match fargs with

@@ -60,7 +60,7 @@ type ltype = lexp
    | Inductive of U.location * label
                   * ((arg_kind * vdef * ltype) list) (* formal Args *)
                   * ((arg_kind * vdef option * ltype) list) SMap.t
-   | Cons of vref * symbol (* = Type info * ctor_name  *)
+   | Cons of lexp * symbol (* = Type info * ctor_name  *)
    | Case of U.location * lexp
              * ltype (* The base inductive type over which we switch.  *)
              * ltype (* The type of the return value of all branches *)
@@ -300,7 +300,7 @@ let rec push_susp e s =            (* Push a suspension one level down.  *)
                                ncase)
                             cases in
       Inductive (l, label, nargs, ncases)
-  | Cons _ -> e
+  | Cons (it, name) -> Cons (mkSusp it s, name)
   | Case (l, e, it, ret, cases, default)
     -> Case (l, mkSusp e s, mkSusp it s, mkSusp ret s,
             SMap.map (fun (l, cargs, e)
@@ -317,14 +317,13 @@ let rec push_susp e s =            (* Push a suspension one level down.  *)
   (* Susp should never appear around Var/Susp/Metavar because mkSusp
    * pushes the subst into them eagerly.  IOW if there's a Susp(Var..)
    * or Susp(Metavar..) it's because some chunk of code should use mkSusp
-   * rather than Susp.  *)
-  | Susp (e,s') -> (* U.msg_error "SUSP" (lexp_location e) "¡Susp(Susp)!"; *)
-                  push_susp e (scompose s' s)
-  | (Var _)
-    -> (* U.msg_error "SUSP" (lexp_location e) "¡Susp((meta)var)!"; *)
-      push_susp (mkSusp e s) S.identity
+   * rather than Susp.
+   * But we still have to handle them here, since push_susp is called
+   * in many other cases than just when we bump into a Susp.  *)
+  | Susp (e,s') -> push_susp e (scompose s' s)
+  | (Var _) -> nosusp (mkSusp e s)
 
-let nosusp e =                  (* Return `e` without `Susp`.  *)
+and nosusp e =                  (* Return `e` without `Susp`.  *)
   match e with
     | Susp(e, s) -> push_susp e s
     | _ -> e
@@ -497,7 +496,7 @@ let rec lexp_unparse lxp =
     | Imm (sexp) -> Pimm (sexp)
     | Builtin ((loc, name), _) -> Pvar((loc, name))
     | Var ((loc, name), _) -> Pvar((loc, name))
-    | Cons (((iloc, iname), idx), ctor) -> Pcons((iloc, iname), ctor)
+    | Cons (t, ctor) -> Pcons (lexp_unparse t, ctor)
     | Lambda (kind, vdef, ltp, body) ->
       Plambda(kind, vdef, Some (lexp_unparse ltp), lexp_unparse body)
     | Arrow (arg_kind, vdef, ltp1, loc, ltp2) ->
@@ -532,6 +531,7 @@ let rec lexp_unparse lxp =
         in Pinductive(label, pfargs, ctor)
 
     | Case (loc, target, tltp, bltp, branches, default) ->
+       let bt = lexp_unparse bltp in
       let pbranch = List.map (fun (str, (loc, args, bch)) ->
         match args with
           | [] -> Ppatvar (loc, str), lexp_unparse bch
@@ -540,7 +540,9 @@ let rec lexp_unparse lxp =
               match vdef with
                 | Some vdef -> Some (kind, vdef), Ppatvar(vdef)
                 | None -> None, Ppatany(loc)) args
-              in Ppatcons ((loc, str), pat_args), lexp_unparse bch
+            (* FIXME: Rather than a Pcons we'd like to refer to an existing
+             * binding with that value!  *)
+            in Ppatcons (Pcons (bt, (loc, str)), pat_args), lexp_unparse bch
         ) (SMap.bindings branches) in
 
       let pbranch = match default with
@@ -689,8 +691,8 @@ and _lexp_to_str ctx exp =
             (keyword "lambda ") ^ arg ^ " " ^ (kind_str k) ^ newline ^
                 (make_indent 1) ^ (lexp_to_stri 1 lbody)
 
-        | Cons(((_, idt_name), idx), (_, ctor_name)) ->
-            (keyword "inductive-cons ") ^ idt_name ^ (index idx) ^ " " ^ ctor_name
+        | Cons(t, (_, ctor_name)) ->
+            (keyword "inductive-cons ") ^ (lexp_to_str t) ^ " " ^ ctor_name
 
         | Call(fname, args) -> (
             (*  get function name *)

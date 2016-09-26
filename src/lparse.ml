@@ -235,45 +235,30 @@ and _lexp_p_infer (p : pexp) (ctx : elab_context) i: lexp * ltype =
             lexp_call fname _args ctx i
 
         (* Pcons *)
-        | Pcons(vr, sym) -> (
-            let (loc, type_name) = vr in
-            let (_, cname) = sym in
+        | Pcons(t, sym) ->
+            let idt, _ = lexp_infer t ctx in
+            let (loc, cname) = sym in
 
-            (*  An inductive type named type_name must be in the environment *)
-            try let idx = senv_lookup type_name ctx in
-                (*  Check if the constructor exists *)
-                let idt = match env_lookup_expr ctx (vr, idx) with
-                  | Some ((Inductive _) as idt) -> idt
-                  | None -> lexp_fatal loc ("expression " ^ type_name ^ " not found") in
+            (* Get constructor args *)
+            let formal, args = match OL.lexp_whnf idt (ectx_to_lctx ctx) with
+              | Inductive(_, _, formal, ctor_def) -> (
+                try formal, (SMap.find cname ctor_def)
+                with Not_found ->
+                  lexp_error loc
+                             ("Constructor \"" ^ cname ^ "\" does not exist");
+                  [], [])
 
-                (* make Base type *)
-                let inductive_type = Var((loc, type_name), idx) in
+              | _ -> lexp_error loc "Not an Inductive Type"; [], [] in
 
-                (* Get constructor args *)
-                let formal, args = match nosusp idt with
-                    | Inductive(_, _, formal, ctor_def) -> (
-                        try formal, (SMap.find cname ctor_def)
-                        with Not_found ->
-                            lexp_error loc
-                                ("Constructor \"" ^ cname ^ "\" does not exist");
-                                [], [])
+            (* build Arrow type *)
+            let cons_type = List.fold_left (fun ltp (kind, v, tp) ->
+                                Arrow(kind, v, tp, loc, ltp)) idt (List.rev args) in
 
-                    | _ -> lexp_error loc "Not an Inductive Type"; [], [] in
+            (* Add Aerasable argument *)
+            let cons_type = List.fold_left (fun ltp (kind, v, tp) ->
+                                Arrow(Aerasable, Some v, tp, loc, ltp)) cons_type (List.rev formal) in
 
-                (* build Arrow type *)
-                let cons_type = List.fold_left (fun ltp (kind, v, tp) ->
-                    Arrow(kind, v, tp, loc, ltp)) idt (List.rev args) in
-
-                (* Add Aerasable argument *)
-                let cons_type = List.fold_left (fun ltp (kind, v, tp) ->
-                    Arrow(Aerasable, Some v, tp, loc, ltp)) cons_type (List.rev formal) in
-
-                Cons((vr, idx), sym), cons_type
-
-            with Not_found ->
-                lexp_error loc
-                ("The inductive type: " ^ type_name ^ " was not declared");
-                Cons((vr, -1), sym), dltype)
+            Cons(idt, sym), cons_type
 
         (* Pcase: we can infer iff `patterns` is not empty *)
         | Pcase (loc, target, patterns) ->
@@ -448,6 +433,7 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
                                   "Expected non-explicit arg"
            | t ->
             lexp_print t; print_string "\n";
+            print_lexp_ctx ctx;
             lexp_fatal (sexp_location sarg)
                             "Explicit arg to non-function") in
 
@@ -520,6 +506,11 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
 
     (* determine function type *)
     match func, ltp with
+      | Pvar(l, name), _ when is_builtin_macro name ->
+            let pargs = List.map pexp_parse sargs in
+            let largs = _lexp_parse_all pargs ctx i in
+              (get_macro_impl loc name) loc largs ctx ltp
+
       | macro, _ when (macro_disp && (OL.conv_p ltp macro_type))-> (
         match macro with
           | Pvar(l, name) when is_builtin_macro name ->
@@ -534,35 +525,19 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
       (* FIXME: Handle special-forms here as well!  *)
       | _ -> handle_funcall ()
 
-(* return the inductive type declaration from the constructor *)
-and lexp_get_inductive_type loc ctor_name ctx : (string * lexp option) =
-  let cons_idx = senv_lookup ctor_name ctx in
-  let cons = match env_lookup_expr ctx ((loc, ctor_name), cons_idx) with
-    | Some lxp -> lxp
-    | None -> lexp_warning loc ("constructor \"" ^ ctor_name ^ "\" not found"); dltype in
-
-  (* get inductive type index *)
-  match cons with
-    | Cons(((_, name), idx), _) ->
-      (* get inductive type declaration: We are inside a case (+1)  *)
-      name, env_lookup_expr ctx ((loc, name), idx + cons_idx + 1)
-
-    | _ -> lexp_warning loc (ctor_name ^ " is not a constructor");
-         "", None
-
 (*  Read a pattern and create the equivalent representation *)
 and lexp_read_pattern pattern exp target ctx:
           ((string * location * (arg_kind * vdef option) list) * elab_context) =
 
     match pattern with
-        | Ppatany (loc) ->            (* Catch all expression nothing to do  *)
+        | Ppatany (loc) ->            (* Catch all expression nothing to do.  *)
             ("_", loc, []), ctx
 
         | Ppatvar ((loc, name) as var) ->(
             try(
                 let idx = senv_lookup name ctx in
                 match env_lookup_expr ctx ((loc, name), idx) with
-                (* We are matching a constructor *)
+                (* We are matching a constructor.  *)
                 | Some (Cons _) -> (name, loc, []), ctx
 
                 (* name is defined but is not a constructor  *)
@@ -571,28 +546,30 @@ and lexp_read_pattern pattern exp target ctx:
                 | _ -> let nctx = ctx_define ctx var target dltype in
                       (name, loc, []), nctx)
 
-            (* would it not make a default match too? *)
+            (* Would it not make a default match too?  *)
             with Not_found ->
-                (* Create a variable containing target *)
+                (* Create a variable containing target.  *)
                 let nctx = ctx_define ctx var target dltype in
                     (name, loc, []), nctx)
 
-        | Ppatcons (ctor_name, args) ->
-            let (loc, cons_name) = ctor_name in
+        | Ppatcons (ctor, args) ->
+           (* Get cons argument types.  *)
+           let lctor, _ = lexp_p_infer ctor ctx in
+           match OL.lexp_whnf lctor (ectx_to_lctx ctx) with
+           | Cons (it, (loc, cons_name))
+             -> let cons_args = match OL.lexp_whnf it (ectx_to_lctx ctx) with
+                 | Inductive(_, _, _, map)
+                   -> (try SMap.find cons_name map
+                      with Not_found
+                           -> lexp_warning loc
+                                          ("`" ^ lexp_to_str (it)
+                                           ^ "` does not hold a `"
+                                           ^ cons_name ^ "` constructor"); [])
+                 | it -> lexp_fatal loc
+                                  ("`" ^ lexp_to_str (it)
+                                   ^ "` is not an inductive type!") in
 
-            (* We need the constructor type info *)
-            let inductive_name, inductive_ref = match lexp_get_inductive_type loc cons_name ctx with
-              | name, Some lxp -> name, lxp
-              | _ -> "", dltype in
-
-            (*get cons argument types *)
-            let cons_args = match inductive_ref with
-              | Inductive(_, _, _, map) -> (try SMap.find cons_name map
-                with Not_found -> lexp_warning loc
-                  (inductive_name ^ " does not hold a " ^ cons_name ^ " constructor"); [])
-              | _ -> [] in
-
-            (* remove non explicit argument *)
+               (* Remove non explicit argument.  *)
             let rec remove_nexplicit args acc =
               match args with
                 | [] -> List.rev acc
@@ -849,8 +826,8 @@ and _lexp_rec_decl decls ctx i =
         env_extend vctx (l, s) ForwardRef dltype
 
       | Ldecl((l, s), _, Some ptp) ->
-        let lxp, _ = lexp_p_infer ptp vctx in
-          env_extend vctx (l, s) ForwardRef lxp
+        let ltp, _ = lexp_p_infer ptp vctx in
+          env_extend vctx (l, s) ForwardRef ltp
 
       | Lmcall _ ->
         lexp_fatal dloc "use lexp_decl_macro to parse macro decls") ctx decls in

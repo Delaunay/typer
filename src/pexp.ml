@@ -36,15 +36,6 @@ type pvar = symbol
 (* type sort = Type | Ext *)
 (* type tag = string *)
 
-type ppat =
-  (* This data type allows nested patterns, but in reality we don't
-   * support them.  I.e. we don't want Ppatcons within Ppatcons.  *)
-  | Ppatany of location
-  | Ppatvar of pvar
-  (* FIXME: For modules and such, we'll want to generalize this
-   * `pvar' to a pexp.  *)
-  | Ppatcons of pvar * ((arg_kind * symbol) option * ppat) list
-
 type pexp =
   (* | Psort of location * sort *)
   | Pimm of sexp                       (* Used for strings, ...  *)
@@ -59,8 +50,15 @@ type pexp =
    * otherwise isomorphic types.  *)
   | Pinductive of symbol * (arg_kind * pvar * pexp option) list
                   * (symbol * (arg_kind * pvar option * pexp) list) list
-  | Pcons of pvar * symbol
+  | Pcons of pexp * symbol
   | Pcase of location * pexp * (ppat * pexp) list
+
+and ppat =
+  (* This data type allows nested patterns, but in reality we don't
+   * support them.  I.e. we don't want Ppatcons within Ppatcons.  *)
+  | Ppatany of location
+  | Ppatvar of pvar
+  | Ppatcons of pexp * ((arg_kind * symbol) option * ppat) list
 
 and pdecl =
   | Ptype of symbol * pexp        (* identifier : expr  *)
@@ -80,13 +78,13 @@ let rec pexp_location e =
   | Plambda (_,(l,_), _, _) -> l
   | Pcall (f, _) -> pexp_location f
   | Pinductive ((l,_), _, _) -> l
-  | Pcons ((l,_),_) -> l
+  | Pcons (e,_) -> pexp_location e
   | Pcase (l, _, _) -> l
 
 let rec pexp_pat_location e = match e with
   | Ppatany l -> l
   | Ppatvar (l,_) -> l
-  | Ppatcons ((l, _), _) -> l
+  | Ppatcons (e, _) -> pexp_location e
 
 (* In the following "pexp_p" the prefix for "parse a sexp, returning a pexp"
  * and "pexp_u" is the prefix for "unparse a pexp, returning a sexp".  *)
@@ -159,8 +157,8 @@ let rec pexp_parse (s : sexp) : pexp =
   | Node (Symbol (start, "inductive_"), _)
     -> pexp_error start "Unrecognized inductive type"; Pmetavar (start, "_")
   (* constructor *)
-  | Node (Symbol (start, "inductive-cons"), [Symbol tname; Symbol tag])
-    -> Pcons (tname, tag)
+  | Node (Symbol (start, "inductive-cons"), [e; Symbol tag])
+    -> Pcons (pexp_parse e, tag)
   | Node (Symbol (start, "cons_"), _)
     -> pexp_error start "Unrecognized constructor call"; Pmetavar (start, "_")
   (* cases analysis *)
@@ -266,15 +264,15 @@ and pexp_u_pat_arg (arg : (arg_kind * symbol) option * ppat) : sexp =
 and pexp_p_pat (s : sexp) : ppat = match s with
   | Symbol (l, "_") -> Ppatany l
   | Symbol s -> Ppatvar s
-  | Node (Symbol c, args)
-    -> Ppatcons (c, List.map pexp_p_pat_arg args)
+  | Node (c, args)
+    -> Ppatcons (pexp_parse c, List.map pexp_p_pat_arg args)
   | _ -> let l = sexp_location s in
         pexp_error l "Unknown pattern"; Ppatany l
 
 and pexp_u_pat (p : ppat) : sexp = match p with
   | Ppatany l -> Symbol (l, "_")
   | Ppatvar s -> Symbol s
-  | Ppatcons (c, args) -> Node (Symbol c, List.map pexp_u_pat_arg args)
+  | Ppatcons (c, args) -> Node (pexp_unparse c, List.map pexp_u_pat_arg args)
 
 and pexp_p_decls e: pdecl list =
   match e with
@@ -337,9 +335,9 @@ and pexp_unparse (e : pexp) : sexp =
                        -> Node (Symbol s,
                                List.map pexp_u_ind_arg types))
                       branches)
-  | Pcons (tname, ((l,_) as tag)) ->
+  | Pcons (t, ((l,_) as tag)) ->
     Node (Symbol (l, "cons_"),
-          [Symbol tname; Symbol tag])
+          [pexp_unparse t; Symbol tag])
   | Pcase (start, e, branches) ->
     Node (Symbol (start, "case_"),
           pexp_unparse e
@@ -417,5 +415,5 @@ let pexp_to_string e =
   | Plambda (_,(_,_), _, _) -> "Plambda"
   | Pcall (_, _) -> "Pcall"
   | Pinductive ((_,_), _, _) -> "Pinductive"
-  | Pcons ((_,_),_) -> "Pcons"
+  | Pcons (_,_) -> "Pcons"
   | Pcase (_, _, _) -> "Pcase"

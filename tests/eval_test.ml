@@ -192,6 +192,8 @@ let _ = test_eval_eqv_named
    three = succ two;
 
    even : Nat -> Int;
+   odd : Nat -> Int;
+
    odd = lambda (n : Nat) -> case n
       | zero => 0
       | succ y => (even y);
