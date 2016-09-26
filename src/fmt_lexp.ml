@@ -40,7 +40,7 @@ and string_of_lxp lxp =
   | L.Imm (Sexp.Integer (_, value))        -> "Integer(" ^ (string_of_int value) ^ ")"
   | L.Imm (Sexp.String (_, value))         -> "String(" ^ value ^ ")"
   | L.Imm (Sexp.Float (_, value))          -> "Float(" ^ (string_of_float value) ^ ")"
-  | L.Cons (((_,tname),_),(_, cname))      -> "Cons(" ^  tname ^ ", " ^ cname ^")"
+  | L.Cons (it, (_, cname))                -> "Cons(" ^  string_of_lxp it ^ ", " ^ cname ^")"
   | L.Builtin ((_, name), _)               -> "Builtin(" ^ name ^ ")"
   | L.Let (_)                              -> "Let(..)"
   | L.Var ((_, name), idx)                 -> "Var(" ^ name ^ ", #" ^(string_of_int idx) ^ ")"
@@ -77,7 +77,7 @@ let rec colored_string_of_lxp lxp lcol vcol =
   | L.Imm (Sexp.Integer (_, value))   -> (lcol "Integer") ^ "("  ^ (vcol (string_of_int value)) ^ ")"
   | L.Imm (Sexp.String (_, value))    -> (lcol "String") ^ "(" ^  (vcol value ) ^ ")"
   | L.Imm (Sexp.Float (_, value))     -> (lcol "Float" ) ^ "(" ^ (vcol (string_of_float value)) ^ ")"
-  | L.Cons (((_,name),_),_)           -> (lcol "Cons" ) ^ "(" ^ (vcol name) ^ ")"
+  | L.Cons (it, _)                    -> (lcol "Cons" ) ^ "(" ^ (colored_string_of_lxp it lcol vcol) ^ ")"
   | L.Builtin ((_, name), _)          -> (lcol "Builtin") ^ "(" ^ (vcol name) ^ ")"
   | L.Let (_)                         -> (lcol "Let(..)")
   | L.Var ((_, name), idx)            -> (lcol "Var" ) ^ "(" ^ (vcol name ) ^ ", " ^ (vcol ("#" ^ (string_of_int idx))) ^ ")"
@@ -121,7 +121,8 @@ let rec string_of_pexp pxp =
   | Pexp.Plambda _                  -> "Plambda (...)"
   | Pexp.Pcall _                    -> "Pcall (...)"
   | Pexp.Pinductive _               -> "Pinductive (...)"
-  | Pexp.Pcons ( (_, s), (_, s2) )  -> "Pcons (" ^ s ^ ", " ^ s2 ^ ")"
+  | Pexp.Pcons (it, (_, s2))        -> "Pcons (" ^ string_of_pexp it
+                                      ^ ", " ^ s2 ^ ")"
   | Pexp.Pcase _                    -> "Pcase (...)"
   | _                               -> "Pexp not handled"
 

@@ -115,10 +115,8 @@ and _unify_imm (l: lexp) (r: lexp) (subst: substitution) : return_type =
 *)
 and _unify_cons (cons: lexp) (lxp: lexp) (subst: substitution) : return_type =
   match (cons, lxp) with
-  | (Cons ((_, idx),  (_, name)),
-     Cons ((_, idx2), (_, name2))) when name = name2 ->
-    if idx = idx2 then Some (subst, [])
-    else None
+  | (Cons (it1, (_, name)),
+     Cons (it2, (_, name2))) when name = name2 -> unify it1 it2 subst
   | (_, _) -> None
 
 (** Unify a builtin (bltin) and a lexp (lxp) if it is possible
