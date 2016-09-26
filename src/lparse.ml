@@ -170,7 +170,7 @@ and _lexp_p_infer (p : pexp) (ctx : elab_context) i: lexp * ltype =
                 let ltp = env_lookup_type ctx ((loc, name), idx) in
                     lxp, ltp
 
-            with Not_found ->
+            with e ->
                 (lexp_error loc ("The variable: \"" ^ name ^ "\" was not declared");
                 (* Error recovery. The -1 index will raise an error later on *)
                 (make_var name (-1) loc), dltype))
@@ -840,6 +840,7 @@ and _lexp_rec_decl decls ctx i =
   (* to compute recursive offset *)
   let n = (List.length decls) in
   let lst = ref [] in
+  (* print_int n; print_string "\n"; *)
 
   (* add all elements to the environment *)
   let tctx = List.fold_left (fun vctx decl ->
@@ -859,18 +860,19 @@ and _lexp_rec_decl decls ctx i =
   let ctx = List.fold_left (fun vctx decl ->
     i := !i + 1;
     match decl with
+      (* +1 because we allow each definition to be recursive *)
       (* lexp infer *)
       | Ldecl ((l, s), Some pxp, None) ->
-          let lxp, ltp = lexp_p_infer pxp vctx in
+          let lxp, ltp = lexp_p_infer pxp tctx in
           lst := ((l, s), lxp, ltp)::!lst;
-            (env_extend_rec (n - !i) vctx (l, s) (LetDef lxp) ltp)
+            (env_extend_rec (n - !i + 1) vctx (l, s) (LetDef lxp) ltp)
 
       (* lexp check *)
       | Ldecl ((l, s), Some pxp, Some ptp) ->
           let ltp, _ = lexp_p_infer ptp vctx in
           let lxp = lexp_p_check pxp ltp tctx in
           lst := ((l, s), lxp, ltp)::!lst;
-            (env_extend_rec (n - !i) vctx (l, s) (LetDef lxp) ltp)
+            (env_extend_rec (n - !i + 1) vctx (l, s) (LetDef lxp) ltp)
 
       (* macros *)
       | Lmcall (a, sargs) ->
@@ -896,80 +898,6 @@ and _lexp_parse_all (p: pexp list) (ctx: elab_context) i : lexp list =
 
     (loop p ctx [])
 
-(*  Print context  *)
-and print_lexp_ctx (ctx : elab_context) =
-    let ((n, map), env, f) = ctx in
-
-    print_string (make_title " LEXP CONTEXT ");
-
-    make_rheader [
-        (Some ('l', 10), "NAME");
-        (Some ('l',  7), "INDEX");
-        (Some ('l', 10), "NAME");
-        (Some ('l',  4), "OFF");
-        (Some ('l', 29), "VALUE:TYPE")];
-
-    print_string (make_sep '-');
-
-    (* it is annoying to print according to StringMap order *)
-    (* let's use myers list order *)
-    let rec extract_names (lst: lexp_context) acc =
-        match lst with
-            | Mnil-> acc
-            | Mcons (hd, tl, _, _) ->
-                let name = match hd with
-                  | (_, Some (_, name), _, _) -> name
-                  | _ -> "" in
-                    extract_names tl (name::acc) in
-
-    let ord = extract_names env [] in
-
-    let rec _print idx ord =
-        match ord with
-            | [] -> ()
-            | hd::tl ->(
-        let idx2 = StringMap.find hd map in
-
-        (if idx2 != idx then ());
-
-        print_string "    | ";  lalign_print_string hd 10;
-        print_string    " | ";  lalign_print_int (n - idx - 1) 7;
-        print_string    " | ";
-
-        let ptr_str = "" in (*"    |            |         |            | " in *)
-
-        try let r, name, exp, tp =
-              match env_lookup_by_index (n - idx - 1) ctx with
-                | (r, Some (_, name), LetDef exp, tp) -> r, name, Some exp, tp
-                | _ -> 0, "", None, dltype in
-
-            (*  Print env Info *)
-            lalign_print_string name 10; (*   name must match *)
-            print_string " | ";
-             lalign_print_int r 4;
-            print_string " | ";
-
-            let _ = (match exp with
-                | None -> print_string "<var>"
-                | Some exp -> lexp_print exp)
-                    (* let str = _lexp_to_str (!debug_ppctx) exp in
-                    let str = (match str_split str '\n' with
-                        | hd::tl -> print_string (hd ^ "\n"); tl
-                        | _ -> []) in
-
-                        List.iter (fun elem ->
-                            print_string (ptr_str ^ elem ^ "\n")) str) *)in
-
-            print_string (ptr_str ^ ": "); lexp_print tp; print_string "\n";
-
-            _print (idx + 1) tl
-
-        with Not_found ->
-            (print_string "Not_found  |\n"; _print (idx + 1) tl)) in
-
-    _print 0 ord;
-
-    print_string (make_sep '=')
 
 and print_lexp_trace () =
     print_trace " LEXP TRACE " 50 pexp_to_string pexp_print !_global_lexp_trace

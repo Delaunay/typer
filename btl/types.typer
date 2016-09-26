@@ -66,7 +66,7 @@ sexp_eq   = Built-in   "sexp_eq" (Sexp -> Sexp -> Bool);
 % -----------------------------------------------------
 
 List : Type -> Type;
-List = inductive_ (dList (a : Type)) (nil) (cons a (List a));
+List = inductive_ (List (a : Type)) (nil) (cons a (List a));
 
 nil = inductive-cons List nil;
 cons = inductive-cons List cons;
@@ -91,6 +91,7 @@ tail = lambda a ≡>
     case xs
       | nil => nil
       | cons hd tl => tl;
+
 
 % -----------------------------------------------------
 %       Macro
@@ -166,7 +167,7 @@ Attribute = Built-in "Attribute";
 new-attribute = Built-in "new-attribute" (Macro);
 
 add-attribute = Built-in "add-attribute" (Macro);
-% attribute = Macro_ add-attribute;
+attribute = Macro_ add-attribute;
 
 get-attribute = Built-in "get-attribute" Macro;
 has-attribute = Built-in "has-attribute" (Macro);
@@ -178,6 +179,9 @@ has-attribute = Built-in "has-attribute" (Macro);
 %% FIXME: These should be functions!
 decltype = Built-in "decltype" Macro;
 declexpr = Built-in "declexpr" Macro;
+
+
+
 
 
 
