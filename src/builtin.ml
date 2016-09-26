@@ -190,7 +190,8 @@ let make_node loc depth args_val ctx    =
         | [Vsexp(op); lst] -> op, lst
         | op::_  ->
           builtin_error loc
-            ("node_ expects one 'Sexp' got " ^ (value_name op))  in
+            ("node_ expects one 'Sexp' got " ^ (value_name op))
+        | _ -> typer_unreachable "-" in
 
     (* value_print tlist; print_string "\n"; *)
 
@@ -306,7 +307,10 @@ let get_attribute_impl loc largs ctx ftype =
       | _ -> builtin_error loc "get-attribute expects two arguments" in
 
   let lxp = get_property ctx (vi, vn) (ai, an) in
-  let Some ltype = env_lookup_expr ctx ((loc, an), ai) in
+  let ltype = match env_lookup_expr ctx ((loc, an), ai) with
+    | Some ltp -> ltp
+    | None -> builtin_error loc "not expression available" in
+
     lxp, ltype
 
 let new_attribute_impl loc largs ctx ftype =
@@ -336,7 +340,9 @@ let declexpr_impl loc largs ctx ftype =
     | [Var((_, vn), vi)] -> (vi, vn)
     | _ -> builtin_error loc "declexpr expects one argument" in
 
-  let Some lxp = env_lookup_expr ctx ((loc, vn), vi) in
+  let lxp = match env_lookup_expr ctx ((loc, vn), vi) with
+    | Some lxp -> lxp
+    | None -> builtin_error loc "no expr available" in
   let ltp = env_lookup_type ctx ((loc, vn), vi) in
     lxp, ftype
 
@@ -363,7 +369,7 @@ let builtin_macro = [
 ]
 
 type macromap =
-  (location -> lexp list -> lexp_context -> lexp -> (lexp * lexp)) SMap.t
+  (location -> lexp list -> elab_context -> lexp -> (lexp * lexp)) SMap.t
 
 let macro_impl_map : macromap =
   List.fold_left (fun map (name, funct) ->
