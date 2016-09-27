@@ -63,8 +63,8 @@ and string_of_kind = function
 
 and string_of_sort_level lvl =
   match lvl with
-  | L.SLn i    -> "SLn(" ^ string_of_int i ^ ")"
-  | L.SLsucc l -> "SLsucc(" ^ string_of_lxp l^ ")"
+  | L.SLz    -> "SLz"
+  | L.SLsucc l -> "SLsucc(" ^ string_of_lxp l ^ ")"
 
 and string_of_sort sort =
   match sort with

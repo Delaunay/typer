@@ -81,13 +81,24 @@ type ltype = lexp
   *    * unification.  *\)
   *   | MetaFoF
   * and subst = lexp VMap.t *)
+ (*
+  * The PTS I'm imagining looks like:
+  *
+  *    S = { TypeLevel, TypeOmega, Type ℓ }
+  *    A = { Level : TypeLevel, Z : Level, S : Level → Level,
+  *          Type : (ℓ : Level) → Type (S ℓ) }
+  *    R = { (TypeLevel, Type ℓ, TypeOmega),
+  *          (TypeLevel, TypeOmega, TypeOmega),
+  *          (Type ℓ, TypeOmega, TypeOmega),
+  *          (Type ℓ₁, Type ℓ₂, Type (max l₁ l₂) }
+  *)
  and sort =
    | Stype of lexp
    | StypeOmega
    | StypeLevel
  and sort_level =
-  | SLn of int
-  | SLsucc of lexp
+   | SLz
+   | SLsucc of lexp
 
 
 type varbind =
@@ -253,7 +264,7 @@ let rec lexp_location e =
   match e with
   | Sort (l,_) -> l
   | SortLevel (SLsucc e) -> lexp_location e
-  | SortLevel (SLn _) -> U.dummy_location
+  | SortLevel SLz -> U.dummy_location
   | Imm s -> sexp_location s
   | Var ((l,_),_) -> l
   | Builtin ((l, _), _) -> l
@@ -778,7 +789,7 @@ and _lexp_to_str ctx exp =
         | Builtin ((_, name), _) -> name
 
         | Sort (_, Stype lvl) -> (match lvl with
-            | SortLevel (SLn v) -> "Type_" ^ (string_of_int v)
+            | SortLevel SLz -> "Type_0"
             | _ -> "Type_?")
 
         | _ -> print_string "Printing Not Implemented\n"; "-- --"

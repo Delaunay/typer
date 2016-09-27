@@ -75,7 +75,7 @@ let get_predef_raw (name: string) : lexp =
         | None -> builtin_error dloc ("\""^ name ^ "\" was not predefined")
 
 let get_predef_option (name: string) ctx =
-  let r = (get_size ctx) - !builtin_size - 1 in
+  let r = (get_size ctx) - !builtin_size - 0 in
     match !(SMap.find name (!predef_map)) with
         | Some exp -> Some (mkSusp exp (S.shift r))
         | None -> None
@@ -98,9 +98,12 @@ let dump_predef () =
 
 (*                Builtin types               *)
 let dloc    = dummy_location
-let type0   = Sort (dloc, Stype (SortLevel (SLn 0)))
-let type1   = Sort (dloc, Stype (SortLevel (SLn 1)))
-let type2   = Sort (dloc, Stype (SortLevel (SLn 2)))
+let level0 = SortLevel SLz
+let level1 = SortLevel (SLsucc level0)
+let level2 = SortLevel (SLsucc level1)
+let type0   = Sort (dloc, Stype level0)
+let type1   = Sort (dloc, Stype level1)
+let type2   = Sort (dloc, Stype level2)
 let type_omega = Sort (dloc, StypeOmega)
 let type_level = Sort (dloc, StypeLevel)
 
@@ -343,7 +346,7 @@ let declexpr_impl loc largs ctx ftype =
   let lxp = match env_lookup_expr ctx ((loc, vn), vi) with
     | Some lxp -> lxp
     | None -> builtin_error loc "no expr available" in
-  let ltp = env_lookup_type ctx ((loc, vn), vi) in
+  let ltp = env_lookup_type ctx ((loc, vn), vi) in (* FIXME: Unused?  *)
     lxp, ftype
 
 

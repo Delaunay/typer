@@ -176,14 +176,15 @@ and _lexp_p_infer (p : pexp) (ctx : elab_context) i: lexp * ltype =
 
         (*  Symbol i.e identifier *)
         | Pvar (loc, name) ->(
-            try let idx = (senv_lookup name ctx) in
+            try
+                let idx = (senv_lookup name ctx) in
                 let lxp = (make_var name idx loc) in
 
                 (* search type *)
                 let ltp = env_lookup_type ctx ((loc, name), idx) in
                     lxp, ltp
 
-            with Not_found ->
+            with e ->
                 (lexp_error loc ("The variable: \"" ^ name ^ "\" was not declared");
                 (* Error recovery. The -1 index will raise an error later on *)
                 (make_var name (-1) loc), dltype))
@@ -441,7 +442,7 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
      *  Constructor : a constructor is returned
      *  Anonymous   : lambda                                                  *)
 
-    (* retrieve function's body *)
+    (* retrieve function's body (sqr 3) sqr is a Pvar() *)
     let body, ltp = _lexp_p_infer func ctx (i + 1) in
     let ltp = nosusp ltp in
 
@@ -481,12 +482,11 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
                             sexp_print sarg; print_string "\n";
                        lexp_fatal (sexp_location sarg)
                                   "Expected non-explicit arg"
-           | e -> Debug_fun.do_debug (fun () ->
-               print_endline ("<>explicit arg : " ^ Fmt_lexp.string_of_lxp ltp);
-               print_endline ("<>explicit res : " ^ Fmt_lexp.string_of_lxp e);
-               ());
-           lexp_fatal (sexp_location sarg)
-                            "Explicit arg to non-function") in
+           | t ->
+            lexp_print t; print_string "\n";
+            print_lexp_ctx ctx;
+            lexp_fatal (sexp_location sarg)
+                       "Explicit arg to non-function") in
 
     let handle_funcall () =
       (* Here we use lexp_whnf on actual code, but it's OK
@@ -551,32 +551,32 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
             _lexp_p_infer pxp ctx (i + 1)  in
 
     (* This is the builtin Macro type *)
-    let macro_type = match get_predef_option "Macro" ctx with
-      | Some lxp -> lxp
-      (* When type.typer is being parsed and the predef is not yet
-       * available                                                  *)
-      | None -> dltype     in
+    let macro_type, macro_disp = match get_predef_option "Macro" ctx with
+      | Some lxp -> OL.lexp_whnf lxp (ectx_to_lctx ctx) meta_ctx, true
+      (* When type.typer is being parsed and the predef is not yet available *)
+      | None -> dltype, false     in
+
+    (*print_string "\nmacro_type="; lexp_print macro_type;
+      print_string "\nltp="; lexp_print ltp;
+      print_string " (= "; lexp_print (OL.lexp_whnf ltp (ectx_to_lctx ctx)); print_string ")\n"; *)
 
     (* determine function type *)
     match func, ltp with
-      (* This is a work around for the bug described below *)
       | Pvar(l, name), _ when is_builtin_macro name ->
-        let pargs = List.map pexp_parse sargs in
-        let largs = _lexp_parse_all pargs ctx i in
-          (get_macro_impl loc name) loc largs ctx ltp
+            let pargs = List.map pexp_parse sargs in
+            let largs = _lexp_parse_all pargs ctx i in
+              (get_macro_impl loc name) loc largs ctx ltp
 
-      (* FIXME: the branch 'builtin macro' is never used because of missing shift somewhere *)
-      (* while special forms have a type macro this does not recognize them as such *)
-      | macro, _ when OL.conv_p ltp macro_type -> (
+      | macro, _ when (macro_disp && (OL.conv_p ltp macro_type))-> (
         match macro with
           | Pvar(l, name) when is_builtin_macro name ->
-            print_string name;
             let pargs = List.map pexp_parse sargs in
             let largs = _lexp_parse_all pargs ctx i in
               (get_macro_impl loc name) loc largs ctx ltp
 
           (* true macro *)
-          | _ -> handle_macro_call ())
+          | _ ->
+            handle_macro_call ())
 
       (* FIXME: Handle special-forms here as well!  *)
       | _ -> handle_funcall ()
@@ -628,17 +628,21 @@ and lexp_read_pattern pattern exp target ctx:
                                    ^ "` is not an inductive type!") in
 
                (* Remove non explicit argument.  *)
-            let rec remove_nexplicit args acc =
-              match args with
-                | [] -> List.rev acc
-                | (Aexplicit, _, ltp)::tl -> remove_nexplicit tl (ltp::acc)
-                | hd::tl -> remove_nexplicit tl acc in
+               let rec remove_nexplicit args acc =
+                 match args with
+                 | [] -> List.rev acc
+                 | (Aexplicit, _, ltp)::tl -> remove_nexplicit tl (ltp::acc)
+                 | hd::tl -> remove_nexplicit tl acc in
 
-            let cons_args = remove_nexplicit cons_args [] in
+               let cons_args = remove_nexplicit cons_args [] in
 
-            (* read pattern args *)
-            let args, nctx = lexp_read_pattern_args args cons_args ctx in
-                (cons_name, loc, args), nctx
+               (* read pattern args *)
+               let args, nctx = lexp_read_pattern_args args cons_args ctx in
+               (cons_name, loc, args), nctx
+           | _ -> lexp_warning (pexp_location ctor)
+                              ("Invalid constructor `"
+                               ^ (pexp_to_string ctor) ^ "`");
+                 ("_", pexp_location ctor, []), ctx
 
 (*  Read patterns inside a constructor *)
 and lexp_read_pattern_args args (args_type : lexp list) ctx:
@@ -873,8 +877,9 @@ and _lexp_rec_decl decls ctx i =
    * i.e let decl parsing *)
 
   (* to compute recursive offset *)
-  let n = (List.length decls) + 1 in
+  let n = (List.length decls) in
   let lst = ref [] in
+  (* print_int n; print_string "\n"; *)
 
   (* add all elements to the environment *)
   let tctx = List.fold_left (fun vctx decl ->
@@ -883,29 +888,30 @@ and _lexp_rec_decl decls ctx i =
         env_extend vctx (l, s) ForwardRef dltype
 
       | Ldecl((l, s), _, Some ptp) ->
-        let lxp, _ = lexp_p_infer ptp vctx in
-          env_extend vctx (l, s) ForwardRef lxp
+        let ltp, _ = lexp_p_infer ptp vctx in
+          env_extend vctx (l, s) ForwardRef ltp
 
       | Lmcall _ ->
         lexp_fatal dloc "use lexp_decl_macro to parse macro decls") ctx decls in
 
+        (* ectx_extend_rec (ctx: elab_context) (defs: (vdef * lexp * ltype) list) *)
   let i = ref 0 in
   let ctx = List.fold_left (fun vctx decl ->
     i := !i + 1;
     match decl with
+      (* +1 because we allow each definition to be recursive *)
       (* lexp infer *)
       | Ldecl ((l, s), Some pxp, None) ->
-          let lxp, ltp = lexp_p_infer pxp vctx in
+          let lxp, ltp = lexp_p_infer pxp tctx in
           lst := ((l, s), lxp, ltp)::!lst;
-            (* replace forward ref by its true value *)
-            replace_by vctx s (n - !i, Some (l, s), LetDef lxp, ltp)
+            (env_extend_rec (n - !i + 1) vctx (l, s) (LetDef lxp) ltp)
 
       (* lexp check *)
       | Ldecl ((l, s), Some pxp, Some ptp) ->
           let ltp, _ = lexp_p_infer ptp vctx in
-          let lxp = lexp_p_check pxp ltp vctx in
+          let lxp = lexp_p_check pxp ltp tctx in
           lst := ((l, s), lxp, ltp)::!lst;
-            replace_by vctx s (n - !i, Some (l, s), LetDef lxp, ltp)
+            (env_extend_rec (n - !i + 1) vctx (l, s) (LetDef lxp) ltp)
 
       (* macros *)
       | Lmcall (a, sargs) ->
@@ -914,7 +920,7 @@ and _lexp_rec_decl decls ctx i =
       (* unused arg *)
       | Ldecl ((l, s), None, _) ->
         lexp_error l ("Variable \"" ^ s ^ "\" is unused!");
-        vctx) tctx decls in
+        vctx) ctx decls in
 
         (List.rev !lst), ctx
 
@@ -931,80 +937,6 @@ and _lexp_parse_all (p: pexp list) (ctx: elab_context) i : lexp list =
 
     (loop p ctx [])
 
-(*  Print context  *)
-and print_lexp_ctx (ctx : elab_context) =
-    let ((n, map), env, f) = ctx in
-
-    print_string (make_title " LEXP CONTEXT ");
-
-    make_rheader [
-        (Some ('l', 10), "NAME");
-        (Some ('l',  7), "INDEX");
-        (Some ('l', 10), "NAME");
-        (Some ('l',  4), "OFF");
-        (Some ('l', 29), "VALUE:TYPE")];
-
-    print_string (make_sep '-');
-
-    (* it is annoying to print according to StringMap order *)
-    (* let's use myers list order *)
-    let rec extract_names (lst: lexp_context) acc =
-        match lst with
-            | Mnil-> acc
-            | Mcons (hd, tl, _, _) ->
-                let name = match hd with
-                  | (_, Some (_, name), _, _) -> name
-                  | _ -> "" in
-                    extract_names tl (name::acc) in
-
-    let ord = extract_names env [] in
-
-    let rec _print idx ord =
-        match ord with
-            | [] -> ()
-            | hd::tl ->(
-        let idx2 = StringMap.find hd map in
-
-        (if idx2 != idx then ());
-
-        print_string "    | ";  lalign_print_string hd 10;
-        print_string    " | ";  lalign_print_int (n - idx - 1) 7;
-        print_string    " | ";
-
-        let ptr_str = "" in (*"    |            |         |            | " in *)
-
-        try let r, name, exp, tp =
-              match env_lookup_by_index (n - idx - 1) ctx with
-                | (r, Some (_, name), LetDef exp, tp) -> r, name, Some exp, tp
-                | _ -> 0, "", None, dltype in
-
-            (*  Print env Info *)
-            lalign_print_string name 10; (*   name must match *)
-            print_string " | ";
-             lalign_print_int r 4;
-            print_string " | ";
-
-            let _ = (match exp with
-                | None -> print_string "<var>"
-                | Some exp -> lexp_print exp)
-                    (* let str = _lexp_to_str (!debug_ppctx) exp in
-                    let str = (match str_split str '\n' with
-                        | hd::tl -> print_string (hd ^ "\n"); tl
-                        | _ -> []) in
-
-                        List.iter (fun elem ->
-                            print_string (ptr_str ^ elem ^ "\n")) str) *)in
-
-            print_string (ptr_str ^ ": "); lexp_print tp; print_string "\n";
-
-            _print (idx + 1) tl
-
-        with Not_found ->
-            (print_string "Not_found  |\n"; _print (idx + 1) tl)) in
-
-    _print 0 ord;
-
-    print_string (make_sep '=')
 
 and print_lexp_trace () =
     print_trace " LEXP TRACE " 50 pexp_to_string pexp_print !_global_lexp_trace

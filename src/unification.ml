@@ -301,7 +301,7 @@ and _unfiy_induct (induct: lexp) (lxp: lexp) (subst: substitution) : return_type
 and _unify_sortlvl (sortlvl: lexp) (lxp: lexp) (subst: substitution) : return_type =
   match sortlvl, lxp with
   | (SortLevel s, SortLevel s2) -> (match s, s2 with
-      | SLn i, SLn j when i = j -> Some (subst, [])
+      | SLz, SLz -> Some (subst, [])
       | SLsucc l1, SLsucc l2 -> unify l1 l2 subst
       | _, _ -> None)
   | _, _ -> None
