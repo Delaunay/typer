@@ -570,17 +570,21 @@ and lexp_read_pattern pattern exp target ctx:
                                    ^ "` is not an inductive type!") in
 
                (* Remove non explicit argument.  *)
-            let rec remove_nexplicit args acc =
-              match args with
-                | [] -> List.rev acc
-                | (Aexplicit, _, ltp)::tl -> remove_nexplicit tl (ltp::acc)
-                | hd::tl -> remove_nexplicit tl acc in
+               let rec remove_nexplicit args acc =
+                 match args with
+                 | [] -> List.rev acc
+                 | (Aexplicit, _, ltp)::tl -> remove_nexplicit tl (ltp::acc)
+                 | hd::tl -> remove_nexplicit tl acc in
 
-            let cons_args = remove_nexplicit cons_args [] in
+               let cons_args = remove_nexplicit cons_args [] in
 
-            (* read pattern args *)
-            let args, nctx = lexp_read_pattern_args args cons_args ctx in
-                (cons_name, loc, args), nctx
+               (* read pattern args *)
+               let args, nctx = lexp_read_pattern_args args cons_args ctx in
+               (cons_name, loc, args), nctx
+           | _ -> lexp_warning (pexp_location ctor)
+                              ("Invalid constructor `"
+                               ^ (pexp_to_string ctor) ^ "`");
+                 ("_", pexp_location ctor, []), ctx
 
 (*  Read patterns inside a constructor *)
 and lexp_read_pattern_args args (args_type : lexp list) ctx:
