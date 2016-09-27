@@ -47,7 +47,7 @@ let debruijn_warning = msg_warning "DEBRUIJN"
  * ---------------------------------- *)
 
 let dloc   = dummy_location
-let type0  = Sort (dloc, Stype (SortLevel (SLn 0)))
+let type0  = Sort (dloc, Stype (SortLevel SLz))
 let dltype = type0
 
 type property_key = (int * string)  (* rev_dbi * Var name *)
@@ -180,8 +180,8 @@ let print_lexp_ctx (ctx : elab_context) =
     (* let's use myers list order *)
     let rec extract_names (lst: lexp_context) acc =
         match lst with
-            | Mnil-> acc
-            | Mcons (hd, tl, _, _) ->
+            | M.Mnil -> acc
+            | M.Mcons (hd, tl, _, _) ->
                 let name = match hd with
                   | (_, Some (_, name), _, _) -> name
                   | _ -> "" in

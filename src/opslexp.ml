@@ -37,7 +37,11 @@ module S = Subst
 module B = Builtin
 module DB = Debruijn
 
-let conv_erase = true              (* If true, conv ignores erased terms. *)
+(* `conv_erase` is supposed to be safe according to the ICC papers. *)
+let conv_erase = true          (* Makes conv ignore erased terms. *)
+
+(* The safety of `impredicative_erase` is unknown.  But I like the idea.  *)
+let impredicative_erase = true (* Allows erasable args to be impredicative. *)
 
 (* Lexp context *)
 
@@ -185,14 +189,24 @@ let assert_type e t t' =
   if conv_p t t' then ()
   else U.msg_error "TC" (lexp_location e) "Type mismatch"; ()
 
+let rec sort_level_max l1 l2 = match l1, l2 with
+  | SortLevel SLz, l2 -> l2
+  | l1, SortLevel SLz -> l1
+  | SortLevel (SLsucc l1), SortLevel (SLsucc l2)
+    -> SortLevel (SLsucc (sort_level_max l1 l2))
+  | _, _ (* FIXME: This requires s.th. like `SLmax of lexp * lexp`!  *)
+    -> U.msg_error "TC" (lexp_location l1)
+                  ("Can't compute the max of levels `"
+                  ^ lexp_to_string l1 ^ "` and `"
+                  ^ lexp_to_string l2 ^ "`");
+      SortLevel SLz
+
 let sort_compose l s1 s2 =
   match s1, s2 with
-  | (Stype (SortLevel (SLn n1)), Stype (SortLevel (SLn n2)))
-    (* Basic predicativity rule.  *)
-    -> Stype (SortLevel (SLn (max n1 n2)))
-  | ( (StypeLevel, Stype (SortLevel (SLn _)))
+  | (Stype l1, Stype l2) -> Stype (sort_level_max l1 l2)
+  | ( (StypeLevel, Stype _)
     | (StypeLevel, StypeOmega)
-    (* | (Sort (_, Stype (SortLevel (SLn _))), Sort (_, StypeOmega)) *))
+    | (Stype _, StypeOmega))
     -> StypeOmega
   | _,_ -> (U.msg_error "TC" l
                        "Mismatch sorts for arg and result";
@@ -208,8 +222,8 @@ let rec check ctx e =
     -> (U.msg_error "TC" (lexp_location e) "Unsupported immediate value!";
        B.type_int)
   | SortLevel (_) -> B.type_level
-  | Sort (l, Stype (SortLevel (SLn n)))
-    -> Sort (l, Stype (SortLevel (SLn (1 + n))))
+  | Sort (l, Stype (SortLevel l1 as sl1))
+    -> Sort (l, Stype (SortLevel (SLsucc sl1)))
   | Sort (_, (StypeOmega|StypeLevel))
     -> (U.msg_error "TC" (lexp_location e) "Reached Unreachable sorts!";
        B.type_omega)
@@ -238,7 +252,8 @@ let rec check ctx e =
        let k2 = check (DB.lexp_ctx_cons ctx 0 v Variable t1) t2 in
        match k1, k2 with
        | (Sort (_, s1), Sort (_, s2))
-         -> Sort (l, sort_compose l s1 s2)
+         -> if ak == P.Aerasable && impredicative_erase then k2
+           else Sort (l, sort_compose l s1 s2)
        | (Sort (_, _), _) -> (U.msg_error "TC" (lexp_location t2)
                             "Not a proper type";
                              Sort (l, StypeOmega))
@@ -270,20 +285,29 @@ let rec check ctx e =
                                         "Calling a non function!"; ft))
                   ft args
   | Inductive (l, label, args, cases)
-    -> let rec arg_loop args s ctx =
+    -> let level = SMap.fold
+                    (fun _ case level ->
+                      List.fold_left
+                        (fun level (ak, _, t) ->
+                          if ak == P.Aerasable && impredicative_erase
+                          then level
+                          else match check ctx t with
+                               | Sort (_, Stype level')
+                                 (* FIXME: scoping of level vars!  *)
+                                 -> sort_level_max level level'
+                               | _ -> U.msg_error "TC" (lexp_location t)
+                                                 "Field type is not a Type!";
+                                 SortLevel SLz)
+                        level
+                        case)
+                    cases (SortLevel SLz) in
+      let rec arg_loop args ctx =
         match args with
-        | [] -> Sort (l, s)
+        | [] -> Sort (l, Stype level)
         | (ak, v, t)::args
-          -> let s' = match check ctx t with
-              | Sort (_, s') -> s'
-              | _ -> (U.msg_error "TC" (lexp_location t)
-                                 "Field type is not a Type!";
-                     Stype (SortLevel (SLn 0))) in
-            Arrow (ak, Some v, t, lexp_location t,
-                   (* FIXME: `sort_compose` doesn't do what we want!  *)
-                   arg_loop args (sort_compose l s s')
-                            (DB.lctx_extend ctx v Variable t)) in
-      let tct = arg_loop args (Stype (SortLevel (SLn 0))) ctx in
+          -> Arrow (ak, Some v, t, lexp_location t,
+                   arg_loop args (DB.lctx_extend ctx v Variable t)) in
+      let tct = arg_loop args ctx in
       (* FIXME: Check cases!  *)
       tct
   | Case (l, e, it, ret, branches, default)
