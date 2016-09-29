@@ -109,9 +109,9 @@ let rec senv_lookup (name: string) (ctx: elab_context): int =
         raw_idx
 
 let lexp_ctx_cons (ctx : lexp_context) offset d v t =
-  assert (offset >= 0 &&
-            (ctx = M.nil ||
-               let (previous_offset, _, _, _) = M.car ctx in
+  assert (offset >= 0
+          && (ctx = M.nil
+             || let (previous_offset, _, _, _) = M.car ctx in
                previous_offset >= 0 && previous_offset <= 1 + offset));
   M.cons (offset, d, v, t) ctx
 
