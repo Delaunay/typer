@@ -89,7 +89,6 @@ let ectx_to_lctx (ectx : elab_context) : lexp_context =
 let _make_scope = StringMap.empty
 let _make_senv_type = (0, _make_scope)
 let _make_myers = M.nil
-let _get_env(ctx: elab_context): lexp_context = let (_, ev, _) = ctx in ev
 
 (*  Public methods: DO USE
  * ---------------------------------- *)
@@ -158,12 +157,12 @@ let ectx_extend_rec (ctx: elab_context) (defs: (vdef * lexp * ltype) list) =
       recursion_offset - 1)
     (ctx, List.length defs) defs
 
-let env_lookup_by_index index (ctx: elab_context): env_elem =
-    (Myers.nth index (_get_env ctx))
+let env_lookup_by_index index (ctx: lexp_context): env_elem =
+  Myers.nth index ctx
 
 (*  Print context  *)
-let print_lexp_ctx (ctx : elab_context) =
-    let ((n, map), env, f) = ctx in
+let print_lexp_ctx (ctx : lexp_context) =
+    let n = M.length ctx in
 
     print_string (make_title " LEXP CONTEXT ");
 
@@ -187,15 +186,12 @@ let print_lexp_ctx (ctx : elab_context) =
                   | _ -> "" in
                     extract_names tl (name::acc) in
 
-    let ord = extract_names env [] in
+    let ord = extract_names ctx [] in
 
     let rec _print idx ord =
         match ord with
             | [] -> ()
             | hd::tl ->(
-        let idx2 = StringMap.find hd map in
-
-        (if idx2 != idx then ());
 
         print_string "    | ";  lalign_print_string hd 10;
         print_string    " | ";  lalign_print_int (n - idx - 1) 7;
@@ -243,11 +239,10 @@ let _name_error loc estr str ctx =
 
 
 (* generic lookup *)
-let _env_lookup ctx (v: vref): env_elem  =
-    let ((dv_size, _), info_env, _) = ctx in
+let lctx_lookup (ctx : lexp_context) (v: vref): env_elem  =
     let ((loc, ename), dbi) = v in
 
-    try(let ret = (Myers.nth dbi info_env) in
+    try(let ret = (Myers.nth dbi ctx) in
         let _ = match ret with
           | (_, Some (_, name), _, _) ->
               (* Check if names match *)
@@ -259,19 +254,25 @@ let _env_lookup ctx (v: vref): env_elem  =
         Not_found -> debruijn_error loc "DeBruijn index out of bounds!"
 
 
+
+let lctx_lookup_type (ctx : lexp_context) (vref : vref) : lexp =
+  let (_, i) = vref in
+  let (_, _, _, t) = lctx_lookup ctx vref in
+  mkSusp t (S.shift (i + 1))
+
+let lctx_lookup_value (ctx : lexp_context) (vref : vref) : lexp option =
+  let (_, i) = vref in
+  match lctx_lookup ctx vref with
+  | (o, _, LetDef v, _) -> Some (push_susp v (S.shift (i + 1 - o)))
+  | _ -> None
+
 let env_lookup_type ctx (v : vref): lexp =
-  let (_, idx) = v in
-  let (r, _, _, ltp) = _env_lookup ctx v in
-    (L.push_susp ltp (S.shift (idx + 1)))
+  lctx_lookup_type (ectx_to_lctx ctx) v
 
     (* mkSusp ltp (S.shift (idx + 1)) *)
 
 let env_lookup_expr ctx (v : vref): lexp option =
-  let (_, idx) = v in
-  let (r, _, lxp, _) =  _env_lookup ctx v in
-  match lxp with
-  | LetDef lxp -> Some (L.push_susp lxp (S.shift (idx + 1 - r)))
-  | _ -> None
+  lctx_lookup_value (ectx_to_lctx ctx) v
 
 (* replace an expression by another *)
 (* Most of the time it should be O(1) but it can be O(n)  *)

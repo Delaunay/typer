@@ -216,7 +216,7 @@ let rec repl i clxp rctx =
             | "%quit" | "%q" -> ()
             | "%help" | "%h" -> (print_string _help_msg;  repl clxp rctx)
             | "%who"  | "%w" -> (print_rte_ctx rctx;      repl clxp rctx)
-            | "%info" | "%i" -> (print_lexp_ctx clxp;     repl clxp rctx)
+            | "%info" | "%i" -> (print_lexp_ctx (ectx_to_lctx clxp);     repl clxp rctx)
             | "%calltrace" | "%ct" -> (print_eval_trace (); repl clxp rctx)
 
             (* command with arguments *)

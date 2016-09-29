@@ -433,7 +433,7 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
                                   "Expected non-explicit arg"
            | t ->
             lexp_print t; print_string "\n";
-            print_lexp_ctx ctx;
+            print_lexp_ctx (ectx_to_lctx ctx);
             lexp_fatal (sexp_location sarg)
                             "Explicit arg to non-function") in
 
@@ -499,10 +499,6 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
       | Some lxp -> OL.lexp_whnf lxp (ectx_to_lctx ctx), true
       (* When type.typer is being parsed and the predef is not yet available *)
       | None -> dltype, false     in
-
-      print_string "\nmacro_type="; lexp_print macro_type;
-      print_string "\nltp="; lexp_print ltp;
-      print_string " (= "; lexp_print (OL.lexp_whnf ltp (ectx_to_lctx ctx)); print_string ")\n";
 
     (* determine function type *)
     match func, ltp with

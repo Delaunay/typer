@@ -306,7 +306,11 @@ let main () =
             ) merged));
 
         (* debug lexp parsing once merged *)
-        let lexps, nctx = _lexp_decls pexps octx 0 in
+        let lexps, nctx = try _lexp_decls pexps octx 0
+          with e ->
+            print_lexp_trace ();
+            internal_error "Fail" in
+
         (* use the new way of parsing expr *)
         let ctx = nctx in
         let flexps = List.flatten lexps in
@@ -345,7 +349,7 @@ let main () =
             debug_lexp_decls flexps; print_string "\n"));
 
         (if (get_p_option "lctx") then(
-            print_lexp_ctx nctx; print_string "\n"));
+           print_lexp_ctx (ectx_to_lctx nctx); print_string "\n"));
 
         let clean_lxp = List.map OL.clean_decls lexps in
 
