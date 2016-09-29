@@ -104,7 +104,6 @@ node_    = Built-in "node_"    (Sexp -> List Sexp -> Sexp);
 integer_ = Built-in "integer_" (Int       -> Sexp);
 float_   = Built-in "float_"   (Float     -> Sexp);
 
-Macro  : Type;
 Macro  = inductive_ (Macro) (Macro_ (List Sexp -> Sexp));
 Macro_ = inductive-cons Macro Macro_ ;
 

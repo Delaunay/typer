@@ -69,19 +69,22 @@ let _global_lexp_trace = ref []
 let _parsing_internals = ref false
 let btl_folder = ref "./btl/"
 
+type debug_type =
+  | Dbi of int
+  | Str of string
+  | Lexp of lexp
+
+let debug_print str = let _ = match str with
+  | Str str -> print_string str
+  | Dbi dbi -> print_string "DBI: "; print_int dbi
+  | Lexp lxp -> lexp_print lxp in
+    print_string "\n"
+
 (* merged declaration, allow us to process declaration in multiple pass *)
 (* first detect recursive decls then lexp decls*)
 type mdecl =
   | Ldecl of symbol * pexp option * pexp option
   | Lmcall of symbol * sexp list
-
-(* This is used to make Type annotation and inferred type having the same index *)
-(* since inferred type might need to parse a lambda var to infer the type *)
-
-let _type_shift tp i =
-    match tp with
-        | Var(v, idx) -> Var(v, idx)
-        | expr -> expr
 
 let ctx_define (ctx: elab_context) var lxp ltype =
   let (_, cctx, _) = ctx in
@@ -168,7 +171,7 @@ and _lexp_p_infer (p : pexp) (ctx : elab_context) i: lexp * ltype =
 
                 (* search type *)
                 let ltp = env_lookup_type ctx ((loc, name), idx) in
-                    lxp, ltp
+                    lxp, ltp (* Return Macro[22] *)
 
             with e ->
                 (lexp_error loc ("The variable: \"" ^ name ^ "\" was not declared");
@@ -184,12 +187,11 @@ and _lexp_p_infer (p : pexp) (ctx : elab_context) i: lexp * ltype =
         (* ------------------------------------------------------------------ *)
         | Parrow (kind, ovar, tp, loc, expr) ->
             let ltp, _ = lexp_infer tp ctx in
-            let nctx, sh = match ovar with
-                | None -> ctx, 0
-                | Some var -> (env_extend ctx var Variable ltp), 1 in
+            let nctx = match ovar with
+                | None -> ectx_extend_anon ctx ltp
+                | Some var -> env_extend ctx var Variable ltp in
 
             let lxp, _ = lexp_infer expr nctx in
-            let lxp = _type_shift lxp sh in
 
             let v = Arrow(kind, ovar, ltp, tloc, lxp) in
                 v, type0
@@ -225,8 +227,6 @@ and _lexp_p_infer (p : pexp) (ctx : elab_context) i: lexp * ltype =
 
             let nctx = env_extend ctx var Variable ltp in
             let lbody, lbtp = lexp_infer body nctx in
-            (* We added one variable in the ctx
-             let lbtp = _type_shift lbtp 1 in *)
 
             let lambda_type = Arrow(kind, None, ltp, tloc, lbtp) in
                 Lambda(kind, var, ltp, lbody), lambda_type
@@ -350,18 +350,16 @@ and lexp_case (rtype: lexp option) (loc, target, patterns) ctx i =
 
     (* make a list of all branches return type *)
     let texp = ref [] in
-    let ctx_len = get_size ctx in
 
     (*  Read patterns one by one *)
     let fold_fun (merged, dflt) (pat, exp) =
         (*  Create pattern context *)
         let (name, iloc, arg), nctx = lexp_read_pattern pat exp tlxp ctx in
-        let nctx_len = get_size nctx in
 
         (*  parse using pattern context *)
         let exp, ltp = lexp_infer exp nctx in
             (* we added len(arg) variable int the context *)
-            texp := (_type_shift ltp (nctx_len - ctx_len))::!texp;
+            texp := ltp::!texp;
 
         (* Check ltp type. Must be similar to rtype *)
         (if type_check ltp then ()
@@ -500,6 +498,10 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
       (* When type.typer is being parsed and the predef is not yet available *)
       | None -> dltype, false     in
 
+
+    lexp_print ltp; print_string "\n";
+    print_string (if (OL.conv_p ltp macro_type) then "true" else "false"); print_string "\n";
+
     (* determine function type *)
     match func, ltp with
       | Pvar(l, name), _ when is_builtin_macro name ->
@@ -565,6 +567,8 @@ and lexp_read_pattern pattern exp target ctx:
                                   ("`" ^ lexp_to_str (it)
                                    ^ "` is not an inductive type!") in
 
+               (* FIXME: Don't remove them, add them without names!  *)
+               (* FIXME: Add support for explicit-implicit fields!  *)
                (* Remove non explicit argument.  *)
                let rec remove_nexplicit args acc =
                  match args with
@@ -840,6 +844,9 @@ and _lexp_rec_decl decls ctx i =
       (* +1 because we allow each definition to be recursive *)
       (* lexp infer *)
       | Ldecl ((l, s), Some pxp, None) ->
+          (* Macro failure here *)
+          debug_print (Str "Lexp Rec Decl");
+          debug_print (Str s);
           let lxp, ltp = lexp_p_infer pxp tctx in
           lst := ((l, s), lxp, ltp)::!lst;
             (env_extend_rec (n - !i + 1) vctx (l, s) (LetDef lxp) ltp)
