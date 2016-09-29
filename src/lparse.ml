@@ -433,7 +433,7 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
                                   "Expected non-explicit arg"
            | t ->
             lexp_print t; print_string "\n";
-            print_lexp_ctx ctx;
+            print_lexp_ctx (ectx_to_lctx ctx);
             lexp_fatal (sexp_location sarg)
                             "Explicit arg to non-function") in
 

@@ -345,7 +345,7 @@ let main () =
             debug_lexp_decls flexps; print_string "\n"));
 
         (if (get_p_option "lctx") then(
-            print_lexp_ctx nctx; print_string "\n"));
+           print_lexp_ctx (ectx_to_lctx nctx); print_string "\n"));
 
         let clean_lxp = List.map OL.clean_decls lexps in
 

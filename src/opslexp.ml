@@ -45,16 +45,8 @@ let impredicative_erase = true (* Allows erasable args to be impredicative. *)
 
 (* Lexp context *)
 
-let lookup_type (ctx : DB.lexp_context) vref =
-  let (_, i) = vref in
-  let (_, _, _, t) = Myers.nth i ctx in
-  mkSusp t (S.shift (i + 1))
-
-let lookup_value (ctx : DB.lexp_context) vref =
-  let (_, i) = vref in
-  match Myers.nth i ctx with
-  | (o, _, LetDef v, _) -> Some (push_susp v (S.shift (i + 1 - o)))
-  | _ -> None
+let lookup_type  = DB.lctx_lookup_type
+let lookup_value = DB.lctx_lookup_value
 
 (********* Testing if two types are "convertible" aka "equivalent"  *********)
 
