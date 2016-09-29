@@ -118,6 +118,9 @@ let lexp_ctx_cons (ctx : lexp_context) offset d v t =
 let lctx_extend (ctx : lexp_context) (def: vdef) (v: varbind) (t: lexp) =
   lexp_ctx_cons ctx 0 (Some def) v t
 
+let ectx_extend_anon (ectx: elab_context) (t: lexp) : elab_context =
+  let ((n, map), lctx, f) = ectx in
+  ((n + 1, map), lexp_ctx_cons lctx 0 None Variable t, f)
 
 let env_extend_rec r (ctx: elab_context) (def: vdef) (v: varbind) (t: lexp) =
   let (loc, name) = def in
