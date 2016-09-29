@@ -500,9 +500,9 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
       (* When type.typer is being parsed and the predef is not yet available *)
       | None -> dltype, false     in
 
-    (*print_string "\nmacro_type="; lexp_print macro_type;
+      print_string "\nmacro_type="; lexp_print macro_type;
       print_string "\nltp="; lexp_print ltp;
-      print_string " (= "; lexp_print (OL.lexp_whnf ltp (ectx_to_lctx ctx)); print_string ")\n"; *)
+      print_string " (= "; lexp_print (OL.lexp_whnf ltp (ectx_to_lctx ctx)); print_string ")\n";
 
     (* determine function type *)
     match func, ltp with

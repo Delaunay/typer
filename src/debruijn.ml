@@ -261,8 +261,10 @@ let _env_lookup ctx (v: vref): env_elem  =
 
 let env_lookup_type ctx (v : vref): lexp =
   let (_, idx) = v in
-  let (_, _, _, ltp) = _env_lookup ctx v in
-    mkSusp ltp (S.shift (idx + 0))
+  let (r, _, _, ltp) = _env_lookup ctx v in
+    (L.push_susp ltp (S.shift (idx + 1)))
+
+    (* mkSusp ltp (S.shift (idx + 1)) *)
 
 let env_lookup_expr ctx (v : vref): lexp option =
   let (_, idx) = v in
