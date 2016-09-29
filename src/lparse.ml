@@ -819,9 +819,7 @@ and _lexp_rec_decl decls ctx i =
    * i.e let decl parsing *)
 
   (* to compute recursive offset *)
-  let n = (List.length decls) in
   let lst = ref [] in
-  (* print_int n; print_string "\n"; *)
 
   (* add all elements to the environment *)
   let tctx = List.fold_left (fun vctx decl ->
@@ -837,9 +835,9 @@ and _lexp_rec_decl decls ctx i =
         lexp_fatal dloc "use lexp_decl_macro to parse macro decls") ctx decls in
 
         (* ectx_extend_rec (ctx: elab_context) (defs: (vdef * lexp * ltype) list) *)
-  let i = ref 0 in
+  let i = ref (1 + List.length decls) in
   let ctx = List.fold_left (fun vctx decl ->
-    i := !i + 1;
+    i := !i - 1;
     match decl with
       (* +1 because we allow each definition to be recursive *)
       (* lexp infer *)
@@ -849,14 +847,14 @@ and _lexp_rec_decl decls ctx i =
           debug_print (Str s);
           let lxp, ltp = lexp_p_infer pxp tctx in
           lst := ((l, s), lxp, ltp)::!lst;
-            (env_extend_rec (n - !i + 1) vctx (l, s) (LetDef lxp) ltp)
+          (env_extend_rec (!i) vctx (l, s) (LetDef lxp) ltp)
 
       (* lexp check *)
       | Ldecl ((l, s), Some pxp, Some ptp) ->
-          let ltp, _ = lexp_p_infer ptp vctx in
+          let ltp, _ = lexp_p_infer ptp tctx in
           let lxp = lexp_p_check pxp ltp tctx in
           lst := ((l, s), lxp, ltp)::!lst;
-            (env_extend_rec (n - !i + 1) vctx (l, s) (LetDef lxp) ltp)
+          (env_extend_rec (!i) vctx (l, s) (LetDef lxp) ltp)
 
       (* macros *)
       | Lmcall (a, sargs) ->
