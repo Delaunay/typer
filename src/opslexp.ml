@@ -50,6 +50,10 @@ let lookup_value = DB.lctx_lookup_value
 
 (********* Testing if two types are "convertible" aka "equivalent"  *********)
 
+let get_vardef lv = match lv with
+  | Some lv -> lv
+  | None -> (U.dummy_location, "<anon>")
+
 let rec conv_arglist_p s1 s2 args1 args2 : bool =
   List.fold_left2
     (fun eqp (ak1,t1) (ak2,t2) ->
@@ -78,8 +82,7 @@ and conv_p' (s1:lexp S.subst) (s2:lexp S.subst) e1 e2 : bool =
     | (e1, Susp (e2, s2')) -> conv_p' s1 (scompose s2' s2) e1 e2
     | (Arrow (ak1, vd1, t11, _, t12), Arrow (ak2, vd2, t21, _, t22))
       -> ak1 == ak2 && conv_p t11 t21
-        && conv_p' (match vd1 with None -> s1 | Some l -> ssink l s1)
-                  (match vd2 with None -> s2 | Some l -> ssink l s2)
+        && conv_p' (ssink (get_vardef vd1) s1) (ssink (get_vardef vd2) s2)
                   t12 t22
     | (Lambda (ak1, l1, t1, e1), Lambda (ak2, l2, t2, e2))
       -> ak1 == ak2 && conv_p t1 t2 && conv_p' (ssink l1 s1) (ssink l2 s2) e1 e2
@@ -181,7 +184,7 @@ let assert_type e t t' =
   if conv_p t t' then ()
   else U.msg_error "TC" (lexp_location e) "Type mismatch"; ()
 
-let rec sort_level_max l1 l2 = match l1, l2 with
+let rec sort_level_max l1 l2 = match nosusp l1, nosusp l2 with
   | SortLevel SLz, l2 -> l2
   | l1, SortLevel SLz -> l1
   | SortLevel (SLsucc l1), SortLevel (SLsucc l2)
@@ -189,8 +192,8 @@ let rec sort_level_max l1 l2 = match l1, l2 with
   | _, _ (* FIXME: This requires s.th. like `SLmax of lexp * lexp`!  *)
     -> U.msg_error "TC" (lexp_location l1)
                   ("Can't compute the max of levels `"
-                  ^ lexp_to_string l1 ^ "` and `"
-                  ^ lexp_to_string l2 ^ "`");
+                   ^ lexp_to_str l1 ^ "` and `"
+                   ^ lexp_to_str l2 ^ "`");
       SortLevel SLz
 
 let sort_compose l s1 s2 =
@@ -235,8 +238,11 @@ let rec check ctx e =
                                               "Def type is not a type!"; ()));
                           DB.lctx_extend ctx v ForwardRef t)
                        ctx defs in
-      let _ = List.iter (fun (v, e, t) -> assert_type e t (check tmp_ctx e))
-                        defs in
+      let _ = List.fold_left (fun n (v, e, t)
+                              -> assert_type e (push_susp t (S.shift n))
+                                            (check tmp_ctx e);
+                                n - 1)
+                             (List.length defs) defs in
       let new_ctx = DB.lctx_extend_rec ctx defs in
       check new_ctx e
   | Arrow (ak, v, t1, l, t2)
@@ -265,7 +271,7 @@ let rec check ctx e =
     -> let ft = check ctx f in
       List.fold_left (fun ft (ak,arg)
                    -> let at = check ctx arg in
-                     match ft with
+                     match lexp_whnf ft ctx with
                      | Arrow (ak', v, t1, l, t2)
                        -> if not (ak == ak') then
                             (U.msg_error "TC" (lexp_location arg)
@@ -274,33 +280,40 @@ let rec check ctx e =
                          assert_type arg t1 at;
                          mkSusp t2 (S.substitute arg)
                      | _ -> (U.msg_error "TC" (lexp_location arg)
-                                        "Calling a non function!"; ft))
+                                        ("Calling a non function (type = "
+                                         ^ lexp_to_str ft ^ ")!");
+                            ft))
                   ft args
   | Inductive (l, label, args, cases)
-    -> let level = SMap.fold
-                    (fun _ case level ->
-                      List.fold_left
-                        (fun level (ak, _, t) ->
-                          if ak == P.Aerasable && impredicative_erase
-                          then level
-                          else match check ctx t with
-                               | Sort (_, Stype level')
-                                 (* FIXME: scoping of level vars!  *)
-                                 -> sort_level_max level level'
-                               | _ -> U.msg_error "TC" (lexp_location t)
-                                                 "Field type is not a Type!";
-                                 SortLevel SLz)
-                        level
-                        case)
-                    cases (SortLevel SLz) in
-      let rec arg_loop args ctx =
+    -> let rec arg_loop args ctx =
         match args with
-        | [] -> Sort (l, Stype level)
+        | []
+          -> let level
+              = SMap.fold
+                  (fun _ case level ->
+                    List.fold_left
+                      (fun level (ak, _, t) ->
+                        if ak == P.Aerasable && impredicative_erase
+                        then level
+                        else match lexp_whnf (check ctx t) ctx with
+                             | Sort (_, Stype level')
+                               (* FIXME: scoping of level vars!  *)
+                               -> sort_level_max level level'
+                             | tt -> U.msg_error "TC" (lexp_location t)
+                                               ("Field type "
+                                                ^ lexp_to_str t
+                                                ^ " is not a Type! ("
+                                               ^ lexp_to_str tt ^")");
+                                   DB.print_lexp_ctx ctx;
+                                   SortLevel SLz)
+                      level
+                      case)
+                  cases (SortLevel SLz) in
+            Sort (l, Stype level)
         | (ak, v, t)::args
           -> Arrow (ak, Some v, t, lexp_location t,
                    arg_loop args (DB.lctx_extend ctx v Variable t)) in
       let tct = arg_loop args ctx in
-      (* FIXME: Check cases!  *)
       tct
   | Case (l, e, it, ret, branches, default)
     -> let rec call_split e =

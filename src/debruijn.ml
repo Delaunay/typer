@@ -54,9 +54,6 @@ type property_key = (int * string)  (* rev_dbi * Var name *)
 module PropertyMap
     = Map.Make (struct type t = property_key let compare = compare end)
 
-module StringMap
-    = Map.Make (struct type t = string let compare = String.compare end)
-
 (* (* rev_dbi * Var name *) => (name * lexp) *)
 type property_elem = lexp PropertyMap.t
 type property_env = property_elem PropertyMap.t
@@ -70,7 +67,7 @@ type db_idx  = int (* DeBruijn index.  *)
 type db_ridx = int (* DeBruijn reverse index (i.e. counting from the root).  *)
 
 (*  Map matching variable name and its distance in the current scope *)
-type scope = db_ridx StringMap.t  (*  Map<String, db_ridx>*)
+type scope = db_ridx SMap.t  (*  Map<String, db_ridx>*)
 
 type senv_length = int  (* it is not the map true length *)
 type senv_type = senv_length * scope
@@ -86,7 +83,7 @@ let ectx_to_lctx (ectx : elab_context) : lexp_context =
 (*  internal definitions
  * ---------------------------------- *)
 
-let _make_scope = StringMap.empty
+let _make_scope = SMap.empty
 let _make_senv_type = (0, _make_scope)
 let _make_myers = M.nil
 
@@ -102,7 +99,7 @@ let get_size ctx = let ((n, _), _, _) = ctx in n
 (*  return its current DeBruijn index *)
 let rec senv_lookup (name: string) (ctx: elab_context): int =
     let ((n, map), _, _) = ctx in
-    let raw_idx =  n - (StringMap.find name map) - 1 in (*
+    let raw_idx =  n - (SMap.find name map) - 1 in (*
         if raw_idx > (n - csize) then
             raw_idx - rof   (* Shift if the variable is not bound *)
         else *)
@@ -118,22 +115,25 @@ let lexp_ctx_cons (ctx : lexp_context) offset d v t =
 let lctx_extend (ctx : lexp_context) (def: vdef) (v: varbind) (t: lexp) =
   lexp_ctx_cons ctx 0 (Some def) v t
 
-let ectx_extend_anon (ectx: elab_context) (t: lexp) : elab_context =
-  let ((n, map), lctx, f) = ectx in
-  ((n + 1, map), lexp_ctx_cons lctx 0 None Variable t, f)
-
 let env_extend_rec r (ctx: elab_context) (def: vdef) (v: varbind) (t: lexp) =
   let (loc, name) = def in
   let ((n, map), env, f) = ctx in
   (try let _ = senv_lookup name ctx in
        debruijn_warning loc ("Variable Shadowing " ^ name);
    with Not_found -> ());
-  let nmap = StringMap.add name n map in
+  let nmap = SMap.add name n map in
   ((n + 1, nmap),
    lexp_ctx_cons env r (Some def) v t,
    f)
 
 let env_extend (ctx: elab_context) (def: vdef) (v: varbind) (t: lexp) = env_extend_rec 0 ctx def v t
+
+let ectx_extend (ectx: elab_context) (def: vdef option) (v: varbind) (t: lexp)
+    : elab_context =
+  match def with
+  | None -> let ((n, map), lctx, f) = ectx in
+           ((n + 1, map), lexp_ctx_cons lctx 0 None v t, f)
+  | Some def -> env_extend ectx def v t
 
 let lctx_extend_rec (ctx : lexp_context) (defs: (vdef * lexp * ltype) list) =
   let (ctx, _) =
@@ -145,20 +145,12 @@ let lctx_extend_rec (ctx : lexp_context) (defs: (vdef * lexp * ltype) list) =
   ctx
 
 let ectx_extend_rec (ctx: elab_context) (defs: (vdef * lexp * ltype) list) =
-  (* FIXME: Use lctx_extend_rec!  *)
-  List.fold_left
-    (fun (ctx, recursion_offset) (def, e, t) ->
-      let (loc, name) = def in
-      let ((n, map), env, f) = ctx in
-      (try let _ = senv_lookup name ctx in
-           debruijn_warning loc ("Variable Shadowing " ^ name);
-       with Not_found -> ());
-      let nmap = StringMap.add name n map in
-      ((n + 1, nmap),
-       lexp_ctx_cons env recursion_offset (Some def) (LetDef e) t,
-       f),
-      recursion_offset - 1)
-    (ctx, List.length defs) defs
+  let ((n, senv), lctx, f) = ctx in
+  let senv', _ = List.fold_left
+                   (fun (senv, i) ((_, vname), _, _) ->
+                     SMap.add vname i senv, i + 1)
+                   (senv, n) defs in
+  ((n + List.length defs, senv'), lctx_extend_rec lctx defs, f)
 
 let env_lookup_by_index index (ctx: lexp_context): env_elem =
   Myers.nth index ctx
@@ -170,15 +162,14 @@ let print_lexp_ctx (ctx : lexp_context) =
     print_string (make_title " LEXP CONTEXT ");
 
     make_rheader [
-        (Some ('l', 10), "NAME");
         (Some ('l',  7), "INDEX");
         (Some ('l', 10), "NAME");
         (Some ('l',  4), "OFF");
-        (Some ('l', 29), "VALUE:TYPE")];
+        (Some ('l', 40), "VALUE:TYPE")];
 
     print_string (make_sep '-');
 
-    (* it is annoying to print according to StringMap order *)
+    (* it is annoying to print according to SMap order *)
     (* let's use myers list order *)
     let rec extract_names (lst: lexp_context) acc =
         match lst with
@@ -196,8 +187,7 @@ let print_lexp_ctx (ctx : lexp_context) =
             | [] -> ()
             | hd::tl ->(
 
-        print_string "    | ";  lalign_print_string hd 10;
-        print_string    " | ";  lalign_print_int (n - idx - 1) 7;
+        print_string "    | ";  lalign_print_int (n - idx - 1) 7;
         print_string    " | ";
 
         let ptr_str = "" in (*"    |            |         |            | " in *)
@@ -205,7 +195,8 @@ let print_lexp_ctx (ctx : lexp_context) =
         try let r, name, exp, tp =
               match env_lookup_by_index (n - idx - 1) ctx with
                 | (r, Some (_, name), LetDef exp, tp) -> r, name, Some exp, tp
-                | _ -> 0, "", None, dltype in
+                | (r, Some (_, name), _, tp) -> r, name, None, tp
+                | (r, _, _, tp) -> r, "", None, tp in
 
             (*  Print env Info *)
             lalign_print_string name 10; (*   name must match *)
@@ -234,13 +225,6 @@ let print_lexp_ctx (ctx : lexp_context) =
     _print 0 ord; print_string (make_sep '=')
 
 
-let _name_error loc estr str ctx =
-    if estr = str then () else (
-     print_lexp_ctx ctx;
-    debruijn_error loc ("DeBruijn index refers to wrong name. " ^
-                      "Expected: \"" ^ estr ^ "\" got \"" ^ str ^ "\""))
-
-
 (* generic lookup *)
 let lctx_lookup (ctx : lexp_context) (v: vref): env_elem  =
     let ((loc, ename), dbi) = v in
@@ -248,13 +232,20 @@ let lctx_lookup (ctx : lexp_context) (v: vref): env_elem  =
     try(let ret = (Myers.nth dbi ctx) in
         let _ = match ret with
           | (_, Some (_, name), _, _) ->
-              (* Check if names match *)
-              _name_error loc ename name ctx;
+             (* Check if names match *)
+               if not (ename = name) then
+                 (print_lexp_ctx ctx;
+                  debruijn_error loc ("DeBruijn index "
+                                      ^ string_of_int dbi
+                                      ^ " refers to wrong name.  "
+                                      ^ "Expected: `" ^ ename
+                                      ^ "` got `" ^ name ^ "`"))
           | _ -> () in
 
         ret)
     with
-        Not_found -> debruijn_error loc "DeBruijn index out of bounds!"
+      Not_found -> debruijn_error loc ("DeBruijn index "
+                                      ^ string_of_int dbi ^ " out of bounds!")
 
 
 

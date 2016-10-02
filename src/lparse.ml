@@ -86,21 +86,38 @@ type mdecl =
   | Ldecl of symbol * pexp option * pexp option
   | Lmcall of symbol * sexp list
 
-let ctx_define (ctx: elab_context) var lxp ltype =
-  let (_, cctx, _) = ctx in
-  if OL.conv_p ltype (OL.check cctx lxp) then
-    env_extend ctx var (LetDef lxp) ltype
+let elab_check_def (ctx : lexp_context) var lxp ltype =
+  if OL.conv_p ltype (OL.check ctx lxp) then
+    ()                          (* FIXME: Check ltype as well!  *)
   else
     (print_string "¡¡ctx_define error!!\n";
      lexp_print lxp;
      print_string " !: ";
      lexp_print ltype;
      print_string "\nbecause\n";
-     lexp_print (OL.check cctx lxp);
+     lexp_print (OL.check ctx lxp);
      print_string " != ";
      lexp_print ltype;
      print_string "\n";
      lexp_fatal (let (l,_) = var in l) "TC error")
+
+let ctx_define (ctx: elab_context) var lxp ltype =
+  elab_check_def (ectx_to_lctx ctx) var lxp ltype;
+  env_extend ctx var (LetDef lxp) ltype
+
+let ctx_define_rec (ctx: elab_context) decls =
+  let nctx = ectx_extend_rec ctx decls in
+  (* FIXME: conv_p fails too often, e.g. it fails to see that `Type` is
+   * convertible to `Type_0`, because it doesn't have access to lctx.
+   *
+   * let nlctx = ectx_to_lctx nctx in
+   * let _ = List.fold_left (fun n (var, lxp, ltp)
+   *                         -> elab_check_def nlctx var lxp
+   *                                          (push_susp ltp (S.shift n));
+   *                           n - 1)
+   *                        (List.length decls)
+   *                        decls in *)
+  nctx
 
 (*  The main job of lexp (currently) is to determine variable name (index)
  *  and to regroup type specification with their variable
@@ -173,7 +190,7 @@ and _lexp_p_infer (p : pexp) (ctx : elab_context) i: lexp * ltype =
                 let ltp = env_lookup_type ctx ((loc, name), idx) in
                     lxp, ltp (* Return Macro[22] *)
 
-            with e ->
+            with Not_found ->
                 (lexp_error loc ("The variable: \"" ^ name ^ "\" was not declared");
                 (* Error recovery. The -1 index will raise an error later on *)
                 (make_var name (-1) loc), dltype))
@@ -187,9 +204,7 @@ and _lexp_p_infer (p : pexp) (ctx : elab_context) i: lexp * ltype =
         (* ------------------------------------------------------------------ *)
         | Parrow (kind, ovar, tp, loc, expr) ->
             let ltp, _ = lexp_infer tp ctx in
-            let nctx = match ovar with
-                | None -> ectx_extend_anon ctx ltp
-                | Some var -> env_extend ctx var Variable ltp in
+            let nctx = ectx_extend ctx ovar Variable ltp in
 
             let lxp, _ = lexp_infer expr nctx in
 
@@ -210,8 +225,12 @@ and _lexp_p_infer (p : pexp) (ctx : elab_context) i: lexp * ltype =
                 ) formal_args in
 
             let nctx = !nctx in
-            let ltp = List.fold_left (fun tp (kind, _, _) ->
-                (Arrow(kind, None, type0, tloc, tp))) type0 formal in
+            let ltp = List.fold_left (fun tp (kind, v, ltp)
+                                      -> (Arrow (kind, Some v, ltp, tloc, tp)))
+                                     (* FIXME: See OL.check for how to
+                                      * compute the real target sort
+                                      * (not always type0).  *)
+                                     type0 (List.rev formal) in
 
             let map_ctor = lexp_parse_inductive ctors nctx i in
             let v = Inductive(tloc, label, formal, map_ctor) in
@@ -251,12 +270,30 @@ and _lexp_p_infer (p : pexp) (ctx : elab_context) i: lexp * ltype =
               | _ -> lexp_error loc "Not an Inductive Type"; [], [] in
 
             (* build Arrow type *)
-            let cons_type = List.fold_left (fun ltp (kind, v, tp) ->
-                                Arrow(kind, v, tp, loc, ltp)) idt (List.rev args) in
+            let target = if formal = [] then
+                           push_susp idt (S.shift (List.length args))
+                         else
+                           let targs, _ =
+                             List.fold_right
+                               (fun (ak, v, _) (targs, i)
+                                -> ((ak, Var (v, i)) :: targs,
+                                   i - 1))
+                               formal
+                               ([], List.length formal + List.length args - 1) in
+                           Call (push_susp idt (S.shift (List.length formal
+                                                         + List.length args)),
+                                 targs) in
+            let cons_type
+              = List.fold_left (fun ltp (kind, v, tp)
+                                -> Arrow (kind, v, tp, loc, ltp))
+                               target
+                               (List.rev args) in
 
             (* Add Aerasable argument *)
-            let cons_type = List.fold_left (fun ltp (kind, v, tp) ->
-                                Arrow(Aerasable, Some v, tp, loc, ltp)) cons_type (List.rev formal) in
+            let cons_type = List.fold_left
+                              (fun ltp (kind, v, tp)
+                               -> Arrow (Aerasable, Some v, tp, loc, ltp))
+                              cons_type (List.rev formal) in
 
             Cons(idt, sym), cons_type
 
@@ -416,7 +453,7 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
                handle_fun_args ((ak, larg) :: largs) sargs
                                (L.mkSusp ret_type (S.substitute larg))
            | _ -> lexp_fatal (sexp_location sarg)
-                            "Explicit arg to non-function")
+                            ("Explicit arg `" ^ aname ^ "` to non-function (type = " ^ lexp_to_str ltp ^ ")"))
       | sarg :: sargs
         (*  Process Argument *)
         -> (match OL.lexp_whnf ltp (ectx_to_lctx ctx) with
@@ -433,7 +470,8 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
             lexp_print t; print_string "\n";
             print_lexp_ctx (ectx_to_lctx ctx);
             lexp_fatal (sexp_location sarg)
-                            "Explicit arg to non-function") in
+                       ("Explicit arg `" ^ sexp_to_str sarg
+                        ^ "` to non-function (type = " ^ lexp_to_str ltp ^ ")")) in
 
     let handle_funcall () =
       (* Here we use lexp_whnf on actual code, but it's OK
@@ -509,7 +547,10 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
             let largs = _lexp_parse_all pargs ctx i in
               (get_macro_impl loc name) loc largs ctx ltp
 
-      | macro, _ when (macro_disp && (OL.conv_p ltp macro_type))-> (
+      | macro, _ when (macro_disp
+                       (* FIXME: This call to lexp_whnf shouldn't be needed!  *)
+                       && OL.conv_p (OL.lexp_whnf ltp (ectx_to_lctx ctx))
+                                   macro_type) -> (
         match macro with
           | Pvar(l, name) when is_builtin_macro name ->
             let pargs = List.map pexp_parse sargs in
@@ -635,11 +676,8 @@ and lexp_parse_inductive ctors ctx i =
                     match hd with
                     | (kind, var, exp) ->
                        let lxp, _ = lexp_parse exp ctx in
-                       match var with
-                         | None -> loop tl ((kind, None, lxp)::acc) ctx
-                         | Some (var) ->
-                            let nctx = env_extend ctx var Variable dltype in
-                            loop tl ((kind, Some var, lxp)::acc) nctx
+                       let nctx = ectx_extend ctx var Variable dltype in
+                       loop tl ((kind, var, lxp)::acc) nctx
                   end in
         loop args [] ctx in
 
@@ -667,7 +705,7 @@ and lexp_decls_macro (loc, mname) sargs ctx: (pdecl list * elab_context) =
     | Some (Call(Var((_, "Macro_"), _), [(_, fct)])) -> fct
     | None -> lexp_fatal loc "expression does not exist"
     | Some lxp -> print_string "\n";
-      print_string (lexp_to_string lxp); print_string "\n";
+      print_string (lexp_to_str lxp); print_string "\n";
       lexp_print lxp; print_string "\n";
       lexp_fatal loc "Macro is ill formed" in
 
@@ -684,6 +722,8 @@ and lexp_decls_macro (loc, mname) sargs ctx: (pdecl list * elab_context) =
 
           let ctx = add_property ctx var att fn in
 
+          (* FIXME: We need to have something in lexp to represent this
+           * add-attribute operation!  *)
           [], ctx
         )
         (* Standard Macro *)
