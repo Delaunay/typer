@@ -305,7 +305,7 @@ let rec push_susp e s =            (* Push a suspension one level down.  *)
   | Call (f, args) -> Call (mkSusp f s,
                            L.map (fun (ak, arg) -> (ak, mkSusp arg s)) args)
   | Inductive (l, label, args, cases)
-    -> let (_, nargs) = L.fold_left (fun (s, nargs) (ak, v, t)
+    -> let (s, nargs) = L.fold_left (fun (s, nargs) (ak, v, t)
                                     -> (ssink v s, (ak, v, mkSusp t s) :: nargs))
                                    (s, []) args in
       let ncases = SMap.map (fun args
@@ -315,7 +315,7 @@ let rec push_susp e s =            (* Push a suspension one level down.  *)
                                                    (ak, v, mkSusp t s)
                                                    :: nargs))
                                                (s, []) args in
-                               ncase)
+                               L.rev ncase)
                             cases in
       Inductive (l, label, nargs, ncases)
   | Cons (it, name) -> Cons (mkSusp it s, name)
@@ -703,7 +703,8 @@ and _lexp_to_str ctx exp =
                 (kind_str k) ^ " " ^ (lexp_to_str expr)
 
         | Arrow(k, None, tp, loc, expr) ->
-            (lexp_to_str tp) ^ " " ^ (kind_str k) ^ " " ^ (lexp_to_str expr)
+           "(" ^ (lexp_to_str tp) ^ " "
+           ^ (kind_str k) ^ " " ^ (lexp_to_str expr) ^ ")"
 
         | Lambda(k, (loc, name), ltype, lbody) ->
             let arg = "(" ^ name ^ " : " ^ (lexp_to_str ltype) ^ ")" in
@@ -788,16 +789,17 @@ and _lexp_to_str ctx exp =
 
         | Builtin ((_, name), _) -> name
 
-        | Sort (_, Stype lvl) -> (match lvl with
-            | SortLevel SLz -> "Type_0"
-            | _ -> "Type_?")
+        | Sort (_, Stype (SortLevel SLz)) -> "Type_0"
+        | Sort (_, Stype _) -> "Type_?"
+        | Sort (_, StypeOmega) -> "Type_ω"
+        | Sort (_, StypeLevel) -> "Type_Level"
 
-        | _ -> print_string "Printing Not Implemented\n"; "-- --"
+        | SortLevel (SLz) -> "<Level0>"
+        | SortLevel (SLsucc e) -> "<LevelS?>"
 
 and lexp_str_ctor ctx ctors =
     SMap.fold (fun key value str ->
         let str = str ^ " (" ^ key in
-
         let str = List.fold_left (fun str (k, _, arg) ->
             str ^ " " ^ (_lexp_to_str ctx arg)) str value in
 

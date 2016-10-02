@@ -260,7 +260,7 @@ let _ = (add_test "EVAL" "Infinite Recursion failure" (fun () ->
 
     let code = "
         infinity : Int -> Int;
-        infinity = lambda (beyond : Int) -> (infinity beyond);" in
+        infinity = lambda beyond -> infinity beyond;" in
 
     let rctx, lctx = eval_decl_str code lctx rctx in
 
