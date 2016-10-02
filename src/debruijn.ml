@@ -252,7 +252,7 @@ let lctx_lookup (ctx : lexp_context) (v: vref): env_elem  =
 let lctx_lookup_type (ctx : lexp_context) (vref : vref) : lexp =
   let (_, i) = vref in
   let (_, _, _, t) = lctx_lookup ctx vref in
-  mkSusp t (S.shift (i + 1))
+  mkSusp t (S.shift (i + 0))
 
 let lctx_lookup_value (ctx : lexp_context) (vref : vref) : lexp option =
   let (_, i) = vref in

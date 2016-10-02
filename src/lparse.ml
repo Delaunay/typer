@@ -536,17 +536,12 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
       (* When type.typer is being parsed and the predef is not yet available *)
       | None -> dltype, false     in
 
-
+    (*)
     lexp_print ltp; print_string "\n";
-    print_string (if (OL.conv_p ltp macro_type) then "true" else "false"); print_string "\n";
+    print_string (if (OL.conv_p ltp macro_type) then "true" else "false"); print_string "\n"; *)
 
     (* determine function type *)
     match func, ltp with
-      | Pvar(l, name), _ when is_builtin_macro name ->
-            let pargs = List.map pexp_parse sargs in
-            let largs = _lexp_parse_all pargs ctx i in
-              (get_macro_impl loc name) loc largs ctx ltp
-
       | macro, _ when (macro_disp
                        (* FIXME: This call to lexp_whnf shouldn't be needed!  *)
                        && OL.conv_p (OL.lexp_whnf ltp (ectx_to_lctx ctx))
@@ -882,9 +877,8 @@ and _lexp_rec_decl decls ctx i =
       (* +1 because we allow each definition to be recursive *)
       (* lexp infer *)
       | Ldecl ((l, s), Some pxp, None) ->
-          (* Macro failure here *)
-          debug_print (Str "Lexp Rec Decl");
-          debug_print (Str s);
+          (* debug_print (Str "Lexp Rec Decl");
+             debug_print (Str s); *)
           let lxp, ltp = lexp_p_infer pxp tctx in
           lst := ((l, s), lxp, ltp)::!lst;
           (env_extend_rec (!i) vctx (l, s) (LetDef lxp) ltp)
