@@ -1,0 +1,38 @@
+\chapter{Le langage \typer{}}
+
+    \section{Présentation du langage}
+        \structpar{Description}
+        \typer{} est un langage de programmation fonctionnel pur. Il est total, typé statiquement et avec des types dépendants.
+        Les macros de \typer{} permettent de faire de la méta-programmation et d'étendre le langage
+
+        Dans la suite du rapport, \say{\typer{}} fera référence au langage \typer{} et \say{le compilateur \typer{}} fera référence au compilateur
+        interprétant le langage \typer{}
+
+        \structpar{Inspirations}
+        \typer{} est inspiré de \textit{Lisp}, \textit{Coq} et \textit{ML}.
+        Il est conceptuellement proche de \textit{Coq} (langage pur, total, typé statiquement et avec des types dépendants). Cependant, le but de \typer{}
+        est d'écrire des programmes et non des preuves.
+        Le système de macros de \typer{} est inspiré de \textit{Lisp}, il permet d'étendre facilement le langage
+        en manipulant le code comme des données. De plus, comme pour \textit{Lisp}, la syntaxe de \typer{} est stratifiée.
+        La syntaxe du code est proche de la syntaxe de \textit{ML}. L'inférence de type de \typer{} est un sur-ensemble de l'inférence de type
+        \textit{Hindley-Milner}
+        \structpar{Spécificités}
+        Les macros de \typer{} devraient, à terme, pouvoir être utilisées pour construire des preuves de programmes. % TODO : etoffer
+
+    \section{Motivations}
+        \typer{} est un langage dont le but est de fournir des moyens d'écrire du code sûr.
+        En effet, les outils qu'il devrait fournir, à terme, facilitent l'écriture de code correct.
+        Par exemple, le compilateur de \typer{} peut vérifier qu'il n'y aura pas de récursion infinie.
+        De plus, les macros du langage devrait permettre, à terme, d'écrire des preuves de code.
+
+    \section{État de l'implémentation}
+        \structpar{Avant}
+        Au début de mon stage, les bases du langage étaient implémentées:
+        la définition et l'appel de lambda, la création de type ainsi que la création de variables étaient supportées par le compilateur.
+        L'inférence de type n'étant pas implémentée, le compilateur requérait le typage explicite des variables et des paramètres de fonction.
+        Le compilateur fournissait peu de fonctions et opérations.
+
+        \structpar{Après}
+        \`A la fin du stage, une version basique de l'inférence de type était en cours d'intégration: il restait quelques bogues à résoudre avant que
+        cette version soit fonctionnelle. En effet, l'intégration de l'unification à système de typage a requis certaines modifications dans
+        ce système. Ces modifications ont entrainées des erreurs qui n'ont pas pu être résolues à temps.

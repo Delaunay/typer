@@ -1,0 +1,173 @@
+\documentclass[a4paper, 15pt]{report}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[pdftex]{graphicx}
+\usepackage[backend=biber]{biblatex}
+\usepackage[left=2cm,right=2cm,top=2.5cm,bottom=2cm]{geometry}
+\usepackage{amssymb}
+\usepackage{amsmath}
+\usepackage{hyperref}
+\usepackage{multirow}
+\usepackage{booktabs}
+\usepackage{makeidx}
+\usepackage{filecontents}
+\usepackage{listings}
+\usepackage{color}
+\usepackage{verbatim}
+\usepackage[toc]{glossaries}
+\usepackage{newunicodechar} % for \newunicodechar
+\usepackage{title}
+\usepackage{siunitx}
+\usepackage[french]{babel}
+\usepackage[left=\flqq, right=\frqq, leftsub=\flqq, rightsub=\frqq]{dirtytalk}
+
+\begin{filecontents*}{\jobname.bib}
+@misc{
+    udemnum,
+    title = { http://recteur.umontreal.ca/documents-institutionnels/faits-et-chiffres/}
+}
+@misc{
+    wikinum,
+    title = { http://fin.umontreal.ca/direction-finances/etats-financiers/documents/ef\_udem\_2014\_000.pdf }
+}
+\end{filecontents*}
+
+\addto\captionsfrench{\renewcommand{\chaptername}{Partie}}
+
+\addbibresource{\jobname.bib}
+
+\lstset{language=caml,
+                basicstyle=\ttfamily,
+                keywordstyle=\color{blue}\ttfamily,
+                stringstyle=\color{red}\ttfamily,
+                commentstyle=\color{green}\ttfamily,
+                morecomment=[l][\color{magenta}]{\#}
+}
+
+\newcommand{\subsubsubsection}{\paragraph}
+\renewcommand{\paragraph}{\subparagraph}
+\setcounter{secnumdepth}{3}
+
+\newcommand{\udem}{Université de Montréal}
+\newcommand{\typer}{\textit{Typer}}
+\newcommand{\sexpgl}{\texttt{S-exp}}
+\newcommand{\lexpgl}{\texttt{L-exp}}
+\newcommand{\pexpgl}{\texttt{P-exp}}
+
+\newunicodechar{≡}{\ensuremath{\equiv}}
+\newunicodechar{α}{\ensuremath{\alpha}}
+
+\title{Stage de quatrième année}
+\subtitle{Développement d'inférence de type pour le langage Typer}
+\author{BONNEVALLE Vincent}
+\tuteurPoly{Guillaume Raschia}
+\tuteurEntr{Stéfan Monnier}
+\scolaryear{2015 -- 2016}
+\thisyear{4}
+\logo{%
+\includegraphics[scale=0.5]{./img/udem.png}}{%
+\includegraphics[scale=0.5]{./img/univ-nantes.png}}{%
+\includegraphics[scale=0.5]{./img/polytech.png}%
+}
+
+\makeindex
+\makeglossaries
+\input{./glossary.tex}
+
+\newcommand{\sexp}{\gls{sexp}\index{sexp@S-Expression}}
+\newcommand{\lexp}{\gls{lexp}\index{lexp@Lambda-Expression}}
+\newcommand{\pexp}{\gls{pexp}\index{pexp@P-Expression}}
+\newcommand{\hop}{\textit{High Order Pattern}}
+
+\newboolean{release}
+\newcommand{\release}[1]{\setboolean{release}{#1}}
+\newcommand{\structpar}[1]{%
+    \ifthenelse{\boolean{release}}%
+    {\paragraph{}}%
+    {\paragraph{#1}}%
+}
+
+\newboolean{outline}
+\newcommand{\outline}[1]{\setboolean{outline}{#1}}
+
+\release{true}
+\outline{false}
+%% \par est équivalent à une ligne blanche
+
+\begin{document}
+    \maketitle
+    \tableofcontents
+    \clearpage
+
+    \input{remerciements.tex}
+    \input{pres-univ.tex}
+    \input{gest-proj.tex}
+    \input{typer.tex}
+    \input{infer.tex}
+    \input{cc.tex}
+    \clearpage
+
+    \appendix
+    \thispagestyle{empty}
+    \pagenumbering{roman}
+
+    % TODO : remplir les parties dessous
+    % TODO : rajouter les citations ...
+    % \listoftables
+    \listoffigures
+
+    \clearpage
+    \chapter*{Annexes}
+    \begin{figure}[h]
+        \centering
+        \verbatiminput{test2.typer}
+        \caption{Exemple de code typer}
+        \label{code:typer}
+    \end{figure}
+    \clearpage
+    \begin{figure}[h]
+        \centering
+    \begin{lstlisting}[language=caml]
+type ltype = lexp
+ and lexp =
+   | Imm of sexp
+   | SortLevel of sort_level
+   | Sort of U.location * sort
+   | Builtin of vdef * ltype
+   | Var of vref
+   | Susp of lexp * subst
+   | Let of U.location * (vdef * lexp * ltype) list * lexp
+   | Arrow of arg_kind * vdef option * ltype * U.location * lexp
+   | Lambda of arg_kind * vdef * ltype * lexp
+   | Call of lexp * (arg_kind * lexp) lis
+   | Inductive of U.location * label
+                  * ((arg_kind * vdef * ltype) list)
+                  * ((arg_kind * vdef option * ltype) list) SMap.t
+   | Cons of vref * symbol
+   | Case of U.location * lexp
+             * ltype
+             * ltype
+             * (U.location * (arg_kind * vdef option) list * lexp) SMap.t
+             * lexp option
+   | Metavar of int * subst * vdef
+    \end{lstlisting}
+        \caption{Définition des \lexp{}}
+        \label{fig:ocmllxp}
+    \end{figure}
+    \begin{figure}[h]
+        \centering
+    \begin{lstlisting}[language=caml]
+type substitution = lexp VMap.t (* VMap.t est une table associative *)
+type constraints  = (lexp * lexp) list
+type unification_ctx = (substitution * constraints)
+    \end{lstlisting}
+        \caption{Contexte d'unification}
+        \label{fig:ctxunif}
+    \end{figure}
+    \clearpage
+
+    \printindex
+    \printglossaries
+    \printbibliography
+\end{document}

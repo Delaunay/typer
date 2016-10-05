@@ -1,0 +1,66 @@
+\chapter{Gestion de Projet}
+
+\section{Planning}
+
+\structpar{planning}
+Le stage a été découpé en quatre parties.
+
+\begin{figure}[!h]
+    \centering
+    \caption{Planning du stage}
+\label{tab:plan}
+    \begin{tabular}{|l | l | l |}
+        \toprule
+        partie & durée & résumé \\
+        \midrule
+        première partie & une semaine & familiarisation avec le code et les outils utilisés\\
+        \midrule
+        deuxième partie & quatre semaines & Implémentation de l'unification de premier ordre\\
+        \midrule
+        troisième partie & trois semaines & Implémentation de l'inversion des substitutions d'index de \textit{de Bruijn}\\
+        \midrule
+        quatrième partie & quatre semaines & Intégration de l'unification dans l'inférence de type et résolution des bugs\\
+        \bottomrule
+    \end{tabular}
+\end{figure}
+
+Les deux dernières semaines ont été laissées libres pour être utilisées pour résoudre les problèmes survenus lors de
+l'implémentation des différentes parties ou au cas où une des parties du planning durerait plus longtemps que prévu.
+\structpar{gantt}
+\begin{figure}[!h]
+    \centering
+    \includegraphics[width=1\linewidth]{./plan-1.png}
+    \caption{Première partie du diagramme de Gantt}
+\label{fig:gant1}
+\end{figure}
+\begin{figure}[!h]
+    \centering
+    \includegraphics[width=1\linewidth]{./plan-2.png}
+    \caption{Deuxième partie du diagramme de Gantt}
+\label{fig:gant2}
+\end{figure}
+\structpar{rythmes des contacts}
+Le rythme des contacts avec mon tuteur de stage était d'une fois par semaine. Ces contacts servaient à
+faire un compte rendu de mon avancement durant cette semaine.
+De plus, je pouvais contacter mon tuteur en cas de besoin, pour résoudre un problème théorique par exemple.
+
+\section{Cahier des charges}
+
+\structpar{cahier des charges}
+Le but de ce stage était d'implémenter une première version d'inférence de type pour le compilateur
+du langage \typer{}.
+
+\structpar{définition de l'inférence de type}
+L'inférence de type est une technique permettant à un compilateur de déduire le type d'une expression.
+L'inférence de type de \typer{} doit permettre au système de type de fournir un typage fort.
+
+L'inférence de type de \typer{} est proche de l'inférence de type de \textit{Hindley-Milner} et doit permettre
+d'écrire du code sans aucune annotation de type.
+
+\structpar{contraintes techniques}
+Le code du compilateur de \typer{} est hébergé sur un dépôt gitlab.
+L'implémentation de l'inférence de type devait être codée dans le même langage que le compilateur: \texttt{ocaml}.
+Les outils de compilation et débogage étaient ceux fournis avec le compilateur \texttt{ocaml}: \texttt{ocamlbuild} et \texttt{make}
+pour la compilation et \texttt{ocamldebug} pour le débogage.
+
+Chaque partie du code devait être testée grâce à un framework de test créé pour le compilateur.
