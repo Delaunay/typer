@@ -497,7 +497,7 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
         let args = [(Aexplicit, body); (Aexplicit, (olist2tlist_lexp sargs ctx))] in
         let macro = Call(macro_expand, args) in
         let emacro = OL.erase_type macro in
-        let rctx = (from_lctx ctx 0) in
+        let rctx = from_lctx ctx in
 
         _global_eval_trace := [];
 
@@ -721,7 +721,7 @@ and lexp_decls_macro (loc, mname) sargs ctx: (pdecl list * elab_context) =
         let arg = olist2tlist_lexp sargs ctx in
         let lxp = Call(lxp, [(Aexplicit, arg)]) in
         let elexp = OL.erase_type lxp in
-        let rctx = (from_lctx ctx 0) in
+        let rctx = from_lctx ctx in
 
         (* get a list of declaration *)
         let decls = eval elexp rctx in

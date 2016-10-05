@@ -55,13 +55,17 @@ type value_type =
     | Vcons of symbol * value_type list
     | Vbuiltin of string
     | Vfloat of float
-    | Closure of string * elexp * (((string option * value_type) ref M.myers) * (int * int))
+    | Closure of string * elexp * runtime_env
     | Vsexp of sexp             (* Values passed to macros.  *)
     (* Unable to eval during macro expansion, only throw if the value is used *)
     | Vdummy
     | Vin of in_channel
     | Vout of out_channel
     | Vcommand of (unit -> value_type)
+ (*  Runtime Environ *)
+ and env_cell = (string option * (value_type ref))
+ and runtime_env = env_cell M.myers
+
 
 
 let rec value_equal a b =
@@ -138,26 +142,16 @@ let value_name v =
     | Vout _ -> "Vout"
     | Vcommand _ -> "Vcommand"
 
-(*  Runtime Environ *)
-type env_cell = (string option * value_type) ref
-type runtime_env = (env_cell M.myers) * (int * int)
+let make_runtime_ctx = M.nil
 
-let make_runtime_ctx = (M.nil, (0, 0))
-
-let get_rte_size (ctx: runtime_env): int = let (l, _) = ctx in M.length l
-
-let is_free_var idx ctx =
-    let (l, (osize, _)) = ctx in
-    let tsize = (get_rte_size ctx) - osize in
-        if idx > tsize then true else false
+let get_rte_size (ctx: runtime_env): int = M.length ctx
 
 let get_rte_variable (name: string option) (idx: int)
-                                (ctx: runtime_env): value_type =
-    let (l, _) = ctx in
+                     (ctx: runtime_env): value_type =
     try (
-        let ref_cell = (M.nth idx l) in
-        let (tn, x) = !ref_cell in
-    match (tn, name) with
+        let (defname, ref_cell) = (M.nth idx ctx) in
+        let x = !ref_cell in
+    match (defname, name) with
         | (Some n1, Some n2) -> (
             if n1 = n2 then
                 x
@@ -172,34 +166,21 @@ let get_rte_variable (name: string option) (idx: int)
         env_error dloc ("Variable lookup failure. Var: \"" ^
             n ^ "\" idx: " ^ (str_idx idx))
 
-let rte_shift vref ctx =
-    let (_, (osize, _)) = ctx in    (* number of variable declared outside *)
-    let csize = get_rte_size ctx in (* current size                        *)
-    let offset = csize - osize in
-    let ((loc, name), idx) = vref in
-    (* check if variable is free *)
-    let offset = if idx > offset then offset else 0 in
-    (* shift idx *)
-        idx + offset
+let add_rte_variable name (x: value_type) (ctx: runtime_env)
+    : runtime_env =
+  let valcell = ref x in
+  M.cons (name, valcell) ctx
 
-let add_rte_variable name (x: value_type) (ctx: runtime_env): runtime_env =
-    let (l, b) = ctx in
-    let lst = (M.cons (ref (name, x)) l) in
-        (lst, b)
+let set_rte_variable idx name (v: value_type) (ctx : runtime_env) =
+    let (n, ref_cell) = (M.nth idx ctx) in
 
-let set_rte_variable idx name (lxp: value_type) ctx =
-    let (l, _) = ctx in
-    let ref_cell = (M.nth idx l) in
-    let (n, _) = !ref_cell in
+    (match (n, name) with
+     | Some n1, Some n2 ->
+        if (n1 != n2) then
+          env_error dloc ("Variable's Name must Match: " ^ n1 ^ " vs " ^ n2)
+     | _ -> ());
 
-    match (n, name) with
-        | Some n1, Some n2 ->
-            if (n1 != n2) then
-                env_error dloc ("Variable's Name must Match: " ^ n1 ^ " vs " ^ n2)
-            else(
-                ref_cell := (name, lxp); ctx)
-
-        | _ -> ref_cell := (name, lxp); ctx
+    ref_cell := v
 
 
 (* This function is used when we enter a new scope                         *)
@@ -260,14 +241,14 @@ let print_myers_list l print_fun =
     print_string (make_sep '=')
 
 let print_rte_ctx (ctx: runtime_env) =
-    let (l, b) = ctx in
-    print_myers_list l
-    (fun x ->
-        let (n, g) = !x in
-        let _ =
+  print_myers_list
+    ctx
+    (fun (n, vref) ->
+      let g = !vref in
+      let _ =
         match n with
-            | Some m -> lalign_print_string m 12; print_string "  |  "
-            | None -> print_string (make_line ' ' 12); print_string "  |  " in
+        | Some m -> lalign_print_string m 12; print_string "  |  "
+        | None -> print_string (make_line ' ' 12); print_string "  |  " in
 
-        value_print g; print_string "\n")
+      value_print g; print_string "\n")
 
