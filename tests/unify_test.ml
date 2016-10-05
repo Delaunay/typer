@@ -18,7 +18,8 @@ open Str
 open Debug
 
 open Fmt_lexp
-open Debug_fun
+
+open Log
 
 type result =
   | Constraint

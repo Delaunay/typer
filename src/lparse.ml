@@ -77,54 +77,33 @@ type mdecl =
   | Ldecl of symbol * pexp option * pexp option
   | Lmcall of symbol * sexp list
 
-
-let elab_check_sort (ctx : elab_context) lsort (l, name) ltp =
-  match OL.lexp_whnf lsort (ectx_to_lctx ctx) VMap.empty with
-  | Sort (_, _) -> () (* All clear!  *)
-  | _ -> lexp_error l ("Type of `" ^ name ^ "` is not a proper type: "
-                      ^ lexp_to_str ltp)
-
-let elab_check_proper_type (ctx : elab_context) ltp v =
-  try elab_check_sort ctx (OL.check (ectx_to_lctx ctx) ltp) v ltp
-  with e -> print_string ("Exception while checking type `"
-                         ^ lexp_to_str ltp ^ "` of var `" ^
-                           (let (_, name) = v in name) ^"`\n");
-           print_lexp_ctx (ectx_to_lctx ctx);
-           raise e
-
-let elab_check_def (ctx : elab_context) var lxp ltype =
-  let lctx = ectx_to_lctx ctx in
-  if OL.conv_p ltype (OL.check lctx lxp) then
-    elab_check_proper_type ctx ltype var
+let elab_check_def (ctx : lexp_context) var lxp ltype =
+  if OL.conv_p ltype (OL.check ctx lxp) then
+    ()                          (* FIXME: Check ltype as well!  *)
   else
     (print_string "¡¡ctx_define error!!\n";
      lexp_print lxp;
      print_string " !: ";
      lexp_print ltype;
      print_string "\nbecause\n";
-     lexp_print (OL.check lctx lxp);
+     lexp_print (OL.check ctx lxp);
      print_string " != ";
      lexp_print ltype;
      print_string "\n";
      lexp_fatal (let (l,_) = var in l) "TC error")
 
 let ctx_define (ctx: elab_context) var lxp ltype =
-  elab_check_def ctx var lxp ltype;
+  elab_check_def (ectx_to_lctx ctx) var lxp ltype;
   env_extend ctx var (LetDef lxp) ltype
 
 let ctx_define_rec (ctx: elab_context) decls =
   let nctx = ectx_extend_rec ctx decls in
-  let _ = List.fold_left (fun n (var, lxp, ltp)
-                          -> elab_check_proper_type
-                              nctx (push_susp ltp (S.shift n)) var;
-                            n - 1)
-                         (List.length decls)
-                         decls in
   (* FIXME: conv_p fails too often, e.g. it fails to see that `Type` is
    * convertible to `Type_0`, because it doesn't have access to lctx.
    *
+   * let nlctx = ectx_to_lctx nctx in
    * let _ = List.fold_left (fun n (var, lxp, ltp)
-   *                         -> elab_check_def nctx var lxp
+   *                         -> elab_check_def nlctx var lxp
    *                                          (push_susp ltp (S.shift n));
    *                           n - 1)
    *                        (List.length decls)
@@ -186,7 +165,16 @@ let mkMetavar () = let meta = Unif.create_metavar ()
 let rec lexp_p_infer (p : pexp) (ctx : elab_context): lexp * ltype =
     _lexp_p_infer p ctx 1
 
-and _lexp_p_infer (p : pexp) (ctx : elab_context) i: lexp * ltype =
+and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
+  Debug_fun.do_debug (fun () ->
+      prerr_endline ("[StackTrace] ------------------------------------------");
+      prerr_endline ("[StackTrace] let _lexp_p_infer p ctx i");
+      prerr_endline ("[StackTrace] p        = " ^ Fmt_lexp.string_of_pexp p);
+      prerr_endline ("[StackTrace] ctx      = ???");
+      prerr_endline ("[StackTrace] i        = " ^ string_of_int i);
+      (* prerr_endline (Printexc.raw_backtrace_to_string (Printexc.get_callstack 20)); *)
+      prerr_endline ("[StackTrace] ------------------------------------------");
+      ());
 
     let lexp_infer p ctx = _lexp_p_infer p ctx (i + 1) in
     let tloc = pexp_location p in
@@ -339,7 +327,16 @@ and lexp_let_decls decls (body: lexp) ctx i =
 and lexp_p_check (p : pexp) (t : ltype) (ctx : elab_context): lexp =
   _lexp_p_check p t ctx 1
 
-and _lexp_p_check (p : pexp) (t : ltype) (ctx : elab_context) i: lexp =
+and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
+  Debug_fun.do_debug (fun () ->
+      prerr_endline ("[StackTrace] ------------------------------------------");
+      prerr_endline ("[StackTrace] let _lexp_p_check p t ctx i");
+      prerr_endline ("[StackTrace] p        = " ^ Fmt_lexp.string_of_pexp p);
+      prerr_endline ("[StackTrace] t        = " ^ Fmt_lexp.string_of_lxp t);
+      prerr_endline ("[StackTrace] ctx      = ???");
+      prerr_endline ("[StackTrace] i        = " ^ string_of_int i);
+      prerr_endline ("[StackTrace] ------------------------------------------");
+      ());
     let tloc = pexp_location p
     in
 
@@ -475,6 +472,15 @@ and lexp_case (rtype: lexp option) (loc, target, patterns) ctx i =
 
 (*  Identify Call Type and return processed call *)
 and lexp_call (func: pexp) (sargs: sexp list) ctx i =
+  Debug_fun.do_debug (fun () ->
+      prerr_endline ("[StackTrace] ------------------------------------------");
+      prerr_endline ("[StackTrace] let lexp_call func sargs ctx i");
+      prerr_endline ("[StackTrace] func     = " ^ Fmt_lexp.string_of_pexp func);
+      prerr_endline ("[StackTrace] sargs    = ???");
+      prerr_endline ("[StackTrace] ctx      = ???");
+      prerr_endline ("[StackTrace] i        = " ^ string_of_int i);
+      prerr_endline ("[StackTrace] ------------------------------------------");
+      ());
     let loc = pexp_location func in
     let meta_ctx, _ = !global_substitution in
 
@@ -741,6 +747,14 @@ and lexp_read_pattern_args args (args_type : lexp list) ctx:
 
 (*  Parse inductive type definition.  *)
 and lexp_parse_inductive ctors ctx i =
+  Debug_fun.do_debug (fun () ->
+      prerr_endline ("[StackTrace] ------------------------------------------");
+      prerr_endline ("[StackTrace] let lexp_parse_inductive ctors ctx i");
+      prerr_endline ("[StackTrace] ctors    = ???");
+      prerr_endline ("[StackTrace] ctx      = ???");
+      prerr_endline ("[StackTrace] i        = " ^ string_of_int i);
+      prerr_endline ("[StackTrace] ------------------------------------------");
+      ());
     let lexp_parse p ctx = _lexp_p_infer p ctx (i + 1) in
 
     let make_args (args:(arg_kind * pvar option * pexp) list) ctx
@@ -861,20 +875,8 @@ and lexp_decls_1
             assert (pending_defs == []));
          [], [], nctx
 
-  | Ptype ((l, vname) as v, ptp) :: pdecls
-    -> let (ltp, lsort) = lexp_p_infer ptp nctx in
-      if SMap.mem vname pending_decls then
-        (lexp_error l ("Variable `" ^ vname ^ "` declared twice!");
-         lexp_decls_1 pdecls ectx nctx pending_decls pending_defs)
-      else if List.exists (fun ((_, vname'), _, _) -> vname = vname')
-                          pending_defs then
-        (lexp_error l ("Variable `" ^ vname ^ "` already defined!");
-         lexp_decls_1 pdecls ectx nctx pending_decls pending_defs)
-      else (elab_check_sort nctx lsort v ltp;
-            lexp_decls_1 pdecls ectx
-                         (env_extend nctx v ForwardRef ltp)
-                         (SMap.add vname (l, ltp) pending_decls)
-                         pending_defs)
+        let is_empty = (List.length !pending) = 0 in
+        let is_one = (List.length !pending) = 1 in
 
   | Pexpr ((l, vname) as v, pexp) :: pdecls
        when SMap.is_empty pending_decls
