@@ -215,6 +215,82 @@ let format_source () =
     ) else (List.iter (fun str ->
         print_string str; print_string "\n") result;)
 
+let lexp_detect_recursive pdecls =
+  (* Pack mutually recursive declarations                 *)
+  (* mutually recursive def must use forward declarations *)
+
+  let decls = ref [] in
+  let pending = ref [] in
+  let merged = ref [] in
+
+  List.iter (fun expr ->
+    match expr with
+      | Pexpr((l, s), pxp) ->(
+        let was_forward = (List.exists
+                      (fun (Ldecl((_, p), _, _)) -> p = s) !pending) in
+
+        let is_empty = (List.length !pending) = 0 in
+        let is_one = (List.length !pending) = 1 in
+
+        (* This is a standard declaration: not forwarded *)
+        if (was_forward = false) && is_empty then(
+          decls := [Ldecl((l, s), Some pxp, None)]::!decls;
+        )
+        (* This is an annotated expression
+         * or the last element of a mutually rec definition *)
+        else if (was_forward && is_one) then (
+
+          (* we know that names match already *)
+          let ptp = (match (!pending) with
+            | Ldecl(_, _, ptp)::[] -> ptp
+            (* we already checked that len(pending) == 1*)
+            | Ldecl(_, _, ptp)::_  -> lexp_fatal l "Unreachable"
+            | []                   -> lexp_fatal l "Unreachable"
+            | Lmcall _ :: _        -> lexp_fatal l "Unreachable") in
+
+          (* add declaration to merged decl *)
+          merged := Ldecl((l, s), Some pxp, ptp)::(!merged);
+
+          (* append decls *)
+          decls := (List.rev !merged)::!decls;
+
+          (* Reset State *)
+          pending := [];
+          merged := [];
+        )
+        (* This is a mutually recursive definition *)
+        else (
+          (* get pending element and remove it from the list *)
+          let elem, lst = List.partition
+                                (fun (Ldecl((_, n), _, _)) -> n = s) !pending in
+
+          let _ = (match elem with
+              (* nothing to merge *)
+              | [] ->
+                merged := Ldecl((l, s), Some pxp, None)::!merged;
+
+              (* append new element to merged list *)
+              | Ldecl((l, s), _, Some ptp)::[] ->
+                merged := Ldecl((l, s), Some pxp, (Some ptp))::!merged;
+
+              (* s should be unique *)
+              | _ -> lexp_error l "declaration must be unique") in
+
+          (* element is not pending anymore *)
+          pending := lst;
+        ))
+
+      | Ptype((l, s), ptp) ->
+        pending := Ldecl((l, s), None, Some ptp)::!pending
+
+      (* macro will be handled later *)
+      | Pmcall(a, sargs) ->
+          decls := [Lmcall(a, sargs)]::!decls;
+
+      ) pdecls;
+
+      (List.rev !decls)
+
 let main () =
     parse_args ();
 

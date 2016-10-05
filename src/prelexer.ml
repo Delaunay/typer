@@ -52,13 +52,13 @@ let inc_cp (cp:charpos) (c:char) =
   (* Count char positions in utf-8: don't count the non-leading bytes.  *)
   if (Char.code c < 128 || Char.code c >= 192) then cp+1 else cp
 
-let rec prelex (file : string) (fin : in_channel) ln ctx acc
+let rec prelex (file : string) (getline : unit -> string) ln ctx acc
     : pretoken list =
   try
     (* let fin = open_in file in *)
-    let line = input_line fin in
+    let line = getline () in
     let limit = String.length line in
-    let nextline = prelex file fin (ln + 1) in
+    let nextline = prelex file getline (ln + 1) in
     let rec prelex' ctx (bpos:bytepos) (cpos:charpos) acc =
       let nexttok = prelex' ctx in
       if bpos >= limit then nextline ctx acc else
@@ -138,24 +138,27 @@ let rec prelex (file : string) (fin : in_channel) ln ctx acc
 
 let prelex_file file =
   let fin = open_in file
-  in prelex file fin 1 [] []  (* Traditionally, line numbers start at 1 :-(  *)
+  in prelex file (fun _ -> input_line fin)
+            (* Traditionally, line numbers start at 1 :-(  *)
+            1 [] []
 
 (*  Since current implementation is not compatible with stream          *
  *  we write a temporary file and use this file as input.               *
  *  This is a terrible solution but for the things we do it does not    *
  *  really matters.  Plus it will make testing easier.                  *)
 let prelex_string str =
-    (* FIXME: we should use a proper temp file (e.g. with mktemp).  *)
-    (* "mktemp _temp_typer.XXXX" create a file with an unknown name in /temp
-     * or in $TMPDIR *)
-
-    let fin = open_out "_temp_hack" in
-        output_string fin str;
-        flush_all ();
-        close_out fin;
-    let fin = open_in "_temp_hack" in
-    prelex "string" fin 1 [] []
-
+  let pos = ref 0 in
+  let getline () =
+    let start = !pos in
+    if start >= String.length str then raise End_of_file else
+      let i = try String.index_from str start '\n'
+              with Not_found -> String.length str - 1 in
+      let npos = i + 1 in
+      pos := npos;
+      let line = String.sub str start (npos - start) in
+      (* print_string ("Read line: " ^ line); *)
+      line
+  in prelex "<string>" getline 1 [] []
 
 let rec _pretokens_to_str pretok =
     match pretok with

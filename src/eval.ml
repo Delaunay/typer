@@ -61,10 +61,15 @@ let _eval_max_recursion_depth = ref 255
 let reset_eval_trace () = _global_eval_trace := []
 let _builtin_lookup = ref SMap.empty
 
+(* Print value name followed by the value in itself, finally throw an exception *)
+let value_debug_message loc vxp message =
+  print_string "\n";
+  print_string (value_name vxp); print_string ": "; value_print vxp; print_string "\n";
+  eval_fatal loc message
 
 (* This is an internal definition
  * 'i' is the recursion depth used to print the call trace *)
-let rec _eval lxp ctx i: (value_type) =
+let rec _eval lxp (ctx : Env.runtime_env) i: (value_type) =
     let tloc = elexp_location lxp in
 
     (if i > (!_eval_max_recursion_depth) then
@@ -153,13 +158,7 @@ and eval_case ctx i loc target pat dflt =
     (* extract constructor name and arguments *)
     let ctor_name, args = match v with
         | Vcons((_, cname), args)  -> cname, args
-        | _ ->
-            (* -- Debug print -- *)
-            debug_msg (
-            elexp_print target; print_string "\n";
-             value_print v;     print_string "\n");
-            (* -- Crash -- *)
-            eval_error loc "Target is not a Constructor" in
+        | _ -> elexp_debug_message loc target "Target is not a Constructor" in
 
     (*  Get working pattern *)
     try let (_, pat_args, exp) = SMap.find ctor_name pat in
@@ -204,9 +203,9 @@ and _eval_decls (decls: (vdef * elexp) list)
       add_rte_variable (Some name) Vdummy ctx) ctx decls in
 
     List.iteri (fun idx ((_, name), lxp) ->
-      let lxp = _eval lxp nctx (i + 1) in
+      let v = _eval lxp nctx (i + 1) in
       let offset = n - idx in
-        ignore (set_rte_variable offset (Some name) lxp nctx)) decls;
+        ignore (set_rte_variable offset (Some name) v nctx)) decls;
 
         nctx
 and eval_decls_toplevel (decls: (vdef * elexp) list list) ctx =
@@ -371,34 +370,44 @@ let eval_all lxps rctx silent =
     List.map (fun g -> evalfun g rctx) lxps
 
 
-let maybe s = match s with Some v -> v | _ -> ""
+let varname s = match s with Some (_, v) -> v | _ -> "<anon>"
 
-(* build a rctx from a lctx, rm is used to ignore the last 'rm' elements *)
-let from_lctx (ctx: elab_context) rm: runtime_env =
-    let ((n, _), env, _) = ctx in
-    let n = n - 1 in
-    let rctx = ref make_runtime_ctx in
+(* build a rctx from a lctx.  *)
+let from_lctx (ctx: elab_context): runtime_env =
+    let (_, lctx, _) = ctx in
+    let rctx : runtime_env
+      = M.map (fun (_, oname, _, _)
+               -> (match (oname : symbol option) with
+                  | Some (_, name) -> Some name
+                  | _ -> None),
+                 ref Vdummy)
+              lctx in
 
-    (* FIXME: Why not use Myers.map (Myers.nthcdr) ?  *)
-    for i = 0 to (n - rm) do
-        let name, exp = match (Myers.nth (n - i) env) with
-          | (_, Some (_, name), LetDef exp, _) -> Some name, Some exp
-          | (_, Some (_, name), _, _) -> Some name, None
-          | _ -> None, None in
+    (* Then fill each slot in turn.  *)
+    let _, evals
+      = M.fold_left
+          (fun (i, evals) (o, oname, def, _)
+           -> match def with
+             | LetDef lxp
+               -> (let elxp = OL.erase_type lxp in
+                  let (_, valcell) = M.nth i rctx in
+                  let octx = M.nthcdr (i - o + 1) rctx in
+                  (i + 1, (valcell, elxp, octx) :: evals))
+             | _
+               (* FIXME: We should stop right here if this variable is
+                * actually used (e.g. if this type's variable is ∀t.t).  *)
+               -> eval_warning dloc ("No definition to compute the value of `"
+                                    ^ varname oname ^ "`");
+                 (i + 1, evals))
+          (0, []) lctx in
+    (* The evaluations have to be done "from the end of the list".  *)
+    List.iter (fun (valcell, elxp, octx)
+               -> try valcell := eval elxp octx
+                 with e -> (* print_lexp_ctx (ectx_to_lctx ctx); *)
+                          print_string "eval-in-from_lctx failed on: ";
+                          (* lexp_print lxp; print_string "\nerased to: "; *)
+                          elexp_print elxp;
+                          print_string "\n"; raise e)
+              evals;
 
-        let vxp = match exp with
-          | Some lxp ->
-              let octx = add_rte_variable name Vdummy (!rctx) in
-              let lxp = (OL.erase_type lxp) in
-                (try (eval lxp octx)
-                  with e -> elexp_print lxp;
-                    print_string "\n"; raise e)
-
-            (* Happen once *)
-          | None -> eval_warning dloc ("Unable to eval expr: " ^ (maybe name));
-                Vdummy in
-
-        rctx := add_rte_variable name vxp (!rctx)
-    done;
-
-    !rctx
+    rctx

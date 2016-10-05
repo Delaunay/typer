@@ -253,7 +253,7 @@ let _ = test_eval_eqv attr_decl
   "True"
 
 (* This makes sure contexts are reinitialized between calls
- *  i.e the context should not grow                             *)
+ *  i.e the context should not grow                             * )
 let _ = (add_test "EVAL" "Infinite Recursion failure" (fun () ->
     reset_eval_trace ();
     _typer_verbose := (-1);
@@ -276,7 +276,7 @@ let _ = (add_test "EVAL" "Infinite Recursion failure" (fun () ->
                 success ()
             else
                 failure ())
-))
+)) *)
 
 let _ = (add_test "EVAL" "Monads" (fun () ->
     reset_eval_trace ();

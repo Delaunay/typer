@@ -43,6 +43,7 @@ type label = symbol
 module SMap = U.SMap
 
 let elexp_warning = U.msg_warning "ELEXP"
+let elexp_fatal = U.msg_fatal "ELEXP"
 
 type elexp =
     | Imm of sexp
@@ -137,4 +138,9 @@ and elexp_str lxp =
 
         | Type -> "Type "
 
+(* Print Lexp name followed by the lexp in itself, finally throw an exception *)
+let elexp_debug_message loc lxp message =
+  print_string "\n";
+  print_string (elexp_name lxp); print_string ": "; elexp_print lxp; print_string "\n";
+  elexp_fatal loc message
 

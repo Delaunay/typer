@@ -69,16 +69,12 @@ let _global_lexp_trace = ref []
 let _parsing_internals = ref false
 let btl_folder = ref "./btl/"
 
-type debug_type =
-  | Dbi of int
-  | Str of string
-  | Lexp of lexp
+(* Print Lexp name followed by the lexp in itself, finally throw an exception *)
+let lexp_debug_message loc lxp message =
+  print_string "\n";
+  print_string (lexp_to_str lxp); print_string ": "; lexp_print lxp; print_string "\n";
+  lexp_fatal loc message
 
-let debug_print str = let _ = match str with
-  | Str str -> print_string str
-  | Dbi dbi -> print_string "DBI: "; print_int dbi
-  | Lexp lxp -> lexp_print lxp in
-    print_string "\n"
 
 (* merged declaration, allow us to process declaration in multiple pass *)
 (* first detect recursive decls then lexp decls*)
@@ -86,33 +82,53 @@ type mdecl =
   | Ldecl of symbol * pexp option * pexp option
   | Lmcall of symbol * sexp list
 
-let elab_check_def (ctx : lexp_context) var lxp ltype =
-  if OL.conv_p ltype (OL.check ctx lxp) then
-    ()                          (* FIXME: Check ltype as well!  *)
+let elab_check_sort (ctx : elab_context) lsort (l, name) ltp =
+  match OL.lexp_whnf lsort (ectx_to_lctx ctx) with
+  | Sort (_, _) -> () (* All clear!  *)
+  | _ -> lexp_error l ("Type of `" ^ name ^ "` is not a proper type: "
+                      ^ lexp_to_str ltp)
+
+let elab_check_proper_type (ctx : elab_context) ltp v =
+  try elab_check_sort ctx (OL.check (ectx_to_lctx ctx) ltp) v ltp
+  with e -> print_string ("Exception while checking type `"
+                         ^ lexp_to_str ltp ^ "` of var `" ^
+                           (let (_, name) = v in name) ^"`\n");
+           print_lexp_ctx (ectx_to_lctx ctx);
+           raise e
+
+let elab_check_def (ctx : elab_context) var lxp ltype =
+  let lctx = ectx_to_lctx ctx in
+  if OL.conv_p ltype (OL.check lctx lxp) then
+    elab_check_proper_type ctx ltype var
   else
     (print_string "¡¡ctx_define error!!\n";
      lexp_print lxp;
      print_string " !: ";
      lexp_print ltype;
      print_string "\nbecause\n";
-     lexp_print (OL.check ctx lxp);
+     lexp_print (OL.check lctx lxp);
      print_string " != ";
      lexp_print ltype;
      print_string "\n";
      lexp_fatal (let (l,_) = var in l) "TC error")
 
 let ctx_define (ctx: elab_context) var lxp ltype =
-  elab_check_def (ectx_to_lctx ctx) var lxp ltype;
+  elab_check_def ctx var lxp ltype;
   env_extend ctx var (LetDef lxp) ltype
 
 let ctx_define_rec (ctx: elab_context) decls =
   let nctx = ectx_extend_rec ctx decls in
+  let _ = List.fold_left (fun n (var, lxp, ltp)
+                          -> elab_check_proper_type
+                              nctx (push_susp ltp (S.shift n)) var;
+                            n - 1)
+                         (List.length decls)
+                         decls in
   (* FIXME: conv_p fails too often, e.g. it fails to see that `Type` is
    * convertible to `Type_0`, because it doesn't have access to lctx.
    *
-   * let nlctx = ectx_to_lctx nctx in
    * let _ = List.fold_left (fun n (var, lxp, ltp)
-   *                         -> elab_check_def nlctx var lxp
+   *                         -> elab_check_def nctx var lxp
    *                                          (push_susp ltp (S.shift n));
    *                           n - 1)
    *                        (List.length decls)
@@ -503,42 +519,23 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
         Call (body, List.rev largs), ret_type in
 
     let handle_macro_call () =
-        (* Build function to be called *)
-        let macro_expand = get_predef "expand_macro_" ctx in
-        let args = [(Aexplicit, body); (Aexplicit, (olist2tlist_lexp sargs ctx))] in
-        let macro = Call(macro_expand, args) in
-        let emacro = OL.erase_type macro in
-        let rctx = (from_lctx ctx 0) in
+      let sxp = match lexp_expand_macro body sargs ctx with
+          | Vsexp(sxp) -> sxp
+          (* Those are sexp converted by the eval function *)
+          | Vint(i)    -> Integer(dloc, i)
+          | Vstring(s) -> String(dloc, s)
+          | Vfloat(f)  -> Float(dloc, f)
+          | v          ->
+            value_debug_message loc v "Macro_ expects '(List Sexp) -> Sexp'" in
 
-        _global_eval_trace := [];
-
-        let vxp = try eval emacro rctx
-          with e ->
-            print_eval_trace ();
-            raise e in
-
-          let sxp = match vxp with
-              | Vsexp(sxp) -> sxp
-              (* Those are sexp converted by the eval function *)
-              | Vint(i)    -> Integer(dloc, i)
-              | Vstring(s) -> String(dloc, s)
-              | Vfloat(f)  -> Float(dloc, f)
-              (* I have vdum here WHY *)
-              | v -> debug_msg (value_print v); print_string "\n";
-                  lexp_fatal loc "Macro_ expects '(List Sexp) -> Sexp'" in
-
-        let pxp = pexp_parse sxp in
-            _lexp_p_infer pxp ctx (i + 1)  in
+      let pxp = pexp_parse sxp in
+        _lexp_p_infer pxp ctx (i + 1)  in
 
     (* This is the builtin Macro type *)
     let macro_type, macro_disp = match get_predef_option "Macro" ctx with
       | Some lxp -> OL.lexp_whnf lxp (ectx_to_lctx ctx), true
       (* When type.typer is being parsed and the predef is not yet available *)
       | None -> dltype, false     in
-
-    (*)
-    lexp_print ltp; print_string "\n";
-    print_string (if (OL.conv_p ltp macro_type) then "true" else "false"); print_string "\n"; *)
 
     (* determine function type *)
     match func, ltp with
@@ -683,223 +680,159 @@ and lexp_parse_inductive ctors ctx i =
 
 (* Macro declaration handling, return a list of declarations
  * to be processed *)
+and lexp_expand_macro macro_funct sargs ctx =
+
+  (* Build the function to be called *)
+  let macro_expand = get_predef "expand_macro_" ctx in
+  let args = [(Aexplicit, macro_funct); (Aexplicit, (olist2tlist_lexp sargs ctx))] in
+
+  let macro = Call(macro_expand, args) in
+  let emacro = OL.erase_type macro in
+  let rctx = from_lctx ctx in
+
+  (* eval macro *)
+   _global_eval_trace := [];
+  let vxp = try eval emacro rctx
+    with e -> print_eval_trace (); raise e in
+    (* Return results *)
+    (* Vint/Vstring/Vfloat might need to be converted to sexp *)
+      vxp
+
 and lexp_decls_macro (loc, mname) sargs ctx: (pdecl list * elab_context) =
-  (* lookup for mname_  *)
-  let idx = try senv_lookup mname ctx
-    with Not_found ->
-      lexp_warning loc ("Macro \"" ^ mname ^ "\" was not found!"); 0 in
+   try (* Lookup macro declaration *)
+      let idx = senv_lookup mname ctx in
+      let ltp = env_lookup_type ctx ((loc, mname), idx) in
+      let lxp = env_lookup_expr ctx ((loc, mname), idx) in
 
-  (* get Macro declaration *)
-  let lxp = try env_lookup_expr ctx ((loc, mname), idx)
-    with Not_found ->
-      lexp_fatal loc (mname ^ " was found but " ^ (string_of_int idx) ^
-                  " is not a correct index.") in
+      (* lxp has the form (Call (Var(_, "Macro_"), [(_, function)]))
+       * We need the function so we can call it later *)
+      let body = match lxp with
+        | Some lxp -> lxp
+        | None -> lexp_fatal loc "expression does not exist" in
 
-  (* get stored function *)
-  let lxp = match lxp with
-    | Some (Call(Var((_, "Macro_"), _), [(_, fct)])) -> fct
-    | None -> lexp_fatal loc "expression does not exist"
-    | Some lxp -> print_string "\n";
-      print_string (lexp_to_str lxp); print_string "\n";
-      lexp_print lxp; print_string "\n";
-      lexp_fatal loc "Macro is ill formed" in
+      (* Special Form *)
+        match body with
+          | Var((_, "add-attribute"), _) ->
+            print_string "Not Implemented"; [], ctx
 
-    match lxp with
-      | Var((_, "add-attribute"), _) ->(
-        (* Builtin macro *)
-          let pargs = List.map pexp_parse sargs in
-          let largs = _lexp_parse_all pargs ctx 0 in
+          | _ ->(
+            let ret = lexp_expand_macro body sargs ctx in
 
-          (* extract info *)
-          let var, att, fn = match largs with
-            | [Var((_, vn), vi); Var((_, an), ai); fn] -> (vi, vn), (ai, an), fn
-            | _ -> lexp_fatal loc "add-attribute expects 3 args" in
+            (* convert typer list to ocaml *)
+            let decls = tlist2olist [] ret in
 
-          let ctx = add_property ctx var att fn in
+            (* extract sexp from result *)
+            let decls = List.map (fun g ->
+              match g with
+                | Vsexp(sxp) -> sxp
+                | _ -> value_debug_message loc g "Macro expects sexp list") decls in
 
-          (* FIXME: We need to have something in lexp to represent this
-           * add-attribute operation!  *)
-          [], ctx
-        )
-        (* Standard Macro *)
-      | _ -> (
-        (* build new function *)
-        let arg = olist2tlist_lexp sargs ctx in
-        let lxp = Call(lxp, [(Aexplicit, arg)]) in
-        let elexp = OL.erase_type lxp in
-        let rctx = (from_lctx ctx 0) in
-
-        (* get a list of declaration *)
-        let decls = eval elexp rctx in
-
-        (* convert typer list to ocaml *)
-        let decls = tlist2olist [] decls in
-
-        (* extract sexp from result *)
-        let decls = List.map (fun g ->
-          match g with
-            | Vsexp(sxp) -> sxp
-            | _ ->
-              print_string ((value_name g) ^ " : ");
-              value_print g; print_string "\n";
-              lexp_fatal loc "Macro expects sexp list") decls in
-
-        (* read as pexp_declaraton *)
-          pexp_decls_all decls, ctx)
+            (* read as pexp_declaraton *)
+            pexp_decls_all decls, ctx)
+  with _ ->
+    lexp_fatal loc "Macro not found"
 
 (*  Parse let declaration *)
 and lexp_p_decls decls ctx = _lexp_decls decls ctx 0
 
-and lexp_detect_recursive pdecls =
-  (* Pack mutually recursive declarations                 *)
-  (* mutually recursive def must use forward declarations *)
-
-  let decls = ref [] in
-  let pending = ref [] in
-  let merged = ref [] in
-
-  List.iter (fun expr ->
-    match expr with
-      | Pexpr((l, s), pxp) ->(
-        let was_forward = (List.exists
-                      (fun (Ldecl((_, p), _, _)) -> p = s) !pending) in
-
-        let is_empty = (List.length !pending) = 0 in
-        let is_one = (List.length !pending) = 1 in
-
-        (* This is a standard declaration: not forwarded *)
-        if (was_forward = false) && is_empty then(
-          decls := [Ldecl((l, s), Some pxp, None)]::!decls;
-        )
-        (* This is an annotated expression
-         * or the last element of a mutually rec definition *)
-        else if (was_forward && is_one) then (
-
-          (* we know that names match already *)
-          let ptp = (match (!pending) with
-            | Ldecl(_, _, ptp)::[] -> ptp
-            (* we already checked that len(pending) == 1*)
-            | Ldecl(_, _, ptp)::_  -> lexp_fatal l "Unreachable"
-            | []                   -> lexp_fatal l "Unreachable"
-            | Lmcall _ :: _        -> lexp_fatal l "Unreachable") in
-
-          (* add declaration to merged decl *)
-          merged := Ldecl((l, s), Some pxp, ptp)::(!merged);
-
-          (* append decls *)
-          decls := (List.rev !merged)::!decls;
-
-          (* Reset State *)
-          pending := [];
-          merged := [];
-        )
-        (* This is a mutually recursive definition *)
-        else (
-          (* get pending element and remove it from the list *)
-          let elem, lst = List.partition
-                                (fun (Ldecl((_, n), _, _)) -> n = s) !pending in
-
-          let _ = (match elem with
-              (* nothing to merge *)
-              | [] ->
-                merged := Ldecl((l, s), Some pxp, None)::!merged;
-
-              (* append new element to merged list *)
-              | Ldecl((l, s), _, Some ptp)::[] ->
-                merged := Ldecl((l, s), Some pxp, (Some ptp))::!merged;
-
-              (* s should be unique *)
-              | _ -> lexp_error l "declaration must be unique") in
-
-          (* element is not pending anymore *)
-          pending := lst;
-        ))
-
-      | Ptype((l, s), ptp) ->
-        pending := Ldecl((l, s), None, Some ptp)::!pending
-
-      (* macro will be handled later *)
-      | Pmcall(a, sargs) ->
-          decls := [Lmcall(a, sargs)]::!decls;
-
-      ) pdecls;
-
-      (List.rev !decls)
+and lexp_check_decls (ectx : elab_context) (* External context.  *)
+                     (nctx : elab_context) (* Context with type declarations. *)
+                     (defs : (vdef * pexp * ltype) list)
+    : (vdef * lexp * ltype) list * elab_context =
+  let declmap = List.fold_right
+                  (fun ((_, vname) as v, pexp, ltp) map ->
+                    let i = senv_lookup vname nctx in
+                    let adjusted_ltp = push_susp ltp (S.shift (i + 1)) in
+                    IntMap.add i (v, lexp_p_check pexp adjusted_ltp nctx, ltp)
+                               map)
+                  defs IntMap.empty in
+  let decls = List.rev (List.map (fun (_, d) -> d) (IntMap.bindings declmap)) in
+  decls, ctx_define_rec ectx decls
 
 
-and _lexp_decls decls ctx i: ((vdef * lexp * ltype) list list * elab_context) =
-  (* detect mutually recursive def and merge definition *)
-  let decls = lexp_detect_recursive decls in
-  let all = ref [] in
+and lexp_decls_1
+      (pdecls : pdecl list)
+      (ectx : elab_context)                       (* External ctx.  *)
+      (nctx : elab_context)                       (* New context.  *)
+      (pending_decls : (location * ltype) SMap.t) (* Pending type decls. *)
+      (pending_defs : (vdef * pexp * ltype) list) (* Pending definitions. *)
+    : (vdef * lexp * ltype) list * pdecl list * elab_context =
 
-  let ctx = List.fold_left (fun ctx decl ->
-    match decl with
-      (* Special case *)
-      | [Lmcall ((l, s), sargs)] ->
-        (* get pexp decls *)
-        let pdecls, ctx = lexp_decls_macro (l, s) sargs ctx in
-        let decls, ctx = _lexp_decls pdecls ctx i in
-          all := (List.append (List.rev decls) !all);
-            ctx
+  match pdecls with
+  | [] -> (if not (SMap.is_empty pending_decls) then
+            let (s, (l, _)) = SMap.choose pending_decls in
+            lexp_error l ("Variable `" ^ s ^ "` declared but not defined!")
+          else
+            assert (pending_defs == []));
+         [], [], nctx
 
-      | _ ->
-        let d, ctx = _lexp_rec_decl decl ctx i in
-          all := d::!all;
-          ctx) ctx decls in
+  | Ptype ((l, vname) as v, ptp) :: pdecls
+    -> let (ltp, lsort) = lexp_p_infer ptp nctx in
+      if SMap.mem vname pending_decls then
+        (lexp_error l ("Variable `" ^ vname ^ "` declared twice!");
+         lexp_decls_1 pdecls ectx nctx pending_decls pending_defs)
+      else if List.exists (fun ((_, vname'), _, _) -> vname = vname')
+                          pending_defs then
+        (lexp_error l ("Variable `" ^ vname ^ "` already defined!");
+         lexp_decls_1 pdecls ectx nctx pending_decls pending_defs)
+      else (elab_check_sort nctx lsort v ltp;
+            lexp_decls_1 pdecls ectx
+                         (env_extend nctx v ForwardRef ltp)
+                         (SMap.add vname (l, ltp) pending_decls)
+                         pending_defs)
 
-      (List.rev !all), ctx
+  | Pexpr ((l, vname) as v, pexp) :: pdecls
+       when SMap.is_empty pending_decls
+    -> assert (pending_defs == []);
+      assert (ectx == nctx);
+      let (lexp, ltp) = lexp_p_infer pexp nctx in
+      (* Lexp decls are always recursive, so we have to shift by 1 to account
+       * for the extra var (ourselves).  *)
+      [(v, push_susp lexp (S.shift 1), ltp)], pdecls,
+      env_extend nctx v (LetDef lexp) ltp
 
-and _lexp_rec_decl decls ctx i =
-  (* parse a group of mutually recursive definitions
-   * i.e let decl parsing *)
+  | Pexpr ((l, vname) as v, pexp) :: pdecls
+    -> (try let (_, ltp) = SMap.find vname pending_decls in
+           let pending_decls = SMap.remove vname pending_decls in
+           let pending_defs = ((v, pexp, ltp) :: pending_defs) in
+           if SMap.is_empty pending_decls then
+             let decls, nctx = lexp_check_decls ectx nctx pending_defs in
+             decls, pdecls, nctx
+           else
+             lexp_decls_1 pdecls ectx nctx pending_decls pending_defs
 
-  (* to compute recursive offset *)
-  let lst = ref [] in
+       with Not_found ->
+         lexp_error l ("`" ^ vname ^ "` defined but not declared!");
+         lexp_decls_1 pdecls ectx nctx pending_decls pending_defs)
 
-  (* add all elements to the environment *)
-  let tctx = List.fold_left (fun vctx decl ->
-    match decl with
-      | Ldecl((l, s), _, None) ->
-        env_extend vctx (l, s) ForwardRef dltype
+  | Pmcall ((l, _) as v, sargs) :: pdecls
+   -> ((* expand macro and get the generated declarations *)
+      let pdecls', nctx' = lexp_decls_macro v sargs nctx in
+        print_string "lexp_decls_macro \n"; flush stdout;
 
-      | Ldecl((l, s), _, Some ptp) ->
-        let ltp, _ = lexp_p_infer ptp vctx in
-          env_extend vctx (l, s) ForwardRef ltp
+      if nctx = nctx' then(
+        print_string "nctx = nctx'\n"; flush stdout;
+        (* Plain macro expansion!  *)
+        lexp_decls_1 (List.append pdecls' pdecls) ectx nctx
+                     pending_decls pending_defs)
 
-      | Lmcall _ ->
-        lexp_fatal dloc "use lexp_decl_macro to parse macro decls") ctx decls in
+      else if ectx = nctx then
+        (assert (SMap.is_empty pending_decls);
+         assert (pending_defs = []);
 
-        (* ectx_extend_rec (ctx: elab_context) (defs: (vdef * lexp * ltype) list) *)
-  let i = ref (1 + List.length decls) in
-  let ctx = List.fold_left (fun vctx decl ->
-    i := !i - 1;
-    match decl with
-      (* +1 because we allow each definition to be recursive *)
-      (* lexp infer *)
-      | Ldecl ((l, s), Some pxp, None) ->
-          (* debug_print (Str "Lexp Rec Decl");
-             debug_print (Str s); *)
-          let lxp, ltp = lexp_p_infer pxp tctx in
-          lst := ((l, s), lxp, ltp)::!lst;
-          (env_extend_rec (!i) vctx (l, s) (LetDef lxp) ltp)
+         print_string "ectx = nctx\n"; flush stdout;
+         lexp_decls_1 (List.append pdecls' pdecls) ectx nctx'
+                      pending_decls pending_defs)
 
-      (* lexp check *)
-      | Ldecl ((l, s), Some pxp, Some ptp) ->
-          let ltp, _ = lexp_p_infer ptp tctx in
-          let lxp = lexp_p_check pxp ltp tctx in
-          lst := ((l, s), lxp, ltp)::!lst;
-          (env_extend_rec (!i) vctx (l, s) (LetDef lxp) ltp)
+      else (
+      print_string "error\n"; flush stdout; lexp_fatal l "Context changed in already changed context"))
 
-      (* macros *)
-      | Lmcall (a, sargs) ->
-        lexp_fatal dloc "use lexp_decl_macro to parse macro decls"
 
-      (* unused arg *)
-      | Ldecl ((l, s), None, _) ->
-        lexp_error l ("Variable \"" ^ s ^ "\" is unused!");
-        vctx) ctx decls in
-
-        (List.rev !lst), ctx
+and _lexp_decls pdecls ctx i: ((vdef * lexp * ltype) list list * elab_context) =
+  if pdecls = [] then [], ctx else
+    let decls, pdecls, nctx = lexp_decls_1 pdecls ctx ctx SMap.empty [] in
+    let declss, nnctx = _lexp_decls pdecls nctx i in
+    decls :: declss, nnctx
 
 and lexp_decls_toplevel decls ctx =
   _lexp_decls decls ctx 1
