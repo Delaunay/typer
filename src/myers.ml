@@ -112,3 +112,15 @@ let rec findcdr p l =
      | Mcons (x, _, _, _) when p x -> last
      | Mcons (_, l1, _, l2) -> findcdr2 (Some l) l1 l2
   in findcdr1 None l
+
+let rec fold_left f i l = match l with
+  | Mnil -> i
+  | Mcons (x, l, _, _) -> fold_left f (f i x) l
+
+let rec fold_right f l i = match l with
+  | Mnil -> i
+  | Mcons (x, l, _, _) -> f x (fold_right f l i)
+
+let map f l = fold_right (fun x l' -> cons (f x) l') l nil
+
+let iteri f l = fold_left (fun i x -> f i x; i + 1) 0 l

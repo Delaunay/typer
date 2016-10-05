@@ -109,7 +109,12 @@ let lexp_ctx_cons (ctx : lexp_context) offset d v t =
   assert (offset >= 0
           && (ctx = M.nil
              || let (previous_offset, _, _, _) = M.car ctx in
-               previous_offset >= 0 && previous_offset <= 1 + offset));
+               previous_offset >= 0 (* General constraint.  *)
+               (* Either `ctx` is self-standing (doesn't depend on us),
+                * or it depends on us (and maybe other bindings to come), in
+                * which case we have to depend on the exact same bindings.  *)
+               && (previous_offset <= 1
+                  || previous_offset = 1 + offset)));
   M.cons (offset, d, v, t) ctx
 
 let lctx_extend (ctx : lexp_context) (def: vdef) (v: varbind) (t: lexp) =

@@ -257,8 +257,9 @@ let rec check ctx e =
       check new_ctx e
   | Arrow (ak, v, t1, l, t2)
     -> (let k1 = check ctx t1 in
-       let k2 = check (DB.lexp_ctx_cons ctx 0 v Variable t1) t2 in
-       match k1, k2 with
+       let nctx = DB.lexp_ctx_cons ctx 0 v Variable t1 in
+       let k2 = check nctx t2 in
+       match lexp_whnf k1 ctx VMap.empty, lexp_whnf k2 nctx VMap.empty with
        | (Sort (_, s1), Sort (_, s2))
          -> if ak == P.Aerasable && impredicative_erase then k2
            else Sort (l, sort_compose l s1 s2)

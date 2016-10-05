@@ -1,4 +1,4 @@
-(* util.ml --- Misc definitions for Typer.
+(* util.ml --- Misc definitions for Typer.  -*- coding: utf-8 -*-
 
 Copyright (C) 2011-2013, 2016  Free Software Foundation, Inc.
 
@@ -22,6 +22,8 @@ this program.  If not, see <http://www.gnu.org/licenses/>.  *)
 
 module SMap
   = Map.Make (struct type t = string let compare = String.compare end)
+module IntMap
+  = Map.Make (struct type t = int let compare = compare end)
 
 type charpos = int
 type bytepos = int
@@ -70,8 +72,8 @@ let typer_unreachable s = raise (Unreachable_error s)
  *   |    [X] Fatal     SECTION [ln  12, cl  12: FILE.typer]
  *   |        >>    typer_dump = something;
  *   |        >>
- *   |        >> My Error message is on multiple line
- *   |        >> multiple line
+ *   |        >>Â My Error message is on multiple line
+ *   |        >>Â multiple line
  *   |     ------------------------------------------------
  *)
 
