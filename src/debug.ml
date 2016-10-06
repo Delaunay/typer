@@ -50,7 +50,7 @@ let rec debug_pretokens_print pretoken =
     print_string " ";
     let print_info msg loc =
         print_string msg;
-        print_string "["; print_loc loc; print_string "]\t" in
+        print_string "["; loc_print loc; print_string "]\t" in
 
     match pretoken with
         | Preblock(loc, pts,_)
@@ -73,7 +73,7 @@ let rec debug_pretokens_print_all pretokens =
 let rec debug_sexp_print sexp =
   let print_info msg loc =
     print_string msg;
-    print_string "["; print_loc loc; print_string "]\t" in
+    print_string "["; loc_print loc; print_string "]\t" in
   match sexp with
     | Epsilon
         -> print_string "Epsilon  "  (* "ε" *)
@@ -117,7 +117,7 @@ let debug_pexp_print ptop =
     let l = pexp_location ptop in
     let print_info msg loc pex =
         print_string msg; print_string "[";
-        print_loc loc;
+        loc_print loc;
         print_string "]\t";
         pexp_print pex in
     match ptop with
@@ -135,7 +135,7 @@ let debug_pexp_print ptop =
       (*| _                      -> print_info "Not Impl   " l ptop *)
 
 let debug_pexp_decls decls =
-  let print_loc l = print_string "["; print_loc l; print_string "]  " in
+  let loc_print l = print_string "["; loc_print l; print_string "]  " in
 
     List.iter (fun e ->
       print_string " ";
@@ -143,15 +143,15 @@ let debug_pexp_decls decls =
       let _ = match e with
         | Pexpr ((l, name), pxp) ->
           lalign_print_string (pexp_string pxp) 15;
-          print_loc l; print_string " = "; pexp_print pxp
+          loc_print l; print_string " = "; pexp_print pxp
 
         | Ptype ((l, name), ptp) ->
           lalign_print_string (pexp_string ptp) 15;
-          print_loc l; print_string " : "; pexp_print ptp
+          loc_print l; print_string " : "; pexp_print ptp
 
         | Pmcall((l, op), args)  ->
           lalign_print_string "Macro Decls" 15;
-          print_loc l; sexp_print (Node(Symbol(l, op), args)) in
+          loc_print l; sexp_print (Node(Symbol(l, op), args)) in
 
       print_string "\n")
 
@@ -173,7 +173,7 @@ let debug_lexp_decls decls =
 
             print_string " ";
             lalign_print_string (lexp_string lxp) 15;
-            print_string "["; print_loc loc; print_string "]";
+            print_string "["; loc_print loc; print_string "]";
 
             let str = _lexp_str_decls (!debug_ppctx) [e] in
 

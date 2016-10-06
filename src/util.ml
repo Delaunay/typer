@@ -44,12 +44,10 @@ type vref = vdef * db_index
 type bottom = | B_o_t_t_o_m_ of bottom
 
 (* print debug info *)
-let print_loc (loc: location) =
-    (*print_string loc.file; *) (* Printing the file is too much*)
-    print_string "ln ";
-    Fmt.ralign_print_int loc.line 3;
-    print_string ", cl ";
-    Fmt.ralign_print_int loc.column 3
+let loc_string loc =
+  "Ln " ^ (Fmt.ralign_int loc.line 3) ^ ", cl " ^ (Fmt.ralign_int loc.column 3)
+
+let loc_print loc = print_string (loc_string loc)
 
 (*
  *  -1 - Nothing    (* During testing we may want to produce errors *)
@@ -77,17 +75,16 @@ let typer_unreachable s = raise (Unreachable_error s)
  *   |     ------------------------------------------------
  *)
 
+
+
+
 (*  File is not printed because currently we parse only one file... *)
 (*  Section is the name of the compilation step [for debugging]     *)
 (*  'prerr' output is ugly                                          *)
 let msg_message lvl kind section (loc: location) msg =
   if lvl <= !_typer_verbose then(
-    print_string ("    " ^ kind);
-    print_string " ["; print_loc loc; print_string "] ";
-    Fmt.lalign_print_string section 8;
-    print_string (" " ^ msg);
-    print_newline ()) else ()
-
+    let info = "    " ^ kind ^ " [" ^ loc_string loc ^ "] " ^ (Fmt.lalign_string section 8) in
+      print_string (info ^ " " ^ msg ^ "\n")) else ()
 
 let msg_fatal s l m  =
     msg_message 0 "[X] Fatal    " s l m;
@@ -115,7 +112,7 @@ let print_trace name max elem_to_string print_elem trace =
 
     let racc = List.rev trace in
         Fmt.print_last max racc (fun j (i, l, g) ->
-            print_string "    ["; print_loc l; print_string "] ";
+            print_string "    ["; loc_print l; print_string "] ";
             Fmt._print_ct_tree i; print_string "+- ";
             print_string (elem_to_string g); print_string ": ";
             print_elem g; print_string "\n");
