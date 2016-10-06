@@ -19,7 +19,7 @@ dvi:
 	@echo -e "First compilation"
 	@$(DVI) $(LATEXFLAGS) $(MAIN).tex
 	@echo -e "Generating index"
-	@$(IDX) $(MAIN).idx
+	@$(IDX) $(OBJDIR)/$(MAIN).idx
 	@echo -e "Generating bibliography"
 	@$(BIB) --output-directory $(OBJDIR) $(MAIN)
 	@echo -e "Generating glossary"
