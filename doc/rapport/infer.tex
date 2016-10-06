@@ -19,9 +19,9 @@
             Elles sont utilisées uniquement pour faciliter la transformation des \sexp{} en \lexp{}.
 
         \structpar{Les \lexp{}}
-            Les \lexp{}\ref{fig:ocmllxp} sont des expressions représentant les \textit{Lambda-Expressions} du $\lambda{}-calcul$.
+            Les \lexp{}~\ref{fig:ocmllxp} sont des expressions représentant les \textit{Lambda-Expressions} du $\lambda{}-calcul$.
             Elles servent de représentation intermédiaire du code \typer{}.
-            Les différentes opérations, comme la vérification de type, se fait sur les \lexp{}.
+            Les différentes opérations, comme la vérification de type, se font sur les \lexp{}.
 
         \structpar{Détails}
             Lors de l'interprétation du code, il est tout d'abord \say{prélexé}.
@@ -37,22 +37,41 @@
             à avoir une information sur leur type.
 
     \section{Unification}
-        L'unification est moyen permettant de déterminer si deux expressions sont équivalentes.
-        Dans le cas de l'inférence de type pour le compilateur \typer{},
-        l'unification se fait sur les \lexp{}.
-        Deux \lexp{} sont unifiables si elles sont équivalentes. Si les expressions $S$ et $T$
-        sont unifiables alors on peut écrire (en \typer{}) $S = T$.
+        \structpar{Définition}
+            L'unification est moyen permettant de déterminer si deux expressions sont équivalentes.
+            Dans le cas de l'inférence de type pour le compilateur \typer{},
+            l'unification se fait sur les \lexp{}.
+            Deux \lexp{} sont unifiables si elles sont équivalentes. Si les expressions $S$ et $T$
+            sont unifiables alors on peut écrire (en \typer{}) $S = T$.
 
-        Dans le cas du compilateur \typer{}, l'unification permet de vérifier qu'il n'y a pas
-        d'erreur de typage.
+            Dans le cas du compilateur \typer{}, l'unification permet de vérifier qu'il n'y a pas
+            d'erreur de typage.
+
+            On note $e_1 \unif e_2$ l'unification de $e_1$ et $e_2$.
+
+        \structpar{Exemple}
+            Par exemple:
+            \begin{itemize}
+                \item $3 + 3 \unif 2 * 3$ puisque ces deux opérations sont équivalentes.
+                \item $x + 1 \unif 10$ si et seulement si $x = 9$.
+                \item $1 + 2 \nunif "3"$ puisque les deux expressions n'ont pas le même type.
+            \end{itemize}
 
     \subsection{Unification de premier ordre}
+
+            \structpar{Définition des méta-variable}
+                Une méta-variable est une variable libre. Elle sert de variable fictive et sera remplacée dès qu'on peut
+                associer cette méta-variable à une expression.
+
+                Dans le reste du rapport, les méta-variables seront noté en majuscule.
+                % Par exemple:
+                % TODO : mettre un exemple
 
             \structpar{L'unification des \lexp}
                 L'unification de premier ordre permet de déterminer si deux \lexp{} sont équivalentes, dans les cas simples.
                 Cependant, toutes les informations nécessaires ne sont pas toujours disponibles lors de l'unification.
                 L'algorithme d'unification renvoie une liste de contraintes et une liste d'associations entre une méta-variable et une \lexp{} quelconque.
-                Le couple formé par ces deux listes est appelé le \textit{contexte d'unification}\ref{fig:ctxunif}.
+                Le couple formé par ces deux listes est appelé le \textit{contexte d'unification}~\ref{fig:ctxunif}.
 
             \structpar{Cas Évident}
                 Si deux \lexp{} sont équivalentes, elles sont unifiables. Par exemple, deux nombres égaux seront transformés en deux \lexp{} équivalentes.
@@ -95,12 +114,33 @@
                 L'unification de premier ordre ne tient pas en compte des ajouts et suppressions de variables. C'est pourquoi cette forme d'unification ne suffit
                 pas pour l'inférence de type requise par \typer{}.
 
+                Par exemple, si on essaie d'unifier
+                \begin{verbatim}
+                    x + let x = 5 in x * y
+                \end{verbatim}
+                avec
+                \begin{verbatim}
+                    A + let x = B in A * C
+                \end{verbatim}
+                l'unification renverra un résultat correct avec $A = x$. Cependant, le premier $x$ et le second $x$ de la première expression
+                ne correspondent pas à la même variable. L'unification devrait donc renvoyer une erreur.
+
         \subsection{Unification des \hop{}}
             \structpar{\hop{}}
                 L'unification de premier ordre ne suffit pas pour l'inférence de type requise par \typer{}.
                 En effet, l'unification de premier ordre ne tient pas compte des modifications des index de \textit{de Bruijn}.
                 L'unification de \typer{} utilise un sous-ensemble de l'unification des \hop{}
                 L'unification des \hop{} est un sous-ensemble décidable de l'unification d'ordre supérieur.
+
+                L'équation
+                \begin{equation}
+                    F\ x\ y \unif x + y
+                \end{equation}
+                est un \hop{}. La solution de l'unification est $F = \lambda\ x\ y\ \rightarrow x + y$.
+                \begin{equation}
+                    F\ x\ 1 \unif x + 1
+                \end{equation}
+                n'est pas un \hop{}. Il y a plusieurs solutions non équivalentes: $F = \lambda\ x\ y \rightarrow x + y$ et $F = \lambda\ x\ y \rightarrow x + 1$
 
             \structpar{Les index de \textit{de Bruijn}}
                 Les index de \textit{de Bruijn} sont une notation inventée par Nicolaas Govert de Bruijn qui sert à représenter les
@@ -112,6 +152,15 @@
                 ces deux variables auront des index différents puisqu'elles sont différentes.
                 Cependant, le décalage des index lié à l'ajout et la suppression de variables peut causer des erreurs lors de la comparaison d'une même
                 variable dans des contextes différents.
+
+                Par exemple l'expression:
+                \begin{equation}
+                    \lambda\ x \rightarrow (x, \lambda\ y \rightarrow x + y)
+                \end{equation}
+                sera encodé par:
+                \begin{equation}
+                    \lambda \rightarrow (\#0, \lambda \rightarrow \#1 + \#0)
+                \end{equation}
 
             \structpar{La substitution des index de \textit{de Bruijn}}
                 Pour remédier au problème de l'ajout et de la suppression de variables avec les index de \textit{de Bruijn}, on associe au contexte des
@@ -127,3 +176,10 @@
                 Cette modification permet de prendre en compte le contexte dans lequel la méta-variable a été créée
                 et ainsi de pouvoir appliquer les substitutions lors de l'unification de variables dans des contextes différents.
 
+                Par exemple si on considère $A[\sigma]$ avec $A$ une méta-variable et $\sigma$ la substitution appliquée à $A$.
+                $A$ est une variable libre, sa valeur n'est pas connue. Il faut donc garder la substitution suspendue.
+                Pour résoudre $A[\sigma] \unif e$, avec $e$ une expression quelconque, il faut donc résoudre $A = e[\sigma^{-1}]$.
+
+                $\sigma^{-1}$ est la substitution inverse de $\sigma$ tel que $\sigma \circ \sigma^{-1} = id$ et $e[\sigma \circ \sigma^{-1}] = e[id] = e$.
+
+                % TODO : mettre un exemple concrèt ?

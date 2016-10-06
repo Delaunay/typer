@@ -45,8 +45,8 @@
                 morecomment=[l][\color{magenta}]{\#}
 }
 
-\newcommand{\subsubsubsection}{\paragraph}
-\renewcommand{\paragraph}{\subparagraph}
+\AtBeginDocument{\renewcommand{\ref}[1]{(cf~\autoref{#1})}}
+
 \setcounter{secnumdepth}{3}
 
 \newcommand{\udem}{Université de Montréal}
@@ -57,6 +57,9 @@
 
 \newunicodechar{≡}{\ensuremath{\equiv}}
 \newunicodechar{α}{\ensuremath{\alpha}}
+
+\DeclareMathOperator{\unif}{\mathbin{=?}}
+\DeclareMathOperator{\nunif}{\mathbin{\neq?}}
 
 \title{Stage de quatrième année}
 \subtitle{Développement d'inférence de type pour le langage Typer}
