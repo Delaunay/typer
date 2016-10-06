@@ -706,14 +706,28 @@ and lexp_decls_macro (loc, mname) sargs ctx: (pdecl list * elab_context) =
 
       (* lxp has the form (Call (Var(_, "Macro_"), [(_, function)]))
        * We need the function so we can call it later *)
-      let body = match lxp with
-        | Some lxp -> lxp
+      let body, mfun = match lxp with
+        | Some (Call(_, [(_, lxp)]) as e) -> e, lxp
+        | Some lxp -> lxp, lxp
         | None -> lexp_fatal loc "expression does not exist" in
 
       (* Special Form *)
-        match body with
-          | Var((_, "add-attribute"), _) ->
-            print_string "Not Implemented"; [], ctx
+        match mfun with
+          | Var((_, "add-attribute"), _) ->(
+            (* Builtin macro *)
+            let pargs = List.map pexp_parse sargs in
+            let largs = _lexp_parse_all pargs ctx 0 in
+
+            (* extract info *)
+            let var, att, fn = match largs with
+              | [Var((_, vn), vi); Var((_, an), ai); fn] -> (vi, vn), (ai, an), fn
+              | _ -> lexp_fatal loc "add-attribute expects 3 args" in
+
+            let ctx = add_property ctx var att fn in
+
+            (* FIXME: We need to have something in lexp to represent this
+             * add-attribute operation!  *)
+              [], ctx)
 
           | _ ->(
             let ret = lexp_expand_macro body sargs ctx in
@@ -818,12 +832,10 @@ and lexp_decls_1
         (assert (SMap.is_empty pending_decls);
          assert (pending_defs = []);
 
-         print_string "ectx = nctx\n"; flush stdout;
          lexp_decls_1 (List.append pdecls' pdecls) ectx nctx'
                       pending_decls pending_defs)
 
-      else (
-      print_string "error\n"; flush stdout; lexp_fatal l "Context changed in already changed context"))
+      else lexp_fatal l "Context changed in already changed context")
 
 
 and _lexp_decls pdecls ctx i: ((vdef * lexp * ltype) list list * elab_context) =
