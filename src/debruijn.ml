@@ -117,8 +117,8 @@ let lexp_ctx_cons (ctx : lexp_context) offset d v t =
                   || previous_offset = 1 + offset)));
   M.cons (offset, d, v, t) ctx
 
-let lctx_extend (ctx : lexp_context) (def: vdef) (v: varbind) (t: lexp) =
-  lexp_ctx_cons ctx 0 (Some def) v t
+let lctx_extend (ctx : lexp_context) (def: vdef option) (v: varbind) (t: lexp) =
+  lexp_ctx_cons ctx 0 def v t
 
 let env_extend_rec r (ctx: elab_context) (def: vdef) (v: varbind) (t: lexp) =
   let (loc, name) = def in

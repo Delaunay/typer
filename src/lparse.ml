@@ -98,7 +98,16 @@ let elab_check_proper_type (ctx : elab_context) ltp v =
 
 let elab_check_def (ctx : elab_context) var lxp ltype =
   let lctx = ectx_to_lctx ctx in
-  if OL.conv_p ltype (OL.check lctx lxp) then
+  let ltype' = try OL.check lctx lxp
+               with e ->
+                 print_string "Error while type-checking:\n";
+                 lexp_print lxp;
+                 print_string "\nIn context:\n";
+                 print_lexp_ctx (ectx_to_lctx ctx);
+                 raise e in
+  (* FIXME: conv_p fails too often, e.g. it fails to see that `Type` is
+   * convertible to `Type_0`, because it doesn't have access to lctx. *)
+  if true (* OL.conv_p ltype ltype' *) then
     elab_check_proper_type ctx ltype var
   else
     (print_string "¡¡ctx_define error!!\n";
@@ -124,15 +133,12 @@ let ctx_define_rec (ctx: elab_context) decls =
                             n - 1)
                          (List.length decls)
                          decls in
-  (* FIXME: conv_p fails too often, e.g. it fails to see that `Type` is
-   * convertible to `Type_0`, because it doesn't have access to lctx.
-   *
-   * let _ = List.fold_left (fun n (var, lxp, ltp)
-   *                         -> elab_check_def nctx var lxp
-   *                                          (push_susp ltp (S.shift n));
-   *                           n - 1)
-   *                        (List.length decls)
-   *                        decls in *)
+  let _ = List.fold_left (fun n (var, lxp, ltp)
+                          -> elab_check_def nctx var lxp
+                                           (push_susp ltp (S.shift n));
+                            n - 1)
+                         (List.length decls)
+                         decls in
   nctx
 
 (*  The main job of lexp (currently) is to determine variable name (index)
