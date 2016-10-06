@@ -808,15 +808,13 @@ and lexp_decls_1
   | Pmcall ((l, _) as v, sargs) :: pdecls
    -> ((* expand macro and get the generated declarations *)
       let pdecls', nctx' = lexp_decls_macro v sargs nctx in
-        print_string "lexp_decls_macro \n"; flush stdout;
 
-      if nctx = nctx' then(
-        print_string "nctx = nctx'\n"; flush stdout;
+      if nctx == nctx' then
         (* Plain macro expansion!  *)
         lexp_decls_1 (List.append pdecls' pdecls) ectx nctx
-                     pending_decls pending_defs)
+                     pending_decls pending_defs
 
-      else if ectx = nctx then
+      else if ectx == nctx then
         (assert (SMap.is_empty pending_decls);
          assert (pending_defs = []);
 
