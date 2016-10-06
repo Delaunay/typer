@@ -194,8 +194,8 @@ let rec sort_level_max l1 l2 = match nosusp l1, nosusp l2 with
   | _, _ (* FIXME: This requires s.th. like `SLmax of lexp * lexp`!  *)
     -> U.msg_error "TC" (lexp_location l1)
                   ("Can't compute the max of levels `"
-                   ^ lexp_to_str l1 ^ "` and `"
-                   ^ lexp_to_str l2 ^ "`");
+                   ^ lexp_string l1 ^ "` and `"
+                   ^ lexp_string l2 ^ "`");
       SortLevel SLz
 
 let sort_compose l s1 s2 =
@@ -284,7 +284,7 @@ let rec check ctx e =
                          mkSusp t2 (S.substitute arg)
                      | _ -> (U.msg_error "TC" (lexp_location arg)
                                         ("Calling a non function (type = "
-                                         ^ lexp_to_str ft ^ ")!");
+                                         ^ lexp_string ft ^ ")!");
                             ft))
                   ft args
   | Inductive (l, label, args, cases)
@@ -305,9 +305,9 @@ let rec check ctx e =
                                   -> sort_level_max level level'
                                 | tt -> U.msg_error "TC" (lexp_location t)
                                                    ("Field type "
-                                                    ^ lexp_to_str t
+                                                    ^ lexp_string t
                                                     ^ " is not a Type! ("
-                                                    ^ lexp_to_str tt ^")");
+                                                    ^ lexp_string tt ^")");
                                        DB.print_lexp_ctx ctx;
                                        SortLevel SLz),
                           DB.lctx_extend ctx v Variable t)
@@ -459,4 +459,4 @@ and clean_map cases =
     SMap.mapi (fun key (l, args, expr) ->
         (l, (clean_arg_list args), (erase_type expr))) cases
 
-    
+

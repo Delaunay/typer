@@ -142,11 +142,11 @@ let debug_pexp_decls decls =
 
       let _ = match e with
         | Pexpr ((l, name), pxp) ->
-          lalign_print_string (pexp_to_string pxp) 15;
+          lalign_print_string (pexp_string pxp) 15;
           print_loc l; print_string " = "; pexp_print pxp
 
         | Ptype ((l, name), ptp) ->
-          lalign_print_string (pexp_to_string ptp) 15;
+          lalign_print_string (pexp_string ptp) 15;
           print_loc l; print_string " : "; pexp_print ptp
 
         | Pmcall((l, op), args)  ->
@@ -172,7 +172,7 @@ let debug_lexp_decls decls =
             let ((loc, name), lxp, ltp) = e in
 
             print_string " ";
-            lalign_print_string (lexp_to_string lxp) 15;
+            lalign_print_string (lexp_string lxp) 15;
             print_string "["; print_loc loc; print_string "]";
 
             let str = _lexp_str_decls (!debug_ppctx) [e] in

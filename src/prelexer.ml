@@ -142,10 +142,6 @@ let prelex_file file =
             (* Traditionally, line numbers start at 1 :-(  *)
             1 [] []
 
-(*  Since current implementation is not compatible with stream          *
- *  we write a temporary file and use this file as input.               *
- *  This is a terrible solution but for the things we do it does not    *
- *  really matters.  Plus it will make testing easier.                  *)
 let prelex_string str =
   let pos = ref 0 in
   let getline () =
@@ -160,19 +156,25 @@ let prelex_string str =
       line
   in prelex "<string>" getline 1 [] []
 
-let rec _pretokens_to_str pretok =
+let pretoken_name pretok =
+  match pretok with
+    | Pretoken  _ -> "Pretoken"
+    | Prestring _ -> "Prestring"
+    | Preblock  _ -> "Preblock"
+
+let rec pretoken_string pretok =
     match pretok with
         | Preblock(_,pts,_) ->  "{" ^ (
-            List.fold_left (fun str pts -> str ^ " " ^ (_pretokens_to_str pts))
+            List.fold_left (fun str pts -> str ^ " " ^ (pretoken_string pts))
                 "" pts) ^ " }"
         | Pretoken(_, str)  -> str
         | Prestring(_, str) -> "\"" ^ str ^ "\""
 
-let pretokens_to_str pretokens =
-  List.fold_left (fun str pt -> str ^ (_pretokens_to_str pt)) "" pretokens
+let pretokens_string pretokens =
+  List.fold_left (fun str pt -> str ^ (pretoken_string pt)) "" pretokens
 
 
-let pretokens_print p = print_string (pretokens_to_str p)
+let pretokens_print p = print_string (pretokens_string p)
 
 
 (* Prelexer comparison, ignoring source-line-number info, used for tests.  *)

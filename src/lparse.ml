@@ -72,7 +72,7 @@ let btl_folder = ref "./btl/"
 (* Print Lexp name followed by the lexp in itself, finally throw an exception *)
 let lexp_debug_message loc lxp message =
   print_string "\n";
-  print_string (lexp_to_str lxp); print_string ": "; lexp_print lxp; print_string "\n";
+  print_string (lexp_string lxp); print_string ": "; lexp_print lxp; print_string "\n";
   lexp_fatal loc message
 
 
@@ -86,12 +86,12 @@ let elab_check_sort (ctx : elab_context) lsort (l, name) ltp =
   match OL.lexp_whnf lsort (ectx_to_lctx ctx) with
   | Sort (_, _) -> () (* All clear!  *)
   | _ -> lexp_error l ("Type of `" ^ name ^ "` is not a proper type: "
-                      ^ lexp_to_str ltp)
+                      ^ lexp_string ltp)
 
 let elab_check_proper_type (ctx : elab_context) ltp v =
   try elab_check_sort ctx (OL.check (ectx_to_lctx ctx) ltp) v ltp
   with e -> print_string ("Exception while checking type `"
-                         ^ lexp_to_str ltp ^ "` of var `" ^
+                         ^ lexp_string ltp ^ "` of var `" ^
                            (let (_, name) = v in name) ^"`\n");
            print_lexp_ctx (ectx_to_lctx ctx);
            raise e
@@ -475,7 +475,7 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
                handle_fun_args ((ak, larg) :: largs) sargs
                                (L.mkSusp ret_type (S.substitute larg))
            | _ -> lexp_fatal (sexp_location sarg)
-                            ("Explicit arg `" ^ aname ^ "` to non-function (type = " ^ lexp_to_str ltp ^ ")"))
+                            ("Explicit arg `" ^ aname ^ "` to non-function (type = " ^ lexp_string ltp ^ ")"))
       | sarg :: sargs
         (*  Process Argument *)
         -> (match OL.lexp_whnf ltp (ectx_to_lctx ctx) with
@@ -492,8 +492,8 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
             lexp_print t; print_string "\n";
             print_lexp_ctx (ectx_to_lctx ctx);
             lexp_fatal (sexp_location sarg)
-                       ("Explicit arg `" ^ sexp_to_str sarg
-                        ^ "` to non-function (type = " ^ lexp_to_str ltp ^ ")")) in
+                       ("Explicit arg `" ^ sexp_string sarg
+                        ^ "` to non-function (type = " ^ lexp_string ltp ^ ")")) in
 
     let handle_funcall () =
       (* Here we use lexp_whnf on actual code, but it's OK
@@ -599,11 +599,11 @@ and lexp_read_pattern pattern exp target ctx:
                    -> (try SMap.find cons_name map
                       with Not_found
                            -> lexp_warning loc
-                                          ("`" ^ lexp_to_str (it)
+                                          ("`" ^ lexp_string (it)
                                            ^ "` does not hold a `"
                                            ^ cons_name ^ "` constructor"); [])
                  | it -> lexp_fatal loc
-                                  ("`" ^ lexp_to_str (it)
+                                  ("`" ^ lexp_string (it)
                                    ^ "` is not an inductive type!") in
 
                (* FIXME: Don't remove them, add them without names!  *)
@@ -622,7 +622,7 @@ and lexp_read_pattern pattern exp target ctx:
                (cons_name, loc, args), nctx
            | _ -> lexp_warning (pexp_location ctor)
                               ("Invalid constructor `"
-                               ^ (pexp_to_string ctor) ^ "`");
+                               ^ (pexp_string ctor) ^ "`");
                  ("_", pexp_location ctor, []), ctx
 
 (*  Read patterns inside a constructor *)
@@ -865,7 +865,7 @@ and _lexp_parse_all (p: pexp list) (ctx: elab_context) i : lexp list =
 
 
 and print_lexp_trace () =
-    print_trace " LEXP TRACE " 50 pexp_to_string pexp_print !_global_lexp_trace
+    print_trace " LEXP TRACE " 50 pexp_string pexp_print !_global_lexp_trace
 
 (*  Only print var info *)
 and lexp_print_var_info ctx =
