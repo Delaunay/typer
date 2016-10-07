@@ -109,17 +109,22 @@ let elab_check_def (ctx : elab_context) var lxp ltype =
      lexp_fatal (let (l,_) = var in l) "TC error")
 
 let ctx_define (ctx: elab_context) var lxp ltype =
-  elab_check_def (ectx_to_lctx ctx) var lxp ltype;
+  elab_check_def ctx var lxp ltype;
   env_extend ctx var (LetDef lxp) ltype
 
 let ctx_define_rec (ctx: elab_context) decls =
   let nctx = ectx_extend_rec ctx decls in
+  let _ = List.fold_left (fun n (var, lxp, ltp)
+                          -> elab_check_proper_type
+                              nctx (push_susp ltp (S.shift n)) var;
+                            n - 1)
+                         (List.length decls)
+                         decls in
   (* FIXME: conv_p fails too often, e.g. it fails to see that `Type` is
    * convertible to `Type_0`, because it doesn't have access to lctx.
    *
-   * let nlctx = ectx_to_lctx nctx in
    * let _ = List.fold_left (fun n (var, lxp, ltp)
-   *                         -> elab_check_def nlctx var lxp
+   *                         -> elab_check_def nctx var lxp
    *                                          (push_susp ltp (S.shift n));
    *                           n - 1)
    *                        (List.length decls)
@@ -181,7 +186,7 @@ let mkMetavar () = let meta = Unif.create_metavar ()
 let rec lexp_p_infer (p : pexp) (ctx : elab_context): lexp * ltype =
     _lexp_p_infer p ctx 1
 
-and _lexp_p_infer (p : pexp) (ctx : lexp_context) i: lexp * ltype =
+and _lexp_p_infer (p : pexp) (ctx : elab_context) i: lexp * ltype =
   Debug_fun.do_debug (fun () ->
       prerr_endline ("[StackTrace] ------------------------------------------");
       prerr_endline ("[StackTrace] let _lexp_p_infer p ctx i");
@@ -343,7 +348,7 @@ and lexp_let_decls decls (body: lexp) ctx i =
 and lexp_p_check (p : pexp) (t : ltype) (ctx : elab_context): lexp =
   _lexp_p_check p t ctx 1
 
-and _lexp_p_check (p : pexp) (t : ltype) (ctx : lexp_context) i: lexp =
+and _lexp_p_check (p : pexp) (t : ltype) (ctx : elab_context) i: lexp =
   Debug_fun.do_debug (fun () ->
       prerr_endline ("[StackTrace] ------------------------------------------");
       prerr_endline ("[StackTrace] let _lexp_p_check p t ctx i");
@@ -891,8 +896,20 @@ and lexp_decls_1
             assert (pending_defs == []));
          [], [], nctx
 
-        let is_empty = (List.length !pending) = 0 in
-        let is_one = (List.length !pending) = 1 in
+  | Ptype ((l, vname) as v, ptp) :: pdecls
+    -> let (ltp, lsort) = lexp_p_infer ptp nctx in
+      if SMap.mem vname pending_decls then
+        (lexp_error l ("Variable `" ^ vname ^ "` declared twice!");
+         lexp_decls_1 pdecls ectx nctx pending_decls pending_defs)
+      else if List.exists (fun ((_, vname'), _, _) -> vname = vname')
+                          pending_defs then
+        (lexp_error l ("Variable `" ^ vname ^ "` already defined!");
+         lexp_decls_1 pdecls ectx nctx pending_decls pending_defs)
+      else (elab_check_sort nctx lsort v ltp;
+            lexp_decls_1 pdecls ectx
+                         (env_extend nctx v ForwardRef ltp)
+                         (SMap.add vname (l, ltp) pending_decls)
+                         pending_defs)
 
   | Pexpr ((l, vname) as v, pexp) :: pdecls
        when SMap.is_empty pending_decls
