@@ -115,14 +115,14 @@
                 pas pour l'inférence de type requise par \typer{}.
 
                 Par exemple, si on essaie d'unifier
-                \begin{verbatim}
-                    x + let x = 5 in x * y
-                \end{verbatim}
+                \begin{equation}
+                    \verb!x + let x = 5 in x * y! \label{eq:first}
+                \end{equation}
                 avec
-                \begin{verbatim}
-                    A + let x = B in A * C
-                \end{verbatim}
-                l'unification renverra un résultat correct avec $A = x$. Cependant, le premier $x$ et le second $x$ de la première expression
+                \begin{equation}
+                    \verb!A + let x = B in A * C! \label{eq:sec}
+                \end{equation}
+                l'unification renverra un résultat correct avec $A = x$. Cependant, le premier $x$ et le second $x$ de la première expression (~\autoref{eq:first}~)
                 ne correspondent pas à la même variable. L'unification devrait donc renvoyer une erreur.
 
         \subsection{Unification des \hop{}}
