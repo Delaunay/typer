@@ -63,20 +63,20 @@ let emptyString = hString ""
 
 (*************** The Sexp Printer *********************)
 
-let rec sexp_to_str sexp =
+let rec sexp_string sexp =
   match sexp with
     | Epsilon -> "ε"  (* "ε" *)
-    | Block(_,pts,_) -> "{" ^ (pretokens_to_str pts) ^ " }"
+    | Block(_,pts,_) -> "{" ^ (pretokens_string pts) ^ " }"
     | Symbol(_, name) ->  name
     | String(_, str) -> "\"" ^ str ^ "\""
     | Integer(_, n) -> string_of_int n
     | Float(_, x) -> string_of_float x
     | Node(f, args) ->
-        let str = "(" ^ (sexp_to_str f) in
+        let str = "(" ^ (sexp_string f) in
             (List.fold_left (fun str sxp ->
-                str ^ " " ^ (sexp_to_str sxp)) str args) ^ ")"
+                str ^ " " ^ (sexp_string sxp)) str args) ^ ")"
 
-let sexp_print sexp = print_string (sexp_to_str sexp)
+let sexp_print sexp = print_string (sexp_string sexp)
 
 let rec sexp_location s =
   match s with
@@ -87,6 +87,16 @@ let rec sexp_location s =
     | Float (l, _) -> l
     | Node (s, _) -> sexp_location s
     | Epsilon -> (internal_error "Looking for the location of Epsilon")
+
+let rec sexp_name s =
+  match s with
+    | Block   _ -> "Block"
+    | Symbol  _ -> "Symbol"
+    | String  _ -> "String"
+    | Integer _ -> "Integer"
+    | Float   _ -> "Float"
+    | Node    _ -> "Node"
+    | Epsilon   -> "Epsilon"
 
 (*************** The Sexp Parser *********************)
 

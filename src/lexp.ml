@@ -346,18 +346,18 @@ and nosusp e =                  (* Return `e` without `Susp`.  *)
     | Susp(e, s) -> push_susp e s
     | _ -> e
 
-let lexp_to_string e =
+let lexp_name e =
   match e with
-    | Imm _ -> "Imm"
-    | Var _ -> "Var"
-    | Let _ -> "let"
-    | Arrow _ -> "Arrow"
+    | Imm    _ -> "Imm"
+    | Var    _ -> "Var"
+    | Let    _ -> "let"
+    | Arrow  _ -> "Arrow"
     | Lambda _ -> "lambda"
-    | Call _ -> "Call"
+    | Call   _ -> "Call"
+    | Cons   _ -> "inductive-cons"
+    | Case   _ -> "case"
     | Inductive _ -> "inductive_"
-    | Cons _ -> "inductive-cons"
-    | Case _ -> "case"
-    | Builtin _ -> "Builtin"
+    | Builtin   _ -> "Builtin"
     | _ -> "lexp_to_string: not implemented"
 
 (*
@@ -574,7 +574,7 @@ let rec lexp_unparse lxp =
 
     | _ as e -> Pimm (Symbol(lexp_location e, "Type"))
 
-
+let lexp_string lxp = sexp_string (pexp_unparse (lexp_unparse lxp))
 (*
  *      Printing
  * --------------------- *)
@@ -623,7 +623,7 @@ let default_print_context =
 
 (* If I remember correctly ocaml doc, concat string is actually terrible *)
 (* It might be better to use a Buffer. *)
-and lexp_to_str exp = _lexp_to_str (!debug_ppctx) exp
+and lexp_pretty_string exp = _lexp_to_str (!debug_ppctx) exp
 
 and _lexp_to_str ctx exp =
     (* create a string instead of printing *)
@@ -672,7 +672,7 @@ and _lexp_to_str ctx exp =
             | String (_, s) -> tval ("\"" ^ s ^ "\"")
             | Integer(_, s) -> tval (string_of_int s)
             | Float  (_, s) -> tval (string_of_float s)
-            | e -> sexp_to_str e)
+            | e -> sexp_string e)
 
         | Susp (e, s) -> _lexp_to_str ctx (push_susp e s)
 

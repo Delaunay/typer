@@ -43,6 +43,7 @@ type label = symbol
 module SMap = U.SMap
 
 let elexp_warning = U.msg_warning "ELEXP"
+let elexp_fatal = U.msg_fatal "ELEXP"
 
 type elexp =
     | Imm of sexp
@@ -77,28 +78,27 @@ let rec elexp_location e =
 
 let elexp_name e =
   match e with
-    | Imm _ -> "Imm"
-    | Builtin _ -> "Builtin"
-    | Var _ -> "Var"
-    | Let _ -> "Let"
-    | Lambda _ -> "Lambda"
+    | Imm  _ -> "Imm"
+    | Var  _ -> "Var"
+    | Let  _ -> "Let"
     | Call _ -> "Call"
     | Cons _ -> "Cons"
     | Case _ -> "Case"
-    | Type  -> "Type"
+    | Type   -> "Type"
+    | Lambda    _ -> "Lambda"
+    | Builtin   _ -> "Builtin"
     | Inductive _ -> "Inductive"
 
-let rec elexp_print lxp = print_string (elexp_str lxp)
-and elexp_to_string lxp = elexp_str lxp
-and elexp_str lxp =
+let rec elexp_print lxp = print_string (elexp_string lxp)
+and elexp_string lxp =
     let maybe_str lxp =
         match lxp with
-            | Some lxp -> " | _ => " ^ (elexp_str lxp)
+            | Some lxp -> " | _ => " ^ (elexp_string lxp)
             | None -> "" in
 
     let str_decls d =
         List.fold_left (fun str ((_, s), lxp) ->
-            str ^ " " ^ s ^ " = " ^ (elexp_str lxp)) "" d in
+            str ^ " " ^ s ^ " = " ^ (elexp_string lxp)) "" d in
 
     let str_pat lst =
         List.fold_left (fun str v ->
@@ -108,33 +108,36 @@ and elexp_str lxp =
 
     let str_cases c =
         SMap.fold (fun key (_, lst, lxp) str ->
-            str ^ " | " ^ key ^ " " ^ (str_pat lst) ^ " => " ^ (elexp_str lxp))
+            str ^ " | " ^ key ^ " " ^ (str_pat lst) ^ " => " ^ (elexp_string lxp))
                 c "" in
 
     let str_args lst =
         List.fold_left (fun str lxp ->
-            str ^ " " ^ (elexp_str lxp)) "" lst in
+            str ^ " " ^ (elexp_string lxp)) "" lst in
 
     match lxp with
-        | Imm(s)          -> sexp_to_str s
+        | Imm(s)          -> sexp_string s
         | Builtin((_, s)) -> s
         | Var((_, s), _)  -> s
         | Cons((_, s))    -> s
 
-        | Lambda((_, s), b)  -> "lambda " ^ s ^ " -> " ^ (elexp_str b)
+        | Lambda((_, s), b)  -> "lambda " ^ s ^ " -> " ^ (elexp_string b)
 
         | Let(_, d, b)    ->
-            "let" ^ (str_decls d) ^ " in " ^ (elexp_str b)
+            "let" ^ (str_decls d) ^ " in " ^ (elexp_string b)
 
         | Call(fct, args) ->
-            "(" ^ (elexp_str fct) ^ (str_args args) ^ ")"
+            "(" ^ (elexp_string fct) ^ (str_args args) ^ ")"
 
         | Case(_, t, cases, default) ->
-            "case " ^ (elexp_str t) ^ (str_cases cases) ^ (maybe_str default)
+            "case " ^ (elexp_string t) ^ (str_cases cases) ^ (maybe_str default)
 
         | Inductive(_, (_, s)) ->
             "inductive_ " ^ s
 
         | Type -> "Type "
 
+(* Print Lexp name followed by the lexp in itself, finally throw an exception *)
+let elexp_debug_message loc lxp message =
+  elexp_fatal loc (message ^ "\n" ^ (elexp_name lxp) ^ ": " ^ (elexp_string lxp) ^ "\n");
 

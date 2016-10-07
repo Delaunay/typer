@@ -404,16 +404,20 @@ let _pexp_decl_str (str: string) tenv grm limit =
 let pexp_decl_str str =
     _pexp_decl_str str default_stt default_grammar (Some ";")
 
-let pexp_to_string e =
+
+let pexp_string e = sexp_string (pexp_unparse e)
+let pexp_print e = print_string (pexp_string e)
+
+let pexp_name e =
   match e with
-  | Pimm _ -> "Pimm"
-  | Pvar (_,_) -> "Pvar"
+  | Pimm _           -> "Pimm"
+  | Pvar (_,_)       -> "Pvar"
   | Phastype (_,_,_) -> "Phastype"
-  | Pmetavar (_, _) -> "Pmetavar"
-  | Plet (_, _, _) -> "Plet"
-  | Parrow (_, _, _, _, _) -> "Parrow"
-  | Plambda (_,(_,_), _, _) -> "Plambda"
-  | Pcall (_, _) -> "Pcall"
+  | Pmetavar (_, _)  -> "Pmetavar"
+  | Plet (_, _, _)   -> "Plet"
+  | Parrow (_, _, _, _, _)   -> "Parrow"
+  | Plambda (_,(_,_), _, _)  -> "Plambda"
+  | Pcall (_, _)             -> "Pcall"
   | Pinductive ((_,_), _, _) -> "Pinductive"
-  | Pcons (_,_) -> "Pcons"
+  | Pcons (_,_)     -> "Pcons"
   | Pcase (_, _, _) -> "Pcase"

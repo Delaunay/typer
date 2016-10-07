@@ -71,30 +71,45 @@ let _global_lexp_trace = ref []
 let _parsing_internals = ref false
 let btl_folder = ref "./btl/"
 
+(* Print Lexp name followed by the lexp in itself, finally throw an exception *)
+let lexp_debug_message loc lxp message =
+  print_string "\n";
+  print_string (lexp_string lxp); print_string ": "; lexp_print lxp; print_string "\n";
+  lexp_fatal loc message
+
+
 (* merged declaration, allow us to process declaration in multiple pass *)
 (* first detect recursive decls then lexp decls*)
 type mdecl =
   | Ldecl of symbol * pexp option * pexp option
   | Lmcall of symbol * sexp list
 
-
 let elab_check_sort (ctx : elab_context) lsort (l, name) ltp =
   match OL.lexp_whnf lsort (ectx_to_lctx ctx) VMap.empty with
   | Sort (_, _) -> () (* All clear!  *)
   | _ -> lexp_error l ("Type of `" ^ name ^ "` is not a proper type: "
-                      ^ lexp_to_str ltp)
+                      ^ lexp_string ltp)
 
 let elab_check_proper_type (ctx : elab_context) ltp v =
   try elab_check_sort ctx (OL.check (ectx_to_lctx ctx) ltp) v ltp
   with e -> print_string ("Exception while checking type `"
-                         ^ lexp_to_str ltp ^ "` of var `" ^
+                         ^ lexp_string ltp ^ "` of var `" ^
                            (let (_, name) = v in name) ^"`\n");
            print_lexp_ctx (ectx_to_lctx ctx);
            raise e
 
 let elab_check_def (ctx : elab_context) var lxp ltype =
   let lctx = ectx_to_lctx ctx in
-  if OL.conv_p ltype (OL.check lctx lxp) then
+  let ltype' = try OL.check lctx lxp
+               with e ->
+                 print_string "Error while type-checking:\n";
+                 lexp_print lxp;
+                 print_string "\nIn context:\n";
+                 print_lexp_ctx (ectx_to_lctx ctx);
+                 raise e in
+  (* FIXME: conv_p fails too often, e.g. it fails to see that `Type` is
+   * convertible to `Type_0`, because it doesn't have access to lctx. *)
+  if true (* OL.conv_p ltype ltype' *) then
     elab_check_proper_type ctx ltype var
   else
     (print_string "¡¡ctx_define error!!\n";
@@ -120,15 +135,12 @@ let ctx_define_rec (ctx: elab_context) decls =
                             n - 1)
                          (List.length decls)
                          decls in
-  (* FIXME: conv_p fails too often, e.g. it fails to see that `Type` is
-   * convertible to `Type_0`, because it doesn't have access to lctx.
-   *
-   * let _ = List.fold_left (fun n (var, lxp, ltp)
-   *                         -> elab_check_def nctx var lxp
-   *                                          (push_susp ltp (S.shift n));
-   *                           n - 1)
-   *                        (List.length decls)
-   *                        decls in *)
+  let _ = List.fold_left (fun n (var, lxp, ltp)
+                          -> elab_check_def nctx var lxp
+                                           (push_susp ltp (S.shift n));
+                            n - 1)
+                         (List.length decls)
+                         decls in
   nctx
 
 (*  The main job of lexp (currently) is to determine variable name (index)
@@ -221,7 +233,7 @@ and _lexp_p_infer (p : pexp) (ctx : elab_context) i: lexp * ltype =
 
                 (* search type *)
                 let ltp = env_lookup_type ctx ((loc, name), idx) in
-                    lxp, ltp
+                    lxp, ltp (* Return Macro[22] *)
 
             with Not_found ->
                 (lexp_error loc ("The variable: \"" ^ name ^ "\" was not declared");
@@ -538,16 +550,8 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
                let larg = _lexp_p_check parg arg_type ctx i in
                handle_fun_args ((ak, larg) :: largs) sargs
                                (L.mkSusp ret_type (S.substitute larg))
-           | e -> Debug_fun.do_debug
-                   (fun () ->
-                     print_endline ("<>explicit arg : "
-                                    ^ Fmt_lexp.string_of_lxp ltp);
-                     print_endline ("<>explicit res : "
-                                    ^ Fmt_lexp.string_of_lxp e);
-                     ());
-                 lexp_fatal (sexp_location sarg)
-                            ("Explicit-implicit arg `" ^ aname
-                       ^ "` to non-function (type = " ^ lexp_to_str ltp ^ ")"))
+           | _ -> lexp_fatal (sexp_location sarg)
+                            ("Explicit-implicit arg `" ^ aname ^ "` to non-function (type = " ^ lexp_string ltp ^ ")"))
       | sarg :: sargs
         (*  Process Argument *)
         -> (match OL.lexp_whnf ltp (ectx_to_lctx ctx) meta_ctx with
@@ -564,9 +568,8 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
             lexp_print t; print_string "\n";
             print_lexp_ctx (ectx_to_lctx ctx);
             lexp_fatal (sexp_location sarg)
-                       ("Explicit arg `" ^ sexp_to_str sarg
-                        ^ "` to non-function (type = "
-                        ^ lexp_to_str ltp ^ ")")) in
+                       ("Explicit arg `" ^ sexp_string sarg
+                        ^ "` to non-function (type = " ^ lexp_string ltp ^ ")")) in
 
     let handle_funcall () =
       (* Here we use lexp_whnf on actual code, but it's OK
@@ -603,32 +606,17 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
         Call (body, List.rev largs), ret_type in
 
     let handle_macro_call () =
-        (* Build function to be called *)
-        let macro_expand = get_predef "expand_macro_" ctx in
-        let args = [(Aexplicit, body); (Aexplicit, (olist2tlist_lexp sargs ctx))] in
-        let macro = Call(macro_expand, args) in
-        let emacro = OL.erase_type macro in
-        let rctx = from_lctx ctx in
+      let sxp = match lexp_expand_macro body sargs ctx with
+          | Vsexp(sxp) -> sxp
+          (* Those are sexp converted by the eval function *)
+          | Vint(i)    -> Integer(dloc, i)
+          | Vstring(s) -> String(dloc, s)
+          | Vfloat(f)  -> Float(dloc, f)
+          | v          ->
+            value_debug_message loc v "Macro_ expects '(List Sexp) -> Sexp'" in
 
-        _global_eval_trace := [];
-
-        let vxp = try eval emacro rctx
-          with e ->
-            print_eval_trace ();
-            raise e in
-
-          let sxp = match vxp with
-              | Vsexp(sxp) -> sxp
-              (* Those are sexp converted by the eval function *)
-              | Vint(i)    -> Integer(dloc, i)
-              | Vstring(s) -> String(dloc, s)
-              | Vfloat(f)  -> Float(dloc, f)
-              (* I have vdum here WHY *)
-              | v -> debug_msg (value_print v); print_string "\n";
-                  lexp_fatal loc "Macro_ expects '(List Sexp) -> Sexp'" in
-
-        let pxp = pexp_parse sxp in
-            _lexp_p_infer pxp ctx (i + 1)  in
+      let pxp = pexp_parse sxp in
+        _lexp_p_infer pxp ctx (i + 1)  in
 
     (* This is the builtin Macro type *)
     let macro_type, macro_disp = match get_predef_option "Macro" ctx with
@@ -636,17 +624,8 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
       (* When type.typer is being parsed and the predef is not yet available *)
       | None -> dltype, false     in
 
-    (*print_string "\nmacro_type="; lexp_print macro_type;
-      print_string "\nltp="; lexp_print ltp;
-      print_string " (= "; lexp_print (OL.lexp_whnf ltp (ectx_to_lctx ctx)); print_string ")\n"; *)
-
     (* determine function type *)
     match func, ltp with
-      | Pvar(l, name), _ when is_builtin_macro name ->
-            let pargs = List.map pexp_parse sargs in
-            let largs = _lexp_parse_all pargs ctx i in
-              (get_macro_impl loc name) loc largs ctx ltp
-
       | macro, _ when (macro_disp
                        (* FIXME: This call to lexp_whnf shouldn't be needed!  *)
                        && OL.conv_p (OL.lexp_whnf ltp (ectx_to_lctx ctx)
@@ -704,11 +683,11 @@ and lexp_read_pattern pattern exp target ctx:
                    -> (try SMap.find cons_name map
                       with Not_found
                            -> lexp_warning loc
-                                          ("`" ^ lexp_to_str (it)
+                                          ("`" ^ lexp_string (it)
                                            ^ "` does not hold a `"
                                            ^ cons_name ^ "` constructor"); [])
                  | it -> lexp_fatal loc
-                                  ("`" ^ lexp_to_str (it)
+                                  ("`" ^ lexp_string (it)
                                    ^ "` is not an inductive type!") in
 
                (* FIXME: Don't remove them, add them without names!  *)
@@ -727,7 +706,7 @@ and lexp_read_pattern pattern exp target ctx:
                (cons_name, loc, args), nctx
            | _ -> lexp_warning (pexp_location ctor)
                               ("Invalid constructor `"
-                               ^ (pexp_to_string ctor) ^ "`");
+                               ^ (pexp_string ctor) ^ "`");
                  ("_", pexp_location ctor, []), ctx
 
 (*  Read patterns inside a constructor *)
@@ -799,69 +778,71 @@ and lexp_parse_inductive ctors ctx i =
 
 (* Macro declaration handling, return a list of declarations
  * to be processed *)
+and lexp_expand_macro macro_funct sargs ctx =
+
+  (* Build the function to be called *)
+  let macro_expand = get_predef "expand_macro_" ctx in
+  let args = [(Aexplicit, macro_funct); (Aexplicit, (olist2tlist_lexp sargs ctx))] in
+
+  let macro = Call(macro_expand, args) in
+  let emacro = OL.erase_type macro in
+  let rctx = from_lctx ctx in
+
+  (* eval macro *)
+   _global_eval_trace := [];
+  let vxp = try eval emacro rctx
+    with e -> print_eval_trace (); raise e in
+    (* Return results *)
+    (* Vint/Vstring/Vfloat might need to be converted to sexp *)
+      vxp
+
 and lexp_decls_macro (loc, mname) sargs ctx: (pdecl list * elab_context) =
-  (* lookup for mname_  *)
-  let idx = try senv_lookup mname ctx
-    with Not_found ->
-      lexp_warning loc ("Macro \"" ^ mname ^ "\" was not found!"); 0 in
+   try (* Lookup macro declaration *)
+      let idx = senv_lookup mname ctx in
+      let ltp = env_lookup_type ctx ((loc, mname), idx) in
+      let lxp = env_lookup_expr ctx ((loc, mname), idx) in
 
-  (* get Macro declaration *)
-  let lxp = try env_lookup_expr ctx ((loc, mname), idx)
-    with Not_found ->
-      lexp_fatal loc (mname ^ " was found but " ^ (string_of_int idx) ^
-                  " is not a correct index.") in
+      (* lxp has the form (Call (Var(_, "Macro_"), [(_, function)]))
+       * We need the function so we can call it later *)
+      let body, mfun = match lxp with
+        | Some (Call(_, [(_, lxp)]) as e) -> e, lxp
+        | Some lxp -> lxp, lxp
+        | None -> lexp_fatal loc "expression does not exist" in
 
-  (* get stored function *)
-  let lxp = match lxp with
-    | Some (Call(Var((_, "Macro_"), _), [(_, fct)])) -> fct
-    | None -> lexp_fatal loc "expression does not exist"
-    | Some lxp -> print_string "\n";
-      print_string (lexp_to_str lxp); print_string "\n";
-      lexp_print lxp; print_string "\n";
-      lexp_fatal loc "Macro is ill formed" in
+      (* Special Form *)
+        match mfun with
+          | Var((_, "add-attribute"), _) ->(
+            (* Builtin macro *)
+            let pargs = List.map pexp_parse sargs in
+            let largs = _lexp_parse_all pargs ctx 0 in
 
-    match lxp with
-      | Var((_, "add-attribute"), _) ->(
-        (* Builtin macro *)
-          let pargs = List.map pexp_parse sargs in
-          let largs = _lexp_parse_all pargs ctx 0 in
+            (* extract info *)
+            let var, att, fn = match largs with
+              | [Var((_, vn), vi); Var((_, an), ai); fn] -> (vi, vn), (ai, an), fn
+              | _ -> lexp_fatal loc "add-attribute expects 3 args" in
 
-          (* extract info *)
-          let var, att, fn = match largs with
-            | [Var((_, vn), vi); Var((_, an), ai); fn] -> (vi, vn), (ai, an), fn
-            | _ -> lexp_fatal loc "add-attribute expects 3 args" in
+            let ctx = add_property ctx var att fn in
 
-          let ctx = add_property ctx var att fn in
+            (* FIXME: We need to have something in lexp to represent this
+             * add-attribute operation!  *)
+              [], ctx)
 
-          (* FIXME: We need to have something in lexp to represent this
-           * add-attribute operation!  *)
-          [], ctx
-        )
-        (* Standard Macro *)
-      | _ -> (
-        (* build new function *)
-        let arg = olist2tlist_lexp sargs ctx in
-        let lxp = Call(lxp, [(Aexplicit, arg)]) in
-        let elexp = OL.erase_type lxp in
-        let rctx = from_lctx ctx in
+          | _ ->(
+            let ret = lexp_expand_macro body sargs ctx in
 
-        (* get a list of declaration *)
-        let decls = eval elexp rctx in
+            (* convert typer list to ocaml *)
+            let decls = tlist2olist [] ret in
 
-        (* convert typer list to ocaml *)
-        let decls = tlist2olist [] decls in
+            (* extract sexp from result *)
+            let decls = List.map (fun g ->
+              match g with
+                | Vsexp(sxp) -> sxp
+                | _ -> value_debug_message loc g "Macro expects sexp list") decls in
 
-        (* extract sexp from result *)
-        let decls = List.map (fun g ->
-          match g with
-            | Vsexp(sxp) -> sxp
-            | _ ->
-              print_string ((value_name g) ^ " : ");
-              value_print g; print_string "\n";
-              lexp_fatal loc "Macro expects sexp list") decls in
-
-        (* read as pexp_declaraton *)
-          pexp_decls_all decls, ctx)
+            (* read as pexp_declaraton *)
+            pexp_decls_all decls, ctx)
+  with _ ->
+    lexp_fatal loc "Macro not found"
 
 (*  Parse let declaration *)
 and lexp_p_decls decls ctx = _lexp_decls decls ctx 0
@@ -888,6 +869,7 @@ and lexp_decls_1
       (pending_decls : (location * ltype) SMap.t) (* Pending type decls. *)
       (pending_defs : (vdef * pexp * ltype) list) (* Pending definitions. *)
     : (vdef * lexp * ltype) list * pdecl list * elab_context =
+
   match pdecls with
   | [] -> (if not (SMap.is_empty pending_decls) then
             let (s, (l, _)) = SMap.choose pending_decls in
@@ -930,23 +912,28 @@ and lexp_decls_1
              decls, pdecls, nctx
            else
              lexp_decls_1 pdecls ectx nctx pending_decls pending_defs
-                          
+
        with Not_found ->
          lexp_error l ("`" ^ vname ^ "` defined but not declared!");
          lexp_decls_1 pdecls ectx nctx pending_decls pending_defs)
 
   | Pmcall ((l, _) as v, sargs) :: pdecls
-    -> let pdecls', nctx' = lexp_decls_macro v sargs nctx in
-      if nctx = nctx' then
+   -> ((* expand macro and get the generated declarations *)
+      let pdecls', nctx' = lexp_decls_macro v sargs nctx in
+
+      if nctx == nctx' then
         (* Plain macro expansion!  *)
         lexp_decls_1 (List.append pdecls' pdecls) ectx nctx
                      pending_decls pending_defs
-      else if ectx = nctx then
+
+      else if ectx == nctx then
         (assert (SMap.is_empty pending_decls);
          assert (pending_defs = []);
+
          lexp_decls_1 (List.append pdecls' pdecls) ectx nctx'
                       pending_decls pending_defs)
-      else lexp_fatal l "Context changed in already changed context"
+
+      else lexp_fatal l "Context changed in already changed context")
 
 
 and _lexp_decls pdecls ctx i: ((vdef * lexp * ltype) list list * elab_context) =
@@ -970,7 +957,7 @@ and _lexp_parse_all (p: pexp list) (ctx: elab_context) i : lexp list =
 
 
 and print_lexp_trace () =
-    print_trace " LEXP TRACE " 50 pexp_to_string pexp_print !_global_lexp_trace
+    print_trace " LEXP TRACE " 50 pexp_string pexp_print !_global_lexp_trace
 
 (*  Only print var info *)
 and lexp_print_var_info ctx =

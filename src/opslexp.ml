@@ -191,7 +191,9 @@ let rec lexp_whnf e (ctx : DB.lexp_context) meta_ctx : lexp =
 
 
 let assert_type e t t' =
-  if conv_p t t' then ()
+  (* FIXME: conv_p is not up to the task yet: it needs to take the ctx
+   * into account!  *)
+  if true (* conv_p t t' *) then ()
   else U.msg_error "TC" (lexp_location e) "Type mismatch"; ()
 
 let rec sort_level_max l1 l2 = match nosusp l1, nosusp l2 with
@@ -202,8 +204,8 @@ let rec sort_level_max l1 l2 = match nosusp l1, nosusp l2 with
   | _, _ (* FIXME: This requires s.th. like `SLmax of lexp * lexp`!  *)
     -> U.msg_error "TC" (lexp_location l1)
                   ("Can't compute the max of levels `"
-                   ^ lexp_to_str l1 ^ "` and `"
-                   ^ lexp_to_str l2 ^ "`");
+                   ^ lexp_string l1 ^ "` and `"
+                   ^ lexp_string l2 ^ "`");
       SortLevel SLz
 
 let sort_compose l s1 s2 =
@@ -242,11 +244,11 @@ let rec check ctx e =
   | Let (_, defs, e)
     -> let tmp_ctx =
         List.fold_left (fun ctx (v, e, t)
-                        -> (match check ctx t with
+                        -> (match lexp_whnf (check ctx t) ctx VMap.empty with
                            | Sort (_, Stype _) -> ()
                            | _ -> (U.msg_error "TC" (lexp_location t)
                                               "Def type is not a type!"; ()));
-                          DB.lctx_extend ctx v ForwardRef t)
+                          DB.lctx_extend ctx (Some v) ForwardRef t)
                        ctx defs in
       let _ = List.fold_left (fun n (v, e, t)
                               -> assert_type e (push_susp t (S.shift n))
@@ -270,14 +272,14 @@ let rec check ctx e =
                                "Not a proper type";
                    Sort (l, StypeOmega)))
   | Lambda (ak, ((l,_) as v), t, e)
-    -> ((match check ctx t with
+    -> ((match lexp_whnf (check ctx t) ctx VMap.empty with
         | Sort _ -> ()
         | _ -> (U.msg_error "TC" (lexp_location t)
                            "Formal arg type is not a type!"; ()));
        Arrow (ak, Some v, t, l,
               (* FIXME: If ak is Aerasable, make sure the var only appears
                * in type annotations.  *)
-              check (DB.lctx_extend ctx v Variable t) e))
+              check (DB.lctx_extend ctx (Some v) Variable t) e))
   | Call (f, args)
     -> let ft = check ctx f in
       List.fold_left (fun ft (ak,arg)
@@ -292,7 +294,7 @@ let rec check ctx e =
                          mkSusp t2 (S.substitute arg)
                      | _ -> (U.msg_error "TC" (lexp_location arg)
                                         ("Calling a non function (type = "
-                                         ^ lexp_to_str ft ^ ")!");
+                                         ^ lexp_string ft ^ ")!");
                             ft))
                   ft args
   | Inductive (l, label, args, cases)
@@ -302,28 +304,31 @@ let rec check ctx e =
           -> let level
               = SMap.fold
                   (fun _ case level ->
-                    List.fold_left
-                      (fun level (ak, _, t) ->
-                        if ak == P.Aerasable && impredicative_erase
-                        then level
-                        else match lexp_whnf (check ctx t) ctx VMap.empty with
-                             | Sort (_, Stype level')
-                               (* FIXME: scoping of level vars!  *)
-                               -> sort_level_max level level'
-                             | tt -> U.msg_error "TC" (lexp_location t)
-                                               ("Field type "
-                                                ^ lexp_to_str t
-                                                ^ " is not a Type! ("
-                                               ^ lexp_to_str tt ^")");
-                                   DB.print_lexp_ctx ctx;
-                                   SortLevel SLz)
-                      level
-                      case)
+                    let level, _ =
+                      List.fold_left
+                        (fun (level, ctx) (ak, v, t) ->
+                          (if ak == P.Aerasable && impredicative_erase
+                           then level
+                           else match lexp_whnf (check ctx t) ctx VMap.empty with
+                                | Sort (_, Stype level')
+                                  (* FIXME: scoping of level vars!  *)
+                                  -> sort_level_max level level'
+                                | tt -> U.msg_error "TC" (lexp_location t)
+                                                   ("Field type "
+                                                    ^ lexp_string t
+                                                    ^ " is not a Type! ("
+                                                    ^ lexp_string tt ^")");
+                                       DB.print_lexp_ctx ctx;
+                                       SortLevel SLz),
+                          DB.lctx_extend ctx v Variable t)
+                        (level, ctx)
+                        case in
+                    level)
                   cases (SortLevel SLz) in
             Sort (l, Stype level)
         | (ak, v, t)::args
           -> Arrow (ak, Some v, t, lexp_location t,
-                   arg_loop args (DB.lctx_extend ctx v Variable t)) in
+                   arg_loop args (DB.lctx_extend ctx (Some v) Variable t)) in
       let tct = arg_loop args ctx in
       tct
   | Case (l, e, it, ret, branches, default)
@@ -331,7 +336,7 @@ let rec check ctx e =
         match e with
         | Call (f, args) -> let (f',args') = call_split f in (f', args' @ args)
         | _ -> (e,[]) in
-      (match call_split (check ctx e) with
+      (match call_split (lexp_whnf (check ctx e) ctx VMap.empty) with
        | Inductive (_, _, fargs, constructors), aargs ->
           let rec mksubst s fargs aargs =
             match fargs, aargs with
@@ -464,4 +469,4 @@ and clean_map cases =
     SMap.mapi (fun key (l, args, expr) ->
         (l, (clean_arg_list args), (erase_type expr))) cases
 
-    
+

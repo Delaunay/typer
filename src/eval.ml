@@ -61,6 +61,11 @@ let _eval_max_recursion_depth = ref 255
 let reset_eval_trace () = _global_eval_trace := []
 let _builtin_lookup = ref SMap.empty
 
+(* Print value name followed by the value in itself, finally throw an exception *)
+let value_debug_message loc vxp message =
+  print_string "\n";
+  print_string (value_name vxp); print_string ": "; value_print vxp; print_string "\n";
+  eval_fatal loc message
 
 (* This is an internal definition
  * 'i' is the recursion depth used to print the call trace *)
@@ -68,7 +73,7 @@ let rec _eval lxp (ctx : Env.runtime_env) i: (value_type) =
   Debug_fun.do_debug (fun () ->
       prerr_endline ("[StackTrace] ------------------------------------------");
       prerr_endline ("[StackTrace] let rec _eval lxp ctx i");
-      prerr_endline ("[StackTrace] lxp = " ^ Elexp.elexp_str lxp);
+      prerr_endline ("[StackTrace] lxp = " ^ Elexp.elexp_string lxp);
       prerr_endline ("[StackTrace] ctx = ???");
       prerr_endline ("[StackTrace] i   = " ^ (string_of_int i));
       prerr_endline ("[StackTrace] ------------------------------------------");
@@ -122,7 +127,7 @@ and eval_var ctx lxp v =
   Debug_fun.do_debug (fun () ->
       prerr_endline ("[StackTrace] ------------------------------------------");
       prerr_endline ("[StackTrace] let eval_var ctx lxp v");
-      prerr_endline ("[StackTrace] lxp = " ^ Elexp.elexp_str lxp);
+      prerr_endline ("[StackTrace] lxp = " ^ Elexp.elexp_string lxp);
       prerr_endline ("[StackTrace] ctx = ???");
       prerr_endline ("[StackTrace] v   = ((?loc?, " ^ name ^ "), " ^ (string_of_int idx) ^ ")");
       prerr_endline ("[StackTrace] ------------------------------------------");
@@ -174,13 +179,7 @@ and eval_case ctx i loc target pat dflt =
     (* extract constructor name and arguments *)
     let ctor_name, args = match v with
         | Vcons((_, cname), args)  -> cname, args
-        | _ ->
-            (* -- Debug print -- *)
-            debug_msg (
-            elexp_print target; print_string "\n";
-             value_print v;     print_string "\n");
-            (* -- Crash -- *)
-            eval_error loc "Target is not a Constructor" in
+        | _ -> elexp_debug_message loc target "Target is not a Constructor" in
 
     (*  Get working pattern *)
     try let (_, pat_args, exp) = SMap.find ctor_name pat in
@@ -381,7 +380,7 @@ let debug_eval lxp ctx =
   Debug_fun.do_debug (fun () ->
       prerr_endline ("[StackTrace] ------------------------------------------");
       prerr_endline ("[StackTrace] let debug_eval lxps rctx silent");
-      prerr_endline ("[StackTrace] lxp = " ^ Elexp.elexp_str lxp);
+      prerr_endline ("[StackTrace] lxp = " ^ Elexp.elexp_string lxp);
       prerr_endline ("[StackTrace] ctx = ???");
       prerr_endline ("[StackTrace] ------------------------------------------");
     ());

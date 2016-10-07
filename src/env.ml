@@ -99,27 +99,6 @@ let rec value_eq_list a b =
       value_equal v1 v2 && value_eq_list vv1 vv2
     | _ -> false
 
-let rec value_print (vtp: value_type) =
-    match vtp with
-        | Closure (_, lxp, _) ->
-            print_string ("Closure(" ^ (elexp_str lxp) ^ ")")
-        | Vsexp sxp -> sexp_print sxp
-        | Vint(i) -> print_int i
-        | Vfloat(f) -> print_float f
-        | Vstring(s) -> print_string ("\"" ^ s ^ "\"")
-        | Vcons ((_, n), []) -> print_string n
-        | Vcons ((_, n), args) ->
-            print_string ("(" ^ n);
-                List.iter (fun arg -> print_string " "; value_print arg) args;
-            print_string ")";
-
-        | Vbuiltin(str) -> print_string str
-        | Vdummy -> print_string "value_print_dummy"
-        | Vin _ -> print_string "in_channel"
-        | Vout _ -> print_string "out_channel"
-        | Vcommand _ -> print_string "command"
-        (* | _ -> print_string "debug print" *)
-
 let value_location (vtp: value_type) =
     match vtp with
         | Vcons ((loc, _), _) -> loc
@@ -127,20 +106,38 @@ let value_location (vtp: value_type) =
         (* location info was lost or never existed *)
         | _ -> dloc
 
-
 let value_name v =
   match v with
-    | Vint _ -> "Vint"
-    | Vstring _ -> "Vstring"
-    | Vcons _ -> "Vcons"
-    | Vbuiltin _ -> "Sbuiltin"
+    | Vin   _ -> "Vin"
+    | Vout  _ -> "Vout"
+    | Vint  _ -> "Vint"
+    | Vsexp  _ -> "Vsexp"
+    | Vcons  _ -> "Vcons"
     | Vfloat _ -> "Vfloat"
-    | Closure _ -> "Closure"
-    | Vsexp _ -> "Vsexp"
-    | Vdummy -> "Vdummy"
-    | Vin _ -> "Vin"
-    | Vout _ -> "Vout"
+    | Vdummy     -> "Vdummy"
+    | Vstring  _ -> "Vstring"
+    | Closure  _ -> "Closure"
+    | Vbuiltin _ -> "Vbuiltin"
     | Vcommand _ -> "Vcommand"
+
+let rec value_string v =
+  match v with
+    | Vin   _ -> "in_channel"
+    | Vout  _ -> "out_channe;"
+    | Vdummy     -> "dummy"
+    | Vcommand _ -> "command"
+    | Vstring  s -> "\"" ^ s ^ "\""
+    | Vbuiltin s -> s
+    | Vint     i -> string_of_int i
+    | Vfloat   f -> string_of_float f
+    | Vsexp    s -> sexp_string s
+    | Closure  (s, elexp, _) -> "(" ^ s ^ (elexp_string elexp) ^ ")"
+    | Vcons    ((_, s), lst) ->
+      let args = List.fold_left (fun str v ->
+        (str ^ " " ^ (value_string v))) "" lst in
+          "(" ^ s ^ args ^ ")"
+
+let value_print (vtp: value_type) = print_string (value_string vtp)
 
 let make_runtime_ctx = M.nil
 
