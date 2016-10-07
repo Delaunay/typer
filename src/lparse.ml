@@ -77,16 +77,32 @@ type mdecl =
   | Ldecl of symbol * pexp option * pexp option
   | Lmcall of symbol * sexp list
 
-let elab_check_def (ctx : lexp_context) var lxp ltype =
-  if OL.conv_p ltype (OL.check ctx lxp) then
-    ()                          (* FIXME: Check ltype as well!  *)
+
+let elab_check_sort (ctx : elab_context) lsort (l, name) ltp =
+  match OL.lexp_whnf lsort (ectx_to_lctx ctx) VMap.empty with
+  | Sort (_, _) -> () (* All clear!  *)
+  | _ -> lexp_error l ("Type of `" ^ name ^ "` is not a proper type: "
+                      ^ lexp_to_str ltp)
+
+let elab_check_proper_type (ctx : elab_context) ltp v =
+  try elab_check_sort ctx (OL.check (ectx_to_lctx ctx) ltp) v ltp
+  with e -> print_string ("Exception while checking type `"
+                         ^ lexp_to_str ltp ^ "` of var `" ^
+                           (let (_, name) = v in name) ^"`\n");
+           print_lexp_ctx (ectx_to_lctx ctx);
+           raise e
+
+let elab_check_def (ctx : elab_context) var lxp ltype =
+  let lctx = ectx_to_lctx ctx in
+  if OL.conv_p ltype (OL.check lctx lxp) then
+    elab_check_proper_type ctx ltype var
   else
     (print_string "¡¡ctx_define error!!\n";
      lexp_print lxp;
      print_string " !: ";
      lexp_print ltype;
      print_string "\nbecause\n";
-     lexp_print (OL.check ctx lxp);
+     lexp_print (OL.check lctx lxp);
      print_string " != ";
      lexp_print ltype;
      print_string "\n";
