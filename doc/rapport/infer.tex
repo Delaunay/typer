@@ -38,14 +38,18 @@
 
     \section{Unification}
         \structpar{Définition}
-            L'unification est moyen permettant de déterminer si deux expressions sont équivalentes.
+            L'unification est un moyen permettant de déterminer si
+            % De plus, "déterminer si" donne l'impression que le ŕesultat est
+            % seulement booléen, alors que l'instantiation des métavariables est
+            % aussi très important.
+            deux expressions peuvent être rendues équivalentes.
             Dans le cas de l'inférence de type pour le compilateur \typer{},
             l'unification se fait sur les \lexp{}.
             Deux \lexp{} sont unifiables si elles sont équivalentes. Si les expressions $S$ et $T$
             sont unifiables alors on peut écrire (en \typer{}) $S = T$.
 
-            Dans le cas du compilateur \typer{}, l'unification permet de vérifier qu'il n'y a pas
-            d'erreur de typage.
+            Dans le cas du compilateur \typer{}, l'unification est utilisée pour inférer les types
+            et réduire le nombre d'annotation de type.
 
             On note $e_1 \unif e_2$ l'unification de $e_1$ et $e_2$.
 
@@ -53,17 +57,17 @@
             Par exemple:
             \begin{itemize}
                 \item $3 + 3 \unif 2 * 3$ puisque ces deux opérations sont équivalentes.
-                \item $x + 1 \unif 10$ si et seulement si $x = 9$.
+                \item $(X, (5, 6)) \unif (A, X)$, avec $X = A$ et $X = (5, 6)$.
                 \item $1 + 2 \nunif "3"$ puisque les deux expressions n'ont pas le même type.
             \end{itemize}
 
     \subsection{Unification de premier ordre}
 
             \structpar{Définition des méta-variable}
-                Une méta-variable est une variable libre. Elle sert de variable fictive et sera remplacée dès qu'on peut
+                Une méta-variable sert de variable fictive et sera remplacée dès qu'on peut
                 associer cette méta-variable à une expression.
 
-                Dans le reste du rapport, les méta-variables seront noté en majuscule.
+                Dans le reste du rapport, les méta-variables seront notées en majuscule.
                 % Par exemple:
                 % TODO : mettre un exemple
 
@@ -86,7 +90,7 @@
             \structpar{Cas qui renvoie une contrainte}
                 Certains cas ne permettent pas de donner une réponse sur le résultat de l'unification. En effet, les informations disponibles
                 ne sont pas suffisantes. C'est notamment le cas avec les variables et les fonctions.
-                Dans ce cas, l'algorithme d'unification renvoie une contrainte indiquant que les deux \lexp{} doivent être unifiables.
+                Dans ce cas, l'algorithme d'unification peut renvoyer une contrainte indiquant que les deux \lexp{} doivent être unifiables.
                 Plus tard dans l'exécution, cette contrainte sera validée, si le code est correct, ou invalidée, s'il y a une erreur de type.
                 La liste des contraintes du \textit{contexte d'unification} est représentée sous la forme d'une liste de couples.
                 Chaque couple représentant de \lexp{} qui doivent être unifiables pour que le typage soit correct.
@@ -136,7 +140,7 @@
                 \begin{equation}
                     F\ x\ y \unif x + y
                 \end{equation}
-                est un \hop{}. La solution de l'unification est $F = \lambda\ x\ y\ \rightarrow x + y$.
+                est un \hop{}. La solution de l'unification est $F = \lambda\ a\ b\ \rightarrow a + b$.
                 \begin{equation}
                     F\ x\ 1 \unif x + 1
                 \end{equation}
@@ -177,9 +181,9 @@
                 et ainsi de pouvoir appliquer les substitutions lors de l'unification de variables dans des contextes différents.
 
                 Par exemple si on considère $A[\sigma]$ avec $A$ une méta-variable et $\sigma$ la substitution appliquée à $A$.
-                $A$ est une variable libre, sa valeur n'est pas connue. Il faut donc garder la substitution suspendue.
+                $A$ est une méta-variable, sa valeur n'est pas connue. Il faut donc garder la substitution suspendue.
                 Pour résoudre $A[\sigma] \unif e$, avec $e$ une expression quelconque, il faut donc résoudre $A = e[\sigma^{-1}]$.
 
-                $\sigma^{-1}$ est la substitution inverse de $\sigma$ tel que $\sigma \circ \sigma^{-1} = id$ et $e[\sigma \circ \sigma^{-1}] = e[id] = e$.
+                $\sigma^{-1}$ est la substitution inverse de $\sigma$ tel que $\sigma^{-1} \circ \sigma = id$ et $e[\sigma^{-1} \circ \sigma] = e[id] = e$.
 
                 % TODO : mettre un exemple concrèt ?
