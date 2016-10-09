@@ -76,12 +76,6 @@ let lexp_debug_message loc lxp message =
   lexp_fatal loc message
 
 
-(* merged declaration, allow us to process declaration in multiple pass *)
-(* first detect recursive decls then lexp decls*)
-type mdecl =
-  | Ldecl of symbol * pexp option * pexp option
-  | Lmcall of symbol * sexp list
-
 let elab_check_sort (ctx : elab_context) lsort (l, name) ltp =
   match OL.lexp_whnf lsort (ectx_to_lctx ctx) with
   | Sort (_, _) -> () (* All clear!  *)

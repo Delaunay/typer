@@ -215,6 +215,12 @@ let format_source () =
     ) else (List.iter (fun str ->
         print_string str; print_string "\n") result;)
 
+(* merged declaration, allow us to process declaration in multiple pass *)
+(* first detect recursive decls then lexp decls*)
+type mdecl =
+  | Ldecl of symbol * pexp option * pexp option
+  | Lmcall of symbol * sexp list
+
 let lexp_detect_recursive pdecls =
   (* Pack mutually recursive declarations                 *)
   (* mutually recursive def must use forward declarations *)
