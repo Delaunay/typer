@@ -420,25 +420,33 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : elab_context) i: lexp =
         (* handle pcall here * )
         | Pcall (fname, _args) -> *)
 
-        | _ -> (let (e, inferred_t) = _lexp_p_infer p ctx (i + 1) in
-            (* e *)
-            match e with
-                (* Built-in is a dummy function with no type. We cannot check
-                 * Built-in *)
-                | Builtin _ -> e
-                | _ ->
-                  (match Unif.unify inferred_t t subst with
-                   | Some subst -> global_substitution := subst; inferred_t
-                   | None -> debug_msg (
-                      let print_lxp str =
-                        print_string (Fmt_lexp.colored_string_of_lxp str Fmt_lexp.str_yellow Fmt_lexp.str_magenta) in
-                      Debug_fun.do_debug (fun () ->
-                          prerr_endline ("0 pxp " ^ Fmt_lexp.string_of_pexp p);
-                          ());
-                      print_string "1 exp "; (print_lxp e); print_string "\n";
-                      print_string "2 inf "; (print_lxp inferred_t); print_string "\n";
-                      print_string "3 Ann susp("; (print_lxp (nosusp t)); print_string ")\n";
-                      lexp_warning tloc "Type Mismatch inferred != Annotation"); e ))
+        | _ -> lexp_p_infer_and_check p ctx t (i + 1)
+
+and lexp_p_infer_and_check pexp ctx t i =
+  let (e, inferred_t) = _lexp_p_infer pexp ctx i in
+  (match e with
+   (* Built-in is a dummy function with no type. We cannot check
+    * Built-in *)
+   | Builtin _ -> ()
+   | _ ->
+      let subst, _ = !global_substitution in
+      match Unif.unify inferred_t t subst with
+      | Some subst -> global_substitution := subst
+      | None
+        -> debug_msg (
+              let print_lxp str =
+                print_string (Fmt_lexp.colored_string_of_lxp
+                                str Fmt_lexp.str_yellow
+                                Fmt_lexp.str_magenta) in
+              Debug_fun.do_debug (fun () ->
+                  prerr_endline ("0 pxp " ^ Fmt_lexp.string_of_pexp pexp);
+                  ());
+              print_string ("1 exp " ^ lexp_string e ^ "\n");
+              print_string ("2 inf " ^ lexp_string inferred_t ^ "\n");
+              print_string ("3 ann " ^ lexp_string t ^ "\n");
+              lexp_warning (pexp_location pexp)
+                           "Type Mismatch inferred != Annotation"));
+  e
 
 (* Lexp.case cam be checked and inferred *)
 and lexp_case (rtype: lexp option) (loc, target, patterns) ctx i =
