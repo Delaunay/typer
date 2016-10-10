@@ -273,36 +273,6 @@ let env_lookup_type ctx (v : vref): lexp =
 let env_lookup_expr ctx (v : vref): lexp option =
   lctx_lookup_value (ectx_to_lctx ctx) v
 
-(* replace an expression by another *)
-(* Most of the time it should be O(1) but it can be O(n)  *)
-let replace_by ctx name by =
-  let (a, env, b) = ctx in
-  let idx = senv_lookup name ctx in
-  (* lookup and replace *)
-  let rec replace_by' ctx by acc =
-    match ctx with
-      | M.Mnil -> debruijn_error dummy_location
-            ("Replace error. This expression does not exist: " ^  name)
-      | M.Mcons((_, None, _, _) as elem, tl1, i, tl2) ->
-          (* Skip some elements if possible *)
-          if idx <= i then replace_by' tl1 by (elem::acc)
-          else replace_by' tl2 by (elem::acc)
-            (* replace_by' tl1 by (elem::acc) *)
-
-      | M.Mcons((_, Some (b, n), _, _) as elem, tl1, i, tl2) ->
-        if n = name then
-          (M.cons by tl1), acc
-        else
-          (* Skip some elements if possible *)
-          if idx <= i then replace_by' tl1 by (elem::acc)
-          else replace_by' tl2 by (elem::acc)
-            (* replace_by' tl1 by (elem::acc) *) in
-
-  let nenv, decls = replace_by' env by [] in
-  (* add old declarations *)
-  let nenv = List.fold_left (fun ctx elem -> M.cons elem ctx) nenv decls in
-    (a, nenv, b)
-
 (* -------------------------------------------------------------------------- *)
 (*          PropertyMap                                                       *)
 (* -------------------------------------------------------------------------- *)
