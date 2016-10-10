@@ -382,9 +382,9 @@ let main () =
             ) merged));
 
         (* debug lexp parsing once merged *)
-        let lexps, nctx = try _lexp_decls pexps octx 0
+        let lexps, nctx = try lexp_p_decls pexps octx
           with e ->
-            print_lexp_trace ();
+            print_lexp_trace None;
             internal_error "Fail" in
 
         (* use the new way of parsing expr *)
@@ -436,7 +436,7 @@ let main () =
             with e ->
                 print_string reset;
                 print_rte_ctx (!_global_eval_ctx);
-                print_eval_trace ();
+                print_eval_trace None;
                 raise e) in
         print_string reset;
 

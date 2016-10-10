@@ -183,6 +183,7 @@ let _help_msg =
       %who          (%w) : print runtime environment
       %info         (%i) : print elaboration environment
       %calltrace    (%ct): print call trace of last call
+      %elabtrace    (%et): print elaboration trace
       %readfile          : read a Typer file
       %help         (%h) : print help
 "
@@ -217,7 +218,8 @@ let rec repl i clxp rctx =
             | "%help" | "%h" -> (print_string _help_msg;  repl clxp rctx)
             | "%who"  | "%w" -> (print_rte_ctx rctx;      repl clxp rctx)
             | "%info" | "%i" -> (print_lexp_ctx (ectx_to_lctx clxp);     repl clxp rctx)
-            | "%calltrace" | "%ct" -> (print_eval_trace (); repl clxp rctx)
+            | "%calltrace" | "%ct" -> (print_eval_trace None; repl clxp rctx)
+            | "%elabtrace" | "%et" -> (print_lexp_trace None; repl clxp rctx)
 
             (* command with arguments *)
             | _ when (ipt.[0] = '%' && ipt.[1] != ' ') -> (

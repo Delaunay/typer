@@ -460,3 +460,9 @@ and clean_map cases =
         (l, (clean_arg_list args), (erase_type expr))) cases
 
 
+(* Custom type to make trace uniform between lparse and eval *)
+type pexporlexp =
+  | Pexp of P.pexp
+  | Elexp of E.elexp
+
+

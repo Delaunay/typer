@@ -136,8 +136,3 @@ and elexp_string lxp =
             "inductive_ " ^ s
 
         | Type -> "Type "
-
-(* Print Lexp name followed by the lexp in itself, finally throw an exception *)
-let elexp_debug_message loc lxp message =
-  elexp_fatal loc (message ^ "\n" ^ (elexp_name lxp) ^ ": " ^ (elexp_string lxp) ^ "\n");
-

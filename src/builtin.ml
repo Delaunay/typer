@@ -38,7 +38,6 @@ open Lexp
 
 open Debruijn
 open Env       (* get_rte_variable *)
-open Printf
 
 let builtin_error loc msg =
     msg_error "BUILT-IN" loc msg;
@@ -123,41 +122,6 @@ let type_int = Builtin((dloc, "Int"), type0)
 let type_float = Builtin((dloc, "Float"), type0)
 let type_string = Builtin((dloc, "String"), type0)
 
-(* Builtin of builtin * string * ltype *)
-let _generic_binary_iop name f loc (depth: int) (args_val: value_type list)
-                                                    (ctx: runtime_env) =
-
-   let l, r = match args_val with
-        | [l; r] -> l, r
-        | _ -> builtin_error loc (name ^ " expects 2 Integers arguments") in
-
-        match l, r with
-            | Vint(v), Vint(w) -> Vint(f v w)
-            | _ ->
-                value_print l; print_string " "; value_print r;
-                builtin_error loc (name ^ " expects Integers as arguments")
-
-let iadd_impl  = _generic_binary_iop "Integer::add"  (fun a b -> a + b)
-let isub_impl  = _generic_binary_iop "Integer::sub"  (fun a b -> a - b)
-let imult_impl = _generic_binary_iop "Integer::mult" (fun a b -> a * b)
-let idiv_impl  = _generic_binary_iop "Integer::div"  (fun a b -> a / b)
-
-
-(* loc is given by the compiler *)
-let none_fun : (location -> int -> value_type list -> runtime_env -> value_type)
-    = (fun loc args_val ctx ->
-    builtin_error loc "Requested Built-in was not implemented")
-
-let make_symbol loc depth args_val ctx  =
-    (* symbol is a simple string *)
-    let lxp = match args_val with
-        | [r] -> r
-        | _ -> builtin_error loc ("symbol_ expects 1 argument") in
-
-        match lxp with
-            | Vstring(str) -> Vsexp(Symbol(loc, str))
-            | _ -> builtin_error loc ("symbol_ expects one string as argument")
-
 
 (* lexp Imm list *)
 let olist2tlist_lexp lst ctx =
@@ -186,107 +150,6 @@ let rec tlist2olist acc expr =
             print_string (value_name expr); print_string "\n";
             value_print expr;
             builtin_error dloc "List conversion failure'"
-
-let make_node loc depth args_val ctx    =
-
-    let op, tlist = match args_val with
-        | [Vsexp(op); lst] -> op, lst
-        | op::_  ->
-          builtin_error loc
-            ("node_ expects one 'Sexp' got " ^ (value_name op))
-        | _ -> typer_unreachable "-" in
-
-    (* value_print tlist; print_string "\n"; *)
-
-    let args = tlist2olist [] tlist in
-
-    let s = List.map (fun g -> match g with
-        | Vsexp(sxp)  -> sxp
-        (* eval transform sexp into those... *)
-        | Vint (i)    -> Integer(dloc, i)
-        | Vstring (s) -> String(dloc, s)
-        | _ ->
-          print_rte_ctx ctx;
-          print_string (value_name g); print_string "\n";
-          value_print g; print_string "\n";
-            builtin_error loc ("node_ expects 'List Sexp' second as arguments")) args in
-
-        Vsexp(Node(op, s))
-
-let make_string loc depth args_val ctx  =
-    let lxp = match args_val with
-        | [r] -> r
-        | _ -> builtin_error loc ("string_ expects 1 argument") in
-
-        match lxp with
-            | Vstring(str) -> Vsexp(String(loc, str))
-            | _ -> builtin_error loc ("string_ expects one string as argument")
-
-let make_integer loc depth args_val ctx =
-    let lxp = match args_val with
-        | [r] -> r
-        | _ -> builtin_error loc ("integer_ expects 1 argument") in
-
-        match lxp with
-            | Vint(str) -> Vsexp(Integer(loc, str))
-            | _ -> builtin_error loc ("integer_ expects one string as argument")
-
-let make_float loc depth args_val ctx   = Vdummy
-let make_block loc depth args_val ctx   = Vdummy
-
-let ttrue = Vcons((dloc, "True"), [])
-let tfalse = Vcons((dloc, "False"), [])
-let btyper b = if b then ttrue else tfalse
-
-let string_eq loc depth args_val ctx =
-    match args_val with
-        | [Vstring(s1); Vstring(s2)] -> btyper (s1 = s2)
-        | _ -> builtin_error loc "string_eq expects 2 strings"
-
-let int_eq loc depth args_val ctx =
-    match args_val with
-        | [Vint(s1); Vint(s2)] -> btyper (s1 = s2)
-        | _ -> builtin_error loc "int_eq expects 2 integer"
-
-let sexp_eq loc depth args_val ctx =
-    match args_val with
-    | [Vsexp (s1); Vsexp (s2)] -> btyper (sexp_equal s1 s2)
-    | _ -> builtin_error loc "sexp_eq expects 2 sexp"
-
-let open_impl loc depth args_val ctx =
-
-  let file, mode = match args_val with
-    | [Vstring(file_name); Vstring(mode)] -> file_name, mode
-    | _ -> builtin_error loc "open expects 2 strings" in
-
-   (* open file *) (* return a file handle *)
-   Vcommand(fun () ->
-      match mode with
-        | "r" -> Vin(open_in file)
-        | "w" -> Vout(open_out file)
-        | _ -> builtin_error loc "wrong open mode")
-
-let read_impl loc depth args_val ctx =
-
-  let channel = match args_val with
-    | [Vin(c); _] -> c
-    | _ ->
-      List.iter (fun v -> value_print v; print_string "\n") args_val;
-      builtin_error loc "read expects an in_channel" in
-
-  let line = input_line channel in
-    Vstring(line)
-
-let write_impl loc depth args_val ctx =
-
-  let channel, msg = match args_val with
-    | [Vout(c); Vstring(msg)] -> c, msg
-    | _ ->
-      List.iter (fun v -> value_print v) args_val;
-      builtin_error loc "read expects an out_channel" in
-
-    fprintf channel "%s" msg;
-      Vdummy
 
 let is_lbuiltin idx ctx =
     let bsize = 1 in
@@ -331,8 +194,6 @@ let has_attribute_impl loc largs ctx ftype =
       | _ -> builtin_error loc "has-attribute expects two arguments" in
 
   let b = has_property ctx (vi, vn) (ai, an) in
-
-
 
   let rvar = if b then get_predef "True" ctx else get_predef "False" ctx in
     rvar, (get_predef "Bool" ctx)
