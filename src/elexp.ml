@@ -42,9 +42,6 @@ type label = symbol
 
 module SMap = U.SMap
 
-let elexp_warning = U.msg_warning "ELEXP"
-let elexp_fatal = U.msg_fatal "ELEXP"
-
 type elexp =
     | Imm of sexp
 

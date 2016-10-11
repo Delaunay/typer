@@ -182,8 +182,9 @@ let _help_msg =
 "      %quit         (%q) : leave REPL
       %who          (%w) : print runtime environment
       %info         (%i) : print elaboration environment
-      %calltrace    (%ct): print call trace of last call
+      %calltrace    (%ct): print eval trace of last call
       %elabtrace    (%et): print elaboration trace
+      %typertrace   (%tt): print typer trace
       %readfile          : read a Typer file
       %help         (%h) : print help
 "
@@ -216,10 +217,9 @@ let rec repl i clxp rctx =
             (*  Check special keywords *)
             | "%quit" | "%q" -> ()
             | "%help" | "%h" -> (print_string _help_msg;  repl clxp rctx)
-            | "%who"  | "%w" -> (print_rte_ctx rctx;      repl clxp rctx)
-            | "%info" | "%i" -> (print_lexp_ctx (ectx_to_lctx clxp);     repl clxp rctx)
-            | "%calltrace" | "%ct" -> (print_eval_trace None; repl clxp rctx)
-            | "%elabtrace" | "%et" -> (print_lexp_trace None; repl clxp rctx)
+            | "%calltrace"  | "%ct" -> (print_eval_trace None; repl clxp rctx)
+            | "%elabtrace"  | "%et" -> (print_lexp_trace None; repl clxp rctx)
+            | "%typertrace" | "%tt" -> (print_typer_trace None; repl clxp rctx)
 
             (* command with arguments *)
             | _ when (ipt.[0] = '%' && ipt.[1] != ' ') -> (
@@ -227,6 +227,17 @@ let rec repl i clxp rctx =
                     | "%readfile"::args ->
                         let (i, clxp, rctx) = readfiles args (i, clxp, rctx) false in
                             repl clxp rctx;
+                    | "%who"::args | "%w"::args -> (
+                      let _ = match args with
+                        | ["all"] -> dump_rte_ctx rctx
+                        | _       -> print_rte_ctx rctx in
+                          repl clxp rctx)
+                    | "%info"::args | "%i"::args -> (
+                      let _ = match args with
+                        | ["all"] -> dump_lexp_ctx (ectx_to_lctx clxp)
+                        | _       -> print_lexp_ctx (ectx_to_lctx clxp) in
+                          repl clxp rctx)
+
                     | cmd::_ ->
                         ieval_error dloc (" \"" ^ cmd ^ "\" is not a correct repl command");
                         repl clxp rctx

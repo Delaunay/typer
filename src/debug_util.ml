@@ -250,9 +250,9 @@ let lexp_detect_recursive pdecls =
           let ptp = (match (!pending) with
             | Ldecl(_, _, ptp)::[] -> ptp
             (* we already checked that len(pending) == 1*)
-            | Ldecl(_, _, ptp)::_  -> lexp_fatal l "Unreachable"
-            | []                   -> lexp_fatal l "Unreachable"
-            | Lmcall _ :: _        -> lexp_fatal l "Unreachable") in
+            | Ldecl(_, _, ptp)::_  -> typer_unreachable "Unreachable"
+            | []                   -> typer_unreachable "Unreachable"
+            | Lmcall _ :: _        -> typer_unreachable "Unreachable") in
 
           (* add declaration to merged decl *)
           merged := Ldecl((l, s), Some pxp, ptp)::(!merged);
@@ -280,7 +280,7 @@ let lexp_detect_recursive pdecls =
                 merged := Ldecl((l, s), Some pxp, (Some ptp))::!merged;
 
               (* s should be unique *)
-              | _ -> lexp_error l "declaration must be unique") in
+              | _ -> error l "declaration must be unique") in
 
           (* element is not pending anymore *)
           pending := lst;
@@ -388,10 +388,13 @@ let main () =
             ) merged));
 
         (* debug lexp parsing once merged *)
+        print_string yellow;
         let lexps, nctx = try lexp_p_decls pexps octx
           with e ->
+            print_string reset;
             print_lexp_trace None;
-            internal_error "Fail" in
+            raise e in
+        print_string reset;
 
         (* use the new way of parsing expr *)
         let ctx = nctx in

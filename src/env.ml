@@ -37,17 +37,14 @@ open Sexp
 
 open Elexp
 module M = Myers
+module L = Lexp
 
 let dloc = dummy_location
 
-let env_error loc msg =
-    msg_error "ENV" loc msg;
-    raise (internal_error msg)
-
-let env_warning loc msg = msg_warning "ENV" loc msg
+let error loc msg = msg_error "ENV" loc msg; raise (internal_error msg)
+let warning loc msg = msg_warning "ENV" loc msg
 
 let str_idx idx = "[" ^ (string_of_int idx) ^ "]"
-
 
 type value_type =
     | Vint of int
@@ -62,11 +59,10 @@ type value_type =
     | Vin of in_channel
     | Vout of out_channel
     | Vcommand of (unit -> value_type)
+
  (*  Runtime Environ *)
  and env_cell = (string option * (value_type ref))
  and runtime_env = env_cell M.myers
-
-
 
 let rec value_equal a b =
   match a, b with
@@ -78,11 +74,10 @@ let rec value_equal a b =
     | Vin (c1), Vin(c2)          -> c1 = c2
     | Vout (c1), Vout(c2)        -> c2 = c2
     | Vcommand (f1), Vcommand(f2)-> f1 = f2
-    | Vdummy, Vdummy             ->
-      env_warning dloc "Vdummy"; true
+    | Vdummy, Vdummy             -> warning dloc "Vdummy"; true
 
     | Closure(s1, b1, ctx1), Closure(s2, b2, ctx2) ->
-      env_warning dloc "Closure";
+      warning dloc "Closure";
       if (s1 != s2) then false else true
 
     | Vcons((_, ct1), a1), Vcons((_, ct2), a2) ->
@@ -131,7 +126,7 @@ let rec value_string v =
     | Vint     i -> string_of_int i
     | Vfloat   f -> string_of_float f
     | Vsexp    s -> sexp_string s
-    | Closure  (s, elexp, _) -> "(" ^ s ^ (elexp_string elexp) ^ ")"
+    | Closure  (s, elexp, _) -> "(lambda " ^ s ^ " -> " ^ (elexp_string elexp) ^ ")"
     | Vcons    ((_, s), lst) ->
       let args = List.fold_left (fun str v ->
         (str ^ " " ^ (value_string v))) "" lst in
@@ -153,14 +148,14 @@ let get_rte_variable (name: string option) (idx: int)
             if n1 = n2 then
                 x
             else (
-            env_error dloc
+            error dloc
                 ("Variable lookup failure. Expected: \"" ^
                 n2 ^ "[" ^ (string_of_int idx) ^ "]" ^ "\" got \"" ^ n1 ^ "\"")))
 
         | _ -> x)
     with Not_found ->
         let n = match name with Some n -> n | None -> "" in
-        env_error dloc ("Variable lookup failure. Var: \"" ^
+        error dloc ("Variable lookup failure. Var: \"" ^
             n ^ "\" idx: " ^ (str_idx idx))
 
 let add_rte_variable name (x: value_type) (ctx: runtime_env)
@@ -174,43 +169,10 @@ let set_rte_variable idx name (v: value_type) (ctx : runtime_env) =
     (match (n, name) with
      | Some n1, Some n2 ->
         if (n1 != n2) then
-          env_error dloc ("Variable's Name must Match: " ^ n1 ^ " vs " ^ n2)
+          error dloc ("Variable's Name must Match: " ^ n1 ^ " vs " ^ n2)
      | _ -> ());
 
     ref_cell := v
-
-
-(* This function is used when we enter a new scope                         *)
-(* it saves the size of the environment before temp var are added          *)
-(* it allow us to remove temporary variables when we enter a new scope     * )
-let local_ctx ctx =
-    let (l, (_, _)) = ctx in
-    let osize = M.length l in
-        (l, (osize, 0))
-
-let select_n (ctx: runtime_env) n: runtime_env =
-    let (l, a) = ctx in
-    let r = ref nil in
-    let s = (M.length l) - 1 in
-
-    for i = 0 to n - 1 do
-        r := (M.cons (M.nth (s - i) l) (!r));
-    done;
-
-    ((!r), a)
-
-(*  This removes temporary variables from the environment *)
-(*  and create a clean context free of function arguments *)
-let temp_ctx (ctx: runtime_env): runtime_env =
-    let (l, (osize, _)) = ctx in
-    let tsize = M.length l in
-        (* Check if temporary variables are present *)
-        if tsize != osize then(
-            (* remove them
-            print_string "temp ctx was useful\n"; *)
-            (select_n ctx osize))
-        else
-            ctx *)
 
 (* Select the n first variable present in the env *)
 let nfirst_rte_var n ctx =
@@ -221,15 +183,14 @@ let nfirst_rte_var n ctx =
             List.rev acc in
     loop 0 []
 
-let print_myers_list l print_fun =
+let print_myers_list l print_fun start =
     let n = (M.length l) - 1 in
-
     print_string (make_title " ENVIRONMENT ");
     make_rheader [(None, "INDEX");
         (None, "VARIABLE NAME"); (Some ('l', 48), "VALUE")];
     print_string (make_sep '-');
 
-    for i = 0 to n do
+    for i = start to n do
     print_string "    | ";
         ralign_print_int (n - i) 5;
         print_string " | ";
@@ -237,7 +198,7 @@ let print_myers_list l print_fun =
     done;
     print_string (make_sep '=')
 
-let print_rte_ctx (ctx: runtime_env) =
+let print_rte_ctx_n (ctx: runtime_env) start =
   print_myers_list
     ctx
     (fun (n, vref) ->
@@ -247,5 +208,13 @@ let print_rte_ctx (ctx: runtime_env) =
         | Some m -> lalign_print_string m 12; print_string "  |  "
         | None -> print_string (make_line ' ' 12); print_string "  |  " in
 
-      value_print g; print_string "\n")
+      value_print g; print_string "\n") start
 
+(* Only print user defined variables *)
+let print_rte_ctx ctx =
+  (* FIXME: harcoded -3, runtime_env has 3 variables missing *)
+  print_rte_ctx_n ctx (!L.builtin_size - 3)
+
+(* Dump the whole context *)
+let dump_rte_ctx ctx =
+  print_rte_ctx_n ctx 0

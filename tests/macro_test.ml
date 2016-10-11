@@ -43,7 +43,6 @@ let lctx = default_lctx
 let rctx = default_rctx
 
 let _ = (add_test "MACROS" "macros base" (fun () ->
-    reset_eval_trace ();
 
     (* define 'lambda x -> x * x' using macros *)
     let dcode = "
@@ -67,8 +66,6 @@ let _ = (add_test "MACROS" "macros base" (fun () ->
 
 
 let _ = (add_test "MACROS" "macros decls" (fun () ->
-    reset_eval_trace ();
-
     let dcode = "
       decls-impl = lambda (x : List Sexp) ->
         cons(a := Sexp) (node_ (symbol_ \"_=_\")

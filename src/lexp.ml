@@ -105,6 +105,8 @@ type varbind =
   | ForwardRef
   | LetDef of lexp
 
+let builtin_size = ref 0
+
 (********* Helper functions to use the Subst operations  *********)
 (* This basically "ties the knot" between Subst and Lexp.
  * Maybe it would be cleaner to just move subst.ml into lexp.ml
@@ -583,9 +585,9 @@ let lexp_string lxp = sexp_string (pexp_unparse (lexp_unparse lxp))
 
 type print_context = (bool * int * bool * bool * bool * bool* int)
 
-let pretty_ppctx  = ref (true , 0, true, false, true,  4, true)
-let compact_ppctx = ref (false, 0, true, false, true,  4, false)
-let debug_ppctx   = ref (false, 0, true, true , false, 4, true)
+let pretty_ppctx  = ref (true , 0, true, false, true,  2, true)
+let compact_ppctx = ref (false, 0, true, false, true,  2, false)
+let debug_ppctx   = ref (false, 0, true, true , false, 2, true)
 
 let rec lexp_print e =  _lexp_print (!debug_ppctx) e
 and _lexp_print ctx e = print_string (_lexp_to_str ctx e)

@@ -466,3 +466,10 @@ type pexporlexp =
   | Elexp of E.elexp
 
 
+let pol_string xp = match xp with
+  | Pexp p -> P.pexp_string p
+  | Elexp e -> E.elexp_string e
+
+let pol_name xp = match xp with
+  | Pexp p -> P.pexp_name p
+  | Elexp e -> E.elexp_name e

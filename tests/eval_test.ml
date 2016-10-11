@@ -48,7 +48,6 @@ let rctx = default_rctx
  *)
 let test_eval_eqv_named name decl run res =
   add_test "EVAL" name (fun () ->
-    reset_eval_trace ();
     let rctx, lctx = eval_decl_str decl lctx rctx in
 
     let erun = eval_expr_str run lctx rctx in (* evaluated run expr *)
@@ -253,9 +252,8 @@ let _ = test_eval_eqv attr_decl
   "True"
 
 (* This makes sure contexts are reinitialized between calls
- *  i.e the context should not grow                             * )
+ *  i.e the context should not grow                             *)
 let _ = (add_test "EVAL" "Infinite Recursion failure" (fun () ->
-    reset_eval_trace ();
     _typer_verbose := (-1);
 
     let code = "
@@ -276,10 +274,9 @@ let _ = (add_test "EVAL" "Infinite Recursion failure" (fun () ->
                 success ()
             else
                 failure ())
-)) *)
+))
 
 let _ = (add_test "EVAL" "Monads" (fun () ->
-    reset_eval_trace ();
 
     let dcode = "
       c = bind (a := Type) (b := Type) (open \"./_build/w_file.txt\" \"w\")

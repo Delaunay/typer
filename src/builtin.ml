@@ -39,12 +39,8 @@ open Lexp
 open Debruijn
 open Env       (* get_rte_variable *)
 
-let builtin_error loc msg =
-    msg_error "BUILT-IN" loc msg;
-    raise (internal_error msg)
-
-let builtin_warning loc msg =
-    msg_warning "BUILT-IN" loc msg
+let error loc msg = msg_error "BUILT-IN" loc msg; raise (internal_error msg)
+let warning loc msg = msg_warning "BUILT-IN" loc msg
 
 type predef_table = (lexp option ref) SMap.t
 
@@ -59,8 +55,6 @@ let predef_name = [
     "expand_macro_";
 ]
 
-let builtin_size = ref 0
-
 let default_predef_map : predef_table =
     (* add predef name, expr will be populated when parsing *)
     List.fold_left (fun m name ->
@@ -71,7 +65,7 @@ let predef_map = ref default_predef_map
 let get_predef_raw (name: string) : lexp =
     match !(SMap.find name (!predef_map)) with
         | Some exp -> exp
-        | None -> builtin_error dloc ("\""^ name ^ "\" was not predefined")
+        | None -> error dloc ("\""^ name ^ "\" was not predefined")
 
 let get_predef_option (name: string) ctx =
   let r = (get_size ctx) - !builtin_size - 0 in
@@ -149,7 +143,7 @@ let rec tlist2olist acc expr =
         | _ ->
             print_string (value_name expr); print_string "\n";
             value_print expr;
-            builtin_error dloc "List conversion failure'"
+            error dloc "List conversion failure'"
 
 let is_lbuiltin idx ctx =
     let bsize = 1 in
@@ -170,12 +164,12 @@ let get_attribute_impl loc largs ctx ftype =
 
   let (vi, vn), (ai, an) = match largs with
       | [Var((_, vn), vi); Var((_, an), ai)] -> (vi, vn), (ai, an)
-      | _ -> builtin_error loc "get-attribute expects two arguments" in
+      | _ -> error loc "get-attribute expects two arguments" in
 
   let lxp = get_property ctx (vi, vn) (ai, an) in
   let ltype = match env_lookup_expr ctx ((loc, an), ai) with
     | Some ltp -> ltp
-    | None -> builtin_error loc "not expression available" in
+    | None -> error loc "not expression available" in
 
     lxp, ltype
 
@@ -183,7 +177,7 @@ let new_attribute_impl loc largs ctx ftype =
 
   let eltp = match largs with
     | [eltp] -> eltp
-    | _ -> builtin_warning loc "new-attribute expects one argument"; type0 in
+    | _ -> warning loc "new-attribute expects one argument"; type0 in
 
     eltp, ftype
 
@@ -191,7 +185,7 @@ let has_attribute_impl loc largs ctx ftype =
 
   let (vi, vn), (ai, an) = match largs with
       | [Var((_, vn), vi); Var((_, an), ai)] -> (vi, vn), (ai, an)
-      | _ -> builtin_error loc "has-attribute expects two arguments" in
+      | _ -> error loc "has-attribute expects two arguments" in
 
   let b = has_property ctx (vi, vn) (ai, an) in
 
@@ -202,11 +196,11 @@ let declexpr_impl loc largs ctx ftype =
 
   let (vi, vn) = match largs with
     | [Var((_, vn), vi)] -> (vi, vn)
-    | _ -> builtin_error loc "declexpr expects one argument" in
+    | _ -> error loc "declexpr expects one argument" in
 
   let lxp = match env_lookup_expr ctx ((loc, vn), vi) with
     | Some lxp -> lxp
-    | None -> builtin_error loc "no expr available" in
+    | None -> error loc "no expr available" in
   let ltp = env_lookup_type ctx ((loc, vn), vi) in (* FIXME: Unused?  *)
     lxp, ftype
 
@@ -215,7 +209,7 @@ let decltype_impl loc largs ctx ftype =
 
   let (vi, vn) = match largs with
     | [Var((_, vn), vi)] -> (vi, vn)
-    | _ -> builtin_error loc "decltype expects one argument" in
+    | _ -> error loc "decltype expects one argument" in
 
   let ltype = env_lookup_type ctx ((loc, vn), vi) in
     (* mkSusp prop (S.shift (var_i + 1)) *)
@@ -241,7 +235,7 @@ let macro_impl_map : macromap =
 
 let get_macro_impl loc name =
   try SMap.find name macro_impl_map
-    with Not_found -> builtin_error loc ("Builtin macro" ^ name ^ " not found")
+    with Not_found -> error loc ("Builtin macro" ^ name ^ " not found")
 
 let is_builtin_macro name =
   try let _ = SMap.find name macro_impl_map in true
