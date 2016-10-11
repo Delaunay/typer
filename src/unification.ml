@@ -66,7 +66,8 @@ let zip_fold list1 list2 f =
  The metavar unifyer is the end rule, it can't call unify with it's parameter (changing their order)
 *)
 let rec unify (l: lexp) (r: lexp) (subst: substitution) : return_type =
-  match (nosusp l, nosusp r) with
+  let l, r = (nosusp l, nosusp r) in
+  match (l, r) with
     | (_, Metavar _)   -> _unify_metavar  r l subst
     | (_, Call _)      -> _unify_call     r l subst
     | (_, Case _)      -> _unify_case     r l subst
