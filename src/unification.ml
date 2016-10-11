@@ -108,7 +108,6 @@ and _unify_imm (l: lexp) (r: lexp) (subst: substitution) : return_type =
     else None
   | (Imm _, Imm _) -> None
   | (Imm _, _) -> unify r l subst
-  | (_, _) -> None
 
 (** Unify a Cons and a lexp
  - Cons, Cons -> if Cons ~= Cons then OK else ERROR
