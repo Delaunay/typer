@@ -202,7 +202,7 @@ and _lexp_p_infer (p : pexp) (ctx : elab_context) i: lexp * ltype =
   Debug_fun.do_debug (fun () ->
       prerr_endline ("[StackTrace] ------------------------------------------");
       prerr_endline ("[StackTrace] let _lexp_p_infer p ctx i");
-      prerr_endline ("[StackTrace] p        = " ^ Fmt_lexp.string_of_pexp p);
+      prerr_endline ("[StackTrace] p        = " ^ pexp_string p);
       prerr_endline ("[StackTrace] ctx      = ???");
       prerr_endline ("[StackTrace] i        = " ^ string_of_int i);
       (* prerr_endline (Printexc.raw_backtrace_to_string (Printexc.get_callstack 20)); *)
@@ -302,7 +302,9 @@ and _lexp_p_infer (p : pexp) (ctx : elab_context) i: lexp * ltype =
 
               | _ -> lexp_error loc "Not an Inductive Type";
                     Debug_fun.do_debug (fun () ->
-                        print_string ("idt  : " ^ Fmt_lexp.string_of_lxp (nosusp idt) ^ ", p : " ^ (Fmt_lexp.string_of_pexp p));
+                        print_string "idt  : ";
+                        lexp_print (nosusp idt);
+                        print_string (", p : " ^ (pexp_string p));
                         print_newline (); ());
                     [], [] in
 
@@ -364,8 +366,8 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : elab_context) i: lexp =
   Debug_fun.do_debug (fun () ->
       prerr_endline ("[StackTrace] ------------------------------------------");
       prerr_endline ("[StackTrace] let _lexp_p_check p t ctx i");
-      prerr_endline ("[StackTrace] p        = " ^ Fmt_lexp.string_of_pexp p);
-      prerr_endline ("[StackTrace] t        = " ^ Fmt_lexp.string_of_lxp t);
+      prerr_endline ("[StackTrace] p        = " ^ pexp_string p);
+      prerr_endline ("[StackTrace] t        = " ^ lexp_string t);
       prerr_endline ("[StackTrace] ctx      = ???");
       prerr_endline ("[StackTrace] i        = " ^ string_of_int i);
       prerr_endline ("[StackTrace] ------------------------------------------");
@@ -381,9 +383,9 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : elab_context) i: lexp =
       in let arrow = Arrow (kind, None, arg, Util.dummy_location, body)
       in match Unif.unify arrow lxp subst with
       | Some(subst) -> global_substitution := subst; arg, body
-      | None       -> lexp_error tloc ("Type " ^ Fmt_lexp.string_of_lxp lxp
+      | None       -> lexp_error tloc ("Type " ^ lexp_string lxp
                                                ^ " and "
-                                               ^ Fmt_lexp.string_of_lxp arrow
+                                               ^ lexp_string arrow
                                                ^ " does not match"); dltype, dltype
 
     in
@@ -435,15 +437,13 @@ and lexp_p_infer_and_check pexp ctx t i =
       | None
         -> debug_msg (
               let print_lxp str =
-                print_string (Fmt_lexp.colored_string_of_lxp
-                                str Fmt_lexp.str_yellow
-                                Fmt_lexp.str_magenta) in
+                print_string (lexp_string str) in
               Debug_fun.do_debug (fun () ->
-                  prerr_endline ("0 pxp " ^ Fmt_lexp.string_of_pexp pexp);
+                  prerr_endline ("0 pxp " ^ pexp_string pexp);
                   ());
-              print_string ("1 exp " ^ lexp_string e ^ "\n");
-              print_string ("2 inf " ^ lexp_string inferred_t ^ "\n");
-              print_string ("3 ann " ^ lexp_string t ^ "\n");
+              print_string "1 exp "; lexp_print e; print_string "\n";
+              print_string "2 inf "; lexp_print inferred_t; print_string "\n";
+              print_string "3 ann "; lexp_print t; print_string "\n";
               lexp_warning (pexp_location pexp)
                            "Type Mismatch inferred != Annotation"));
   e
@@ -516,7 +516,7 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
   Debug_fun.do_debug (fun () ->
       prerr_endline ("[StackTrace] ------------------------------------------");
       prerr_endline ("[StackTrace] let lexp_call func sargs ctx i");
-      prerr_endline ("[StackTrace] func     = " ^ Fmt_lexp.string_of_pexp func);
+      prerr_endline ("[StackTrace] func     = " ^ pexp_string func);
       prerr_endline ("[StackTrace] sargs    = ???");
       prerr_endline ("[StackTrace] ctx      = ???");
       prerr_endline ("[StackTrace] i        = " ^ string_of_int i);
@@ -606,9 +606,9 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
       | e ->
         (*  Process Arguments *)
         let largs, ret_type = try handle_fun_args [] sargs ltp
-          with Internal_error m -> print_string ( ( Fmt_lexp.string_of_lxp e ) ^ "---\n" );
+          with Internal_error m -> print_string ( ( lexp_string e ) ^ "---\n" );
             List.iter (fun s ->  Sexp.sexp_print s; print_newline () ) sargs;
-            print_endline (">>>" ^ Fmt_lexp.string_of_lxp ltp);
+            print_endline (">>>" ^ lexp_string ltp);
             raise (Internal_error m)
         in
         Call (body, List.rev largs), ret_type in

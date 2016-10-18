@@ -574,7 +574,13 @@ let rec lexp_unparse lxp =
 
     | _ as e -> Pimm (Symbol(lexp_location e, "Type"))
 
-let lexp_string lxp = sexp_string (pexp_unparse (lexp_unparse lxp))
+let rec subst_string s = match s with
+  | S.Identity -> "Id"
+  | S.Shift (s, n) -> "(" ^ subst_string s ^ "↑" ^ string_of_int n ^ ")"
+  | S.Cons (l, s) -> lexp_string l ^ " · " ^ subst_string s
+
+(* FIXME: ¡Unify lexp_print and lexp_string!  *)
+and lexp_string lxp = sexp_string (pexp_unparse (lexp_unparse lxp))
 (*
  *      Printing
  * --------------------- *)

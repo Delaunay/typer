@@ -43,7 +43,7 @@ let generate_lexp_from_str str =
 let _ = generate_tests
     "TYPECHECK"
     (fun () -> [generate_lexp_from_str input])
-    (fun x -> List.map string_of_lxp x)
+    (fun x -> List.map lexp_string x)
     (fun x -> (x, true))
 
 let lctx = default_lctx

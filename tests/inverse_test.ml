@@ -126,10 +126,11 @@ let _ = generate_tests "INVERSION"
     fmt_res
     (fun (s, b) -> ( match inverse s with
          | Some (s') -> (let comp = scompose s s' in
-                       let ret = (is_identity comp)
-                       in let str = ((string_of_subst s), (string_of_subst s'), (string_of_subst comp))
-                       in (str, ret))
-         | None      -> ((string_of_subst s, "None", "None"), not b)
+                        let ret = (is_identity comp) in
+                        let str = (subst_string s, subst_string s',
+                                   subst_string comp) in
+                        (str, ret))
+         | None      -> ((subst_string s, "None", "None"), not b)
        )
     )
 
@@ -144,10 +145,12 @@ let _ = generate_tests "INVERSION-RAND"
     fmt_res
     (fun (s) -> ( match inverse s with
          | Some (s') -> (let comp = scompose s s' in
-                       let ret = (is_identity comp)
-                       in let str = ((string_of_subst s), (string_of_subst s'), (string_of_subst comp))
-                       in (str, ret))
-         | None      -> ((string_of_subst s , "None"             , "None") , false)
+                        let ret = (is_identity comp) in
+                        let str = (subst_string s,
+                                   subst_string s',
+                                   subst_string comp) in
+                        (str, ret))
+         | None      -> ((subst_string s , "None"             , "None") , false)
     ))
 
 let _ = run_all ()

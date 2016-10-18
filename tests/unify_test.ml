@@ -17,7 +17,6 @@ open Str
 
 open Debug
 
-open Fmt_lexp
 open Debug_fun
 
 type result =
@@ -46,16 +45,16 @@ let max_dim (lst: (string * string * string * string) list): (int * int * int *i
 
 let fmt (lst: (lexp * lexp * result * result) list): string list =
   let str_lst = List.map
-      (fun (l1, l2, r1, r2) -> ((string_of_lxp l1), (string_of_lxp l2), (string_of_result r1), (string_of_result r2)))
+      (fun (l1, l2, r1, r2) -> ((lexp_string l1), (lexp_string l2), (string_of_result r1), (string_of_result r2)))
       lst
   in let l, c1, c2, r = max_dim str_lst
-  in List.map (fun (l1, l2, r1, r2) -> (padding_right l1 l ' ')
+  in List.map (fun (l1, l2, r1, r2) -> (Fmt_lexp.padding_right l1 l ' ')
                                        ^ ", "
-                                       ^ (padding_right l2 c1 ' ')
+                                       ^ (Fmt_lexp.padding_right l2 c1 ' ')
                                        ^ " -> got: "
-                                       ^ (padding_right r2 r ' ')
+                                       ^ (Fmt_lexp.padding_right r2 r ' ')
                                        ^ " expected: "
-                                       ^ (padding_right r1 c2 ' ')
+                                       ^ (Fmt_lexp.padding_right r1 c2 ' ')
               ) str_lst
 
 (* Inputs for the test *)
