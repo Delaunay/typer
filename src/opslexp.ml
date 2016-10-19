@@ -151,7 +151,7 @@ let rec lexp_whnf e (ctx : DB.lexp_context) = match e with
                    ctx
       | Call (e', xs1) -> Call (e', List.append xs1 xs)
       | e' -> Call (e', xs))
-  | Case (l, e, bt, rt, branches, default) ->
+  | Case (l, e, rt, branches, default) ->
      let reduce name aargs =
        try
          let (_, _, branch) = SMap.find name branches in
@@ -169,11 +169,11 @@ let rec lexp_whnf e (ctx : DB.lexp_context) = match e with
                    | _ -> U.msg_error "WHNF" l
                                      ("Unhandled constructor " ^
                                         name ^ "in case expression");
-                         Case (l, e, bt, rt, branches, default) in
+                         Case (l, e, rt, branches, default) in
      (match lexp_whnf e ctx with
       | Cons (_, (_, name)) -> reduce name []
       | Call (Cons (_, (_, name)), aargs) -> reduce name aargs
-      | e' -> Case (l, e', bt, rt, branches, default))
+      | e' -> Case (l, e', rt, branches, default))
   | e -> e
 
 
@@ -321,7 +321,7 @@ let rec check ctx e =
                    arg_loop args (DB.lctx_extend ctx (Some v) Variable t)) in
       let tct = arg_loop args ctx in
       tct
-  | Case (l, e, it, ret, branches, default)
+  | Case (l, e, ret, branches, default)
     -> let rec call_split e =
         match e with
         | Call (f, args) -> let (f',args') = call_split f in (f', args' @ args)
@@ -414,7 +414,7 @@ let rec erase_type (lxp: L.lexp): E.elexp =
         | L.Call(fct, args) ->
             E.Call((erase_type fct), (filter_arg_list args))
 
-        | L.Case(l, target, _, _, cases, default) ->
+        | L.Case(l, target, _, cases, default) ->
             E.Case(l, (erase_type target), (clean_map cases),
                                          (clean_maybe default))
 

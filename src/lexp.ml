@@ -62,7 +62,6 @@ type ltype = lexp
                   * ((arg_kind * vdef option * ltype) list) SMap.t
    | Cons of lexp * symbol (* = Type info * ctor_name  *)
    | Case of U.location * lexp
-             * ltype (* The base inductive type over which we switch.  *)
              * ltype (* The type of the return value of all branches *)
              * (U.location * (arg_kind * vdef option) list * lexp) SMap.t
              * lexp option               (* Default.  *)
@@ -269,7 +268,7 @@ let rec lexp_location e =
   | Call (f,_) -> lexp_location f
   | Inductive (l,_,_,_) -> l
   | Cons (_,(l,_)) -> l
-  | Case (l,_,_,_,_,_) -> l
+  | Case (l,_,_,_,_) -> l
   | Susp (e, _) -> lexp_location e
   (* | Susp (_, e) -> lexp_location e
    * | Metavar ((l,_),_,_) -> l *)
@@ -314,8 +313,8 @@ let rec push_susp e s =            (* Push a suspension one level down.  *)
                             cases in
       Inductive (l, label, nargs, ncases)
   | Cons (it, name) -> Cons (mkSusp it s, name)
-  | Case (l, e, it, ret, cases, default)
-    -> Case (l, mkSusp e s, mkSusp it s, mkSusp ret s,
+  | Case (l, e, ret, cases, default)
+    -> Case (l, mkSusp e s, mkSusp ret s,
             SMap.map (fun (l, cargs, e)
                       -> let s' = L.fold_left (fun s carg
                                               -> match carg with
@@ -543,7 +542,7 @@ let rec lexp_unparse lxp =
           ) (SMap.bindings ctor)
         in Pinductive(label, pfargs, ctor)
 
-    | Case (loc, target, tltp, bltp, branches, default) ->
+    | Case (loc, target, bltp, branches, default) ->
        let bt = lexp_unparse bltp in
       let pbranch = List.map (fun (str, (loc, args, bch)) ->
         match args with
@@ -758,7 +757,7 @@ and _lexp_to_str ctx exp =
             (keyword "inductive_") ^ " (" ^ name ^ args_str ^") " ^
                                             (lexp_str_ctor ctx ctors)
 
-        | Case (_, target, tpe, _ret, map, dflt) ->(
+        | Case (_, target, _ret, map, dflt) ->(
             let str = (keyword "case ") ^ (lexp_to_str target)
             (* FIXME: `tpe' is the *base* type of `target`.  E.g. if `target`
              * is a `List Int`, then `tpe` will be `List`.
