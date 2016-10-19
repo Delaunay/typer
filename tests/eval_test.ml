@@ -124,7 +124,8 @@ let _ = test_eval_eqv_named
    b = (ctr2 (ctr2 ctr0));   z = 3;
    c = (ctr3 (ctr2 ctr0));   w = 4;
 
-   test_fun = lambda (k : idt) -> case k
+   test_fun : idt -> Int;
+   test_fun = lambda k -> case k
       | ctr1 l => 1
       | ctr2 l => 2
       | _ => 3;"

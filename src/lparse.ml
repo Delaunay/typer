@@ -322,10 +322,6 @@ let rec _lexp_p_infer (p : pexp) (ctx : elab_context) trace: lexp * ltype =
 
             Cons(idt, sym), cons_type
 
-        (* Pcase: we can infer iff `patterns` is not empty *)
-        | Pcase (loc, target, patterns) ->
-            lexp_case None (loc, target, patterns) ctx trace
-
         | Phastype (_, pxp, ptp) ->
             let ltp, _ = lexp_infer ptp ctx in
                 (_lexp_p_check pxp ltp ctx trace), ltp
@@ -353,42 +349,34 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : elab_context) trace: lexp =
 
     match p with
         (* This case cannot be inferred *)
-        | Plambda (kind, var, None, body) ->(
+        | Plambda (kind, var, aty, body) ->(
             (* Read var type from the provided type *)
-            let ltp, lbtp = match nosusp t with
+            let ltp, lbtp = match OL.lexp_whnf t (ectx_to_lctx ctx) with
               | Arrow(kind, _, ltp, _, lbtp) -> ltp, lbtp
               | expr ->
                 lexp_fatal tloc expr "Expected Type Arrow ( _ -> _ )" in
 
+            (* FIXME: Check `conv_p aty ltp`!  *)
             let nctx = env_extend ctx var Variable ltp in
             let lbody = lexp_check body lbtp nctx in
 
                 Lambda(kind, var, ltp, lbody))
 
         (* This is mostly for the case where no branches are provided *)
-        | Pcase (loc, target, patterns) ->
-            let lxp, _ = lexp_case (Some t) (loc, target, patterns) ctx trace in
-                lxp
+        | Pcase (loc, target, patterns)
+          -> lexp_case t (loc, target, patterns) ctx trace
 
         (* handle pcall here * )
         | Pcall (fname, _args) -> *)
 
         | _ -> let (e, inferred_t) = lexp_infer p ctx in e
 
-(* Lexp.case cam be checked and inferred *)
-and lexp_case (rtype: lexp option) (loc, target, patterns) ctx i =
+(* Lexp.case can sometimes be inferred, but we prefer to always check.  *)
+and lexp_case rtype (loc, target, patterns) ctx i =
     (* FIXME: check if case is exhaustive  *)
     (* Helpers *)
 
     let lexp_infer p ctx = _lexp_p_infer p ctx i in
-    let rtype = ref rtype in
-
-    let type_check ltp =
-        match !rtype with
-            (* FIXME: check if branch returns correct type *)
-            | Some rltp -> true
-             (* if rtype was not provided then we use the first branch as reference *)
-            | None -> rtype := (Some ltp); true in
 
     let uniqueness_warn name =
         warning loc ("Pattern " ^ name ^ " is a duplicate." ^
@@ -401,22 +389,15 @@ and lexp_case (rtype: lexp option) (loc, target, patterns) ctx i =
     (* get target and its type *)
     let tlxp, tltp = lexp_infer target ctx in
 
-    (* make a list of all branches return type *)
-    let texp = ref [] in
-
     (*  Read patterns one by one *)
     let fold_fun (merged, dflt) (pat, exp) =
         (*  Create pattern context *)
         let (name, iloc, arg), nctx = lexp_read_pattern pat exp tlxp ctx i in
 
         (*  parse using pattern context *)
-        let exp, ltp = lexp_infer exp nctx in
-            (* we added len(arg) variable int the context *)
-            texp := ltp::!texp;
-
-        (* Check ltp type. Must be similar to rtype *)
-        (if type_check ltp then ()
-            else lexp_error iloc ltp "Branch return type mismatch");
+        let rtype' = mkSusp rtype (S.shift (M.length (ectx_to_lctx nctx)
+                                            - M.length (ectx_to_lctx ctx))) in
+        let exp = _lexp_p_check exp rtype' nctx i in
 
         if name = "_" then (
             (if dflt != None then uniqueness_warn name);
@@ -429,14 +410,7 @@ and lexp_case (rtype: lexp option) (loc, target, patterns) ctx i =
     let (lpattern, dflt) =
         List.fold_left fold_fun (SMap.empty, None) patterns in
 
-    let return_type = match (!texp), (!rtype) with
-        | hd::_, _ -> hd
-        | _    , Some v -> v
-
-        (* This is impossible *)
-        | _, None -> typer_unreachable "The case has no return type info" in
-
-    Case (loc, tlxp, tltp, return_type, lpattern, dflt), return_type
+    Case (loc, tlxp, tltp, rtype, lpattern, dflt)
 
 (*  Identify Call Type and return processed call *)
 and lexp_call (func: pexp) (sargs: sexp list) ctx i =
