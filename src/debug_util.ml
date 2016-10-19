@@ -215,6 +215,12 @@ let format_source () =
     ) else (List.iter (fun str ->
         print_string str; print_string "\n") result;)
 
+(* merged declaration, allow us to process declaration in multiple pass *)
+(* first detect recursive decls then lexp decls*)
+type mdecl =
+  | Ldecl of symbol * pexp option * pexp option
+  | Lmcall of symbol * sexp list
+
 let lexp_detect_recursive pdecls =
   (* Pack mutually recursive declarations                 *)
   (* mutually recursive def must use forward declarations *)
@@ -244,9 +250,9 @@ let lexp_detect_recursive pdecls =
           let ptp = (match (!pending) with
             | Ldecl(_, _, ptp)::[] -> ptp
             (* we already checked that len(pending) == 1*)
-            | Ldecl(_, _, ptp)::_  -> lexp_fatal l "Unreachable"
-            | []                   -> lexp_fatal l "Unreachable"
-            | Lmcall _ :: _        -> lexp_fatal l "Unreachable") in
+            | Ldecl(_, _, ptp)::_  -> typer_unreachable "Unreachable"
+            | []                   -> typer_unreachable "Unreachable"
+            | Lmcall _ :: _        -> typer_unreachable "Unreachable") in
 
           (* add declaration to merged decl *)
           merged := Ldecl((l, s), Some pxp, ptp)::(!merged);
@@ -274,7 +280,7 @@ let lexp_detect_recursive pdecls =
                 merged := Ldecl((l, s), Some pxp, (Some ptp))::!merged;
 
               (* s should be unique *)
-              | _ -> lexp_error l "declaration must be unique") in
+              | _ -> error l "declaration must be unique") in
 
           (* element is not pending anymore *)
           pending := lst;
@@ -382,10 +388,13 @@ let main () =
             ) merged));
 
         (* debug lexp parsing once merged *)
-        let lexps, nctx = try _lexp_decls pexps octx 0
+        print_string yellow;
+        let lexps, nctx = try lexp_p_decls pexps octx
           with e ->
-            print_lexp_trace ();
-            internal_error "Fail" in
+            print_string reset;
+            print_lexp_trace None;
+            raise e in
+        print_string reset;
 
         (* use the new way of parsing expr *)
         let ctx = nctx in
@@ -436,7 +445,7 @@ let main () =
             with e ->
                 print_string reset;
                 print_rte_ctx (!_global_eval_ctx);
-                print_eval_trace ();
+                print_eval_trace None;
                 raise e) in
         print_string reset;
 

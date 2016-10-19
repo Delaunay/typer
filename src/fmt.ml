@@ -31,8 +31,8 @@
  * ---------------------------------------------------------------------------*)
 
 (*  Compute the number of character needed to print an integer*)
-let str_size_int value =
-    (int_of_float (log10 (float value))) + 1
+let str_size_int v =
+    (int_of_float (log10 (float v))) + 1
 
 (* print n char 'c' *)
 let rec make_line c n = String.make n c
@@ -42,56 +42,54 @@ let cut_int (v:int) (start:int) (len:int): int = 0
 
 (*  RALIGN
  * ----------------------- *)
-let ralign_generic get_size print_str print_elem cut_elem elem col =
+let ralign_generic get_size elem_string cut_elem elem col =
     let n = get_size elem in
-    if n > col then
-        print_elem (cut_elem elem 0 col)
-    else begin
-        print_str (make_line ' ' (col - n));
-        print_elem elem; end
+      if n > col then elem_string (cut_elem elem 0 col)
+      else (make_line ' ' (col - n)) ^ (elem_string elem)
 
-let ralign_print_string =
-    ralign_generic String.length print_string print_string String.sub
+let ralign_string =
+    ralign_generic String.length (fun s -> s) String.sub
 
-let ralign_print_int =
-    ralign_generic str_size_int print_string print_int cut_int
+let ralign_int =
+    ralign_generic str_size_int string_of_int cut_int
 
+let ralign_print_int i c = print_string (ralign_int i c)
+let ralign_print_string s c = print_string (ralign_string s c)
 
 (*  LALIGN
  * ----------------------- *)
-let lalign_generic get_size print_str print_elem cut_elem elem col =
+let lalign_generic get_size elem_string cut_elem elem col =
     let n = get_size elem in
-    if n > col then
-        print_elem (cut_elem elem 0 col)
-    else begin
-        print_elem elem;
-        print_str (make_line ' ' (col - n)); end
+      if n > col then elem_string (cut_elem elem 0 col)
+      else (elem_string elem) ^ (make_line ' ' (col - n))
 
-let lalign_print_string =
-    lalign_generic String.length print_string print_string String.sub
+let lalign_string =
+    lalign_generic String.length (fun s -> s) String.sub
 
-let lalign_print_int =
-    lalign_generic str_size_int print_string print_int cut_int
+let lalign_int =
+    lalign_generic str_size_int string_of_int cut_int
+
+let lalign_print_int i c = print_string (lalign_int i c)
+let lalign_print_string s c = print_string (lalign_string s c)
 
 (*  CALIGN
  * ----------------------- *)
-let calign_generic get_size print_str print_elem cut_elem elem col =
+let calign_generic get_size elem_string cut_elem elem col =
     let n = get_size elem in
     let p = n mod 2 in
     let sep_n = (col - n) / 2 in
 
-    if n > col then
-        print_elem (cut_elem elem 0 col)
-    else begin
-        print_str (make_line ' ' sep_n);
-        print_elem elem;
-        print_str (make_line ' ' (sep_n + p)); end
+    if n > col then elem_string (cut_elem elem 0 col)
+    else (make_line ' ' sep_n) ^ (elem_string elem) ^ (make_line ' ' (sep_n + p))
 
-let calign_print_string =
-    calign_generic String.length print_string print_string String.sub
+let calign_string =
+    calign_generic String.length (fun s -> s) String.sub
 
-let calign_print_int =
-    calign_generic str_size_int print_string print_int cut_int
+let calign_int =
+    calign_generic str_size_int string_of_int cut_int
+
+let calign_print_int i c = print_string (calign_int i c)
+let calign_print_string s c = print_string (calign_string s c)
 
 (* Table Printing helper *)
 let make_title title =

@@ -1,0 +1,112 @@
+%(*
+% *      Typer Compiler
+% *
+% * ---------------------------------------------------------------------------
+% *
+% *      Copyright (C) 2011-2016  Free Software Foundation, Inc.
+% *
+% *   Author: Pierre Delaunay <pierre.delaunay@hec.ca>
+% *   Keywords: languages, lisp, dependent types.
+% *
+% *   This file is part of Typer.
+% *
+% *   Typer is free software; you can redistribute it and/or modify it under the
+% *   terms of the GNU General Public License as published by the Free Software
+% *   Foundation, either version 3 of the License, or (at your option) any
+% *   later version.
+% *
+% *   Typer is distributed in the hope that it will be useful, but WITHOUT ANY
+% *   WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+% *   FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+% *   more details.
+% *
+% *   You should have received a copy of the GNU General Public License along
+% *   with this program.  If not, see <http://www.gnu.org/licenses/>.
+% *
+% * ---------------------------------------------------------------------------
+% *
+% *      Description:
+% *          Erroneous typer code to test out error messages
+% *          Fatal errors are at the end of the file
+%*
+% * --------------------------------------------------------------------------- *)
+
+% [!] Error     [Ln  10, cl  29] LPARSE   The variable: "b" was not declared
+%     > Pvar: b
+%     > Root:
+
+a = lambda (n : Int) -> n + b;
+v = (a 2);
+
+% [!] Error     [Ln  14, cl  12] LPARSE   Lambda require type annotation
+%     > Plambda: (lambda_->_ n n)
+%     > Root:
+
+m = lambda n -> n;
+
+% [!] Error     [Ln  27, cl  28] LPARSE   Constructor "cons3" does not exist
+%     > inductive_: (inductive_ e (cons1) (cons2 Int))
+%     > Root:
+
+idt = inductive_ (idt) (cons1) (cons2 Int);
+cons1 = inductive-cons idt cons1;
+cons2 = inductive-cons idt cons2;
+cons3 = inductive-cons idt cons3;
+
+% [!] Error     [Ln  32, cl  28] LPARSE   Not an Inductive Type
+%     > Builtin: Int
+%     > Root:
+
+cons4 = inductive-cons Int cons3;
+
+% /!\ Warning   [Ln  70, cl  17] LPARSE   Pattern cons2 is a duplicate. It will override previous pattern.
+
+fun2 : idt -> Int;
+fun2 n = case n
+  | cons1   => 1
+  | cons2 i => 2
+  | cons2 j => 3;
+
+% [X] Fatal     [Ln  77, cl  12] LPARSE   Explicit arg `2` to non-function (type = Int)
+%     > Builtin: Int
+%     > Root:
+
+% h = fun2 1 2;
+
+% [X] Fatal     [Ln   6, cl   6] LPARSE   Macro_ expects `(List Sexp) -> Sexp`
+%     > Vcons: (cons 2 (nil))
+%     > Root: n
+
+% m = Macro_ (lambda (n : Int) -> n);
+% v = (m 2);
+
+% [X] Fatal     [Ln  43, cl   5] LPARSE   Expected Type Arrow ( _ -> _ )
+%     > Var: Int
+%     > Root:
+
+% fun : Int;
+% fun n = n + 2;
+
+
+% [!] Error     [Ln   0, cl   0] LPARSE   Error while type-checking
+%     > lambda: (lambda_->_ (_:_ n idt) (case_ n (_=>_ cons1 1) (_=>_ cons2c "")))
+%     > Root:
+% [!] Error     [Ln  87, cl   1] LPARSE   `fun4` defined but not declared!
+% [!] Error     [Ln  86, cl   1] LPARSE   Variable `fun4` declared but not defined!
+
+% idtb = inductive_ (idtb) (cons1b) (cons2b Int);
+% cons1b = inductive-cons idtb cons1b;
+% cons2b = inductive-cons idtb cons2b;
+
+% fun4 : idt -> Int;
+% fun4 n = case n
+%  | cons1 => 1
+%  | cons2c => 2;
+
+
+% [!] Error     [Ln  73, cl  16] TC       Unsupported immediate value!
+
+% fun3 : idt -> Int;
+% fun3 n = case n
+%   | cons1   => 1
+%   | cons2 i => "AB";

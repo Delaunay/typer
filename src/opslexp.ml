@@ -470,3 +470,16 @@ and clean_map cases =
         (l, (clean_arg_list args), (erase_type expr))) cases
 
 
+(* Custom type to make trace uniform between lparse and eval *)
+type pexporlexp =
+  | Pexp of P.pexp
+  | Elexp of E.elexp
+
+
+let pol_string xp = match xp with
+  | Pexp p -> P.pexp_string p
+  | Elexp e -> E.elexp_string e
+
+let pol_name xp = match xp with
+  | Pexp p -> P.pexp_name p
+  | Elexp e -> E.elexp_name e
