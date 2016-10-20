@@ -41,8 +41,19 @@ type label = symbol
 
 (*************** Elaboration to Lexp *********************)
 
-(* Pour la propagation des types bidirectionnelle, tout va dans `infer`,
- * sauf Lambda et Case qui vont dans `check`.  Je crois.  *)
+(* The scoping of `Let` is tricky:
+ *
+ * Since it's a recursive let, the definition part of each binding is
+ * valid in the "final" scope which includes all the new bindings.
+ *
+ * But the type of each binding is not defined in that same scope.  Instead
+ * it's defined in the scope of all the previous bindings.
+ *
+ * For exemple the type of the second binding of such a Let is defined in
+ * the scope of the surrounded context extended with the first binding.
+ * And the type of the 3rd binding is defined in the scope of the
+ * surrounded context extended with the first and the second bindings.  *)
+
 type ltype = lexp
  and subst = lexp S.subst
  and lexp =
@@ -64,7 +75,7 @@ type ltype = lexp
    | Case of U.location * lexp
              * ltype (* The type of the return value of all branches *)
              * (U.location * (arg_kind * vdef option) list * lexp) SMap.t
-             * lexp option               (* Default.  *)
+             * (vdef option * lexp) option               (* Default.  *)
  (*   (\* For logical metavars, there's no substitution.  *\)
   *   | Metavar of (U.location * string) * metakind * metavar ref
   * and metavar =
@@ -276,7 +287,7 @@ let rec lexp_location e =
 
 (********* Normalizing a term *********)
 
-let vdummy = (U.dummy_location, "dummy")
+let vdummy = (U.dummy_location, "<anon>")
 let maybev mv = match mv with None -> vdummy | Some v -> v
 
 let rec push_susp e s =            (* Push a suspension one level down.  *)
@@ -325,7 +336,7 @@ let rec push_susp e s =            (* Push a suspension one level down.  *)
                      cases,
             match default with
             | None -> default
-            | Some e -> Some (mkSusp e s))
+            | Some (v,e) -> Some (v, mkSusp e (ssink (maybev v) s)))
   (* Susp should never appear around Var/Susp/Metavar because mkSusp
    * pushes the subst into them eagerly.  IOW if there's a Susp(Var..)
    * or Susp(Metavar..) it's because some chunk of code should use mkSusp
@@ -546,19 +557,24 @@ let rec lexp_unparse lxp =
        let bt = lexp_unparse bltp in
       let pbranch = List.map (fun (str, (loc, args, bch)) ->
         match args with
-          | [] -> Ppatvar (loc, str), lexp_unparse bch
+          | [] -> Ppatsym (loc, str), lexp_unparse bch
           | _  ->
-            let pat_args = List.map (fun (kind, vdef) ->
-              match vdef with
-                | Some vdef -> Some (kind, vdef), Ppatvar(vdef)
-                | None -> None, Ppatany(loc)) args
+             let pat_args
+               = List.map (fun (kind, vdef)
+                           -> match vdef with
+                             | Some vdef -> Some vdef, Ppatsym vdef
+                             | None -> None, Ppatany loc)
+                          args
             (* FIXME: Rather than a Pcons we'd like to refer to an existing
              * binding with that value!  *)
             in Ppatcons (Pcons (bt, (loc, str)), pat_args), lexp_unparse bch
         ) (SMap.bindings branches) in
 
       let pbranch = match default with
-        | Some dft -> (Ppatany(loc), lexp_unparse dft)::pbranch
+        | Some (v,dft) -> ((match v with
+                           | None -> Ppatany loc
+                           | Some vdef -> Ppatsym vdef),
+                          lexp_unparse dft)::pbranch
         | None -> pbranch
         in Pcase (loc, lexp_unparse target, pbranch)
 
@@ -776,8 +792,10 @@ and _lexp_to_str ctx exp =
 
             match dflt with
                 | None -> str
-                | Some df ->
-                    str ^ nl ^ (make_indent 1) ^ "| _ => " ^ (lexp_to_stri 1 df))
+                | Some (v, df) ->
+                   str ^ nl ^ (make_indent 1)
+                   ^ "| " ^ (match v with None -> "_" | Some (_,name) -> name)
+                   ^ " => " ^ (lexp_to_stri 1 df))
 
         | Builtin ((_, name), _) -> name
 

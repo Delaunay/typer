@@ -150,8 +150,9 @@ let rec lexp_whnf e (ctx : DB.lexp_context) = match e with
                           args))
                    ctx
       | Call (e', xs1) -> Call (e', List.append xs1 xs)
-      | e' -> Call (e', xs))
+      | e' -> Call (e, xs))      (* Keep `e`, assuming it's more readable!  *)
   | Case (l, e, rt, branches, default) ->
+     let e' = lexp_whnf e ctx in
      let reduce name aargs =
        try
          let (_, _, branch) = SMap.find name branches in
@@ -165,15 +166,16 @@ let rec lexp_whnf e (ctx : DB.lexp_context) = match e with
          lexp_whnf (push_susp branch subst) ctx
        with Not_found
             -> match default
-              with | Some default -> lexp_whnf default ctx
+              with | Some (v,default)
+                     -> lexp_whnf (push_susp default (S.substitute e')) ctx
                    | _ -> U.msg_error "WHNF" l
                                      ("Unhandled constructor " ^
                                         name ^ "in case expression");
                          Case (l, e, rt, branches, default) in
-     (match lexp_whnf e ctx with
+     (match e' with
       | Cons (_, (_, name)) -> reduce name []
       | Call (Cons (_, (_, name)), aargs) -> reduce name aargs
-      | e' -> Case (l, e', rt, branches, default))
+      | _ -> Case (l, e', rt, branches, default))
   | e -> e
 
 
@@ -297,19 +299,20 @@ let rec check ctx e =
                     let level, _ =
                       List.fold_left
                         (fun (level, ctx) (ak, v, t) ->
-                          (if ak == P.Aerasable && impredicative_erase
-                           then level
-                           else match lexp_whnf (check ctx t) ctx with
-                                | Sort (_, Stype level')
-                                  (* FIXME: scoping of level vars!  *)
-                                  -> sort_level_max level level'
-                                | tt -> U.msg_error "TC" (lexp_location t)
-                                                   ("Field type "
-                                                    ^ lexp_string t
-                                                    ^ " is not a Type! ("
-                                                    ^ lexp_string tt ^")");
-                                       DB.print_lexp_ctx ctx;
-                                       SortLevel SLz),
+                          (match lexp_whnf (check ctx t) ctx with
+                           | Sort _ when ak == P.Aerasable && impredicative_erase
+                             -> level
+                           | Sort (_, Stype level')
+                             (* FIXME: scoping of level vars!  *)
+                             -> sort_level_max level level'
+                           | tt -> U.msg_error "TC" (lexp_location t)
+                                              ("Field type "
+                                               ^ lexp_string t
+                                               ^ " is not a Type! ("
+                                               ^ lexp_string tt ^")");
+                                  (* DB.print_lexp_ctx ctx;
+                                   * U.internal_error "Oops"; *)
+                                  level),
                           DB.lctx_extend ctx v Variable t)
                         (level, ctx)
                         case in
@@ -322,11 +325,12 @@ let rec check ctx e =
       let tct = arg_loop args ctx in
       tct
   | Case (l, e, ret, branches, default)
-    -> let rec call_split e =
-        match e with
-        | Call (f, args) -> let (f',args') = call_split f in (f', args' @ args)
+    -> let rec call_split e = match e with
+        | Call (f, args) -> (f, args)
         | _ -> (e,[]) in
-      (match call_split (lexp_whnf (check ctx e) ctx) with
+      let etype = lexp_whnf (check ctx e) ctx in
+      let it, aargs = call_split etype in
+      (match lexp_whnf it ctx, aargs with
        | Inductive (_, _, fargs, constructors), aargs ->
           let rec mksubst s fargs aargs =
             match fargs, aargs with
@@ -360,7 +364,9 @@ let rec check ctx e =
                assert_type branch ret (check nctx branch))
             branches;
           (match default with
-           | Some d -> assert_type d ret (check ctx d)
+           | Some (v, d)
+             -> assert_type d (mkSusp ret (S.shift 1))
+                           (check (DB.lctx_extend ctx v (LetDef e) etype) d)
            | _ -> ())
        | _,_ -> U.msg_error "TC" l "Case on a non-inductive type!");
       ret
@@ -442,7 +448,7 @@ and clean_decls decls =
 
 and clean_maybe lxp =
     match lxp with
-        | Some lxp -> Some (erase_type lxp)
+        | Some (v, lxp) -> Some (v, erase_type lxp)
         | None -> None
 
 and clean_map cases =
