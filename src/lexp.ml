@@ -76,7 +76,9 @@ type ltype = lexp
              * ltype (* The type of the return value of all branches *)
              * (U.location * (arg_kind * vdef option) list * lexp) SMap.t
              * (vdef option * lexp) option               (* Default.  *)
-   | Metavar of int * subst * vdef
+   (* The substitution `s` only applies to the lexp associated
+    * with the metavar's index (i.e. its "value"), not to the ltype.  *)
+   | Metavar of int * subst * vdef * ltype
  (*   (\* For logical metavars, there's no substitution.  *\)
   *   | Metavar of (U.location * string) * metakind * metavar ref
   * and metavar =
@@ -136,7 +138,7 @@ let rec mkSusp e s =
     match e with
     | Susp (e, s') -> mkSusp e (scompose s' s)
     | Var (l,v) -> slookup s l v
-    | Metavar (vn, s', vd) -> Metavar (vn, scompose s' s, vd)
+    | Metavar (vn, s', vd, t) -> Metavar (vn, scompose s' s, vd, mkSusp t s)
     | _ -> Susp (e, s)
 and scompose s1 s2 = S.compose mkSusp s1 s2
 and slookup s l v = S.lookup (fun l i -> Var (l, i))
@@ -289,7 +291,7 @@ let rec lexp_location e =
   | Case (l,_,_,_,_) -> l
   | Susp (e, _) -> lexp_location e
   (* | Susp (_, e) -> lexp_location e *)
-  | Metavar (_,_,(l,_)) -> l
+  | Metavar (_,_,(l,_), _) -> l
 
 
 (********* Normalizing a term *********)
@@ -585,11 +587,19 @@ let rec lexp_unparse lxp =
         | None -> pbranch
         in Pcase (loc, lexp_unparse target, pbranch)
 
-  (*
-   | SortLevel of sort_level
-   | Sort of U.location * sort *)
+    (* | _ as e -> Pimm (Symbol(lexp_location e, "<")) *)
 
-    | _ as e -> Pimm (Symbol(lexp_location e, "Type"))
+    (* FIXME: The cases below are all broken!  *)
+    | Metavar (idx, subst, (loc, name), _)
+      -> Pimm (Symbol (loc, "?<" ^ name ^ "-" ^ string_of_int idx ^ ">"))
+
+    | SortLevel (SLz) -> Pimm (Integer (U.dummy_location, 0))
+    | SortLevel (SLsucc sl) -> Pcall (Pimm (Symbol (U.dummy_location, "<S>")),
+                                     [pexp_unparse (lexp_unparse sl)])
+    | Sort (l, StypeOmega) -> Pimm (Symbol (l, "<SortOmega>"))
+    | Sort (l, StypeLevel) -> Pimm (Symbol (l, "<SortLevel>"))
+    | Sort (l, Stype sl) -> Pcall (Pimm (Symbol (l, "<Type>")),
+                                  [pexp_unparse (lexp_unparse sl)])
 
 let rec subst_string s = match s with
   | S.Identity -> "Id"
@@ -701,7 +711,8 @@ and _lexp_to_str ctx exp =
 
         | Var ((loc, name), idx) -> name ^ (index idx) ;
 
-        | Metavar (idx, subst, (loc, name)) -> "?" ^ name ^ (index idx) (*TODO : print subst*)
+        | Metavar (idx, subst, (loc, name), _)
+          -> "?" ^ name ^ (index idx) (*TODO : print subst*)
 
         | Let (_, decls, body)   ->
             (* Print first decls without indent *)

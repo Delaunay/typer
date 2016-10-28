@@ -226,14 +226,16 @@ let _ = test_eval_eqv_named
 let _ = test_eval_eqv_named
   "Lists"
 
-  "my_list = cons (a := Int) 1
-            (cons (a := Int) 2
-            (cons (a := Int) 3
-            (cons (a := Int) 4 (nil (a := Int)))))"
+  (* FIXME: This doesn't signal an error, even we don't yet have the code
+   * to handle the `nil` below!  *)
+  "my_list = cons 1
+            (cons 2
+            (cons 3
+            (cons 4 nil)))"
 
-  "length (a := Int) my_list;
-   head (a := Int) my_list;
-   head (a := Int) (tail (a := Int) my_list)"
+  "length my_list;
+   head my_list;
+   head (tail my_list)"
 
   "4; 1; 2"
 

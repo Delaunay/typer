@@ -61,13 +61,12 @@ let fmt (lst: (lexp * lexp * result * result) list): string list =
 let str_induct = "Nat : Type; Nat = inductive_ (dNat) (zero) (succ Nat)"
 let str_int_3  = "i = 3"
 let str_int_4  = "i = 4"
-let str_case   = "i = case 0
-| 1 => 2
-| 0 => 42
-| _ => 5"
-let str_case2 = "i = case 0
-| 0 => 12
-| _ => 12"
+let str_case   = "i = case True
+| True => 2
+| False => 42"
+let str_case2 = "i = case nil(a := Int)
+| nil => 12
+| _ => 24"
 let str_let = "i = let a = 5 in a + 1"
 let str_let2 = "j = let b = 5 in b"
 let str_lambda = "sqr = lambda (x : Int) -> x * x;"
@@ -166,7 +165,8 @@ let generate_testable (_: lexp list) : ((lexp * lexp * result) list) =
 
   ::(input_type    , input_type_t  , Equivalent)  (* 44 *)
 
-  ::(Metavar (0, S.Identity, (Util.dummy_location, "M")), Var ((Util.dummy_location, "x"), 3), Unification) (* 45 *)
+  ::(Metavar (0, S.Identity, (Util.dummy_location, "M"), type0),
+     Var ((Util.dummy_location, "x"), 3), Unification) (* 45 *)
 
   ::[]
 
@@ -179,7 +179,7 @@ let test_input (lxp1: lexp) (lxp2: lexp) (subst: substitution): unif_res =
   | None                              -> (Nothing, res, lxp1, lxp2)
   in tmp
 
-let check (lxp1: lexp ) (lxp2: lexp ) (res: result) (subst: substitution ): bool =
+let check (lxp1: lexp) (lxp2: lexp) (res: result) (subst: substitution): bool =
   let r, _, _, _ = test_input lxp1 lxp2 subst
   in if r = res then true else false
 

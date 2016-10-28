@@ -130,7 +130,8 @@ and conv_p e1 e2 = conv_p' S.identity S.identity e1 e2
  * but only on *types*.  If you must use it on code, be sure to use its
  * return value as little as possible since WHNF will inherently introduce
  * call-by-name behavior.  *)
-let rec lexp_whnf e (ctx : DB.lexp_context) meta_ctx : lexp =
+let lexp_whnf e (ctx : DB.lexp_context) meta_ctx : lexp =
+  let rec lexp_whnf e (ctx : DB.lexp_context) : lexp =
   Debug_fun.do_debug (fun () ->
       prerr_endline ("[StackTrace] ------------------------------------------");
       prerr_endline ("[StackTrace] let lexp_whnf e ctx meta_ctx");
@@ -146,38 +147,37 @@ let rec lexp_whnf e (ctx : DB.lexp_context) meta_ctx : lexp =
              (* We can do this blindly even for recursive definitions!
               * IOW the risk of inf-looping should only show up when doing
               * things like full normalization (e.g. lexp_conv_p).  *)
-             | Some e' -> lexp_whnf e' ctx meta_ctx)
-  | Susp (e, s) -> lexp_whnf (push_susp e s) ctx meta_ctx
-  | Call (e, []) -> lexp_whnf e ctx meta_ctx
+             | Some e' -> lexp_whnf e' ctx)
+  | Susp (e, s) -> lexp_whnf (push_susp e s) ctx
+  | Call (e, []) -> lexp_whnf e ctx
   | Call (e, (((_, arg)::args) as xs)) ->
-     (match lexp_whnf e ctx meta_ctx with
+     (match lexp_whnf e ctx with
       | Lambda (_, _, _, body) ->
          (* Here we apply whnf to the arg eagerly to kind of stay closer
           * to the idea of call-by-value, although in this context
           * we can't really make sure we always reduce the arg to a value.  *)
-         lexp_whnf (Call (push_susp body (S.substitute (lexp_whnf arg ctx meta_ctx)),
+         lexp_whnf (Call (push_susp body (S.substitute (lexp_whnf arg ctx)),
                           args))
-                   ctx meta_ctx
+                   ctx
       | Call (e', xs1) -> Call (e', List.append xs1 xs)
       | e' -> Call (e, xs))      (* Keep `e`, assuming it's more readable!  *)
   | Case (l, e, rt, branches, default) ->
-     let e' = lexp_whnf e ctx meta_ctx in
+     let e' = lexp_whnf e ctx in
      let reduce name aargs =
        try
          let (_, _, branch) = SMap.find name branches in
          let (subst, _)
            = List.fold_left
                (fun (s,d) (_, arg) ->
-                 (S.Cons (L.mkSusp (lexp_whnf arg ctx meta_ctx) (S.shift d), s),
+                 (S.Cons (L.mkSusp (lexp_whnf arg ctx) (S.shift d), s),
                   d + 1))
                (S.identity, 0)
                aargs in
-         lexp_whnf (push_susp branch subst) ctx meta_ctx
+         lexp_whnf (push_susp branch subst) ctx
        with Not_found
             -> match default
               with | Some (v,default)
-                     -> lexp_whnf (push_susp default (S.substitute e'))
-                                 ctx meta_ctx
+                     -> lexp_whnf (push_susp default (S.substitute e')) ctx
                    | _ -> U.msg_error "WHNF" l
                                      ("Unhandled constructor " ^
                                         name ^ "in case expression");
@@ -186,8 +186,12 @@ let rec lexp_whnf e (ctx : DB.lexp_context) meta_ctx : lexp =
       | Cons (_, (_, name)) -> reduce name []
       | Call (Cons (_, (_, name)), aargs) -> reduce name aargs
       | _ -> Case (l, e', rt, branches, default))
-  | Metavar (idx, _, _) -> lexp_whnf (L.VMap.find idx meta_ctx) ctx meta_ctx
+  | Metavar (idx, s, _, _)
+    -> (try lexp_whnf (mkSusp (L.VMap.find idx meta_ctx) s) ctx
+      with Not_found -> e)
   | e -> e
+
+  in lexp_whnf e ctx
 
 
 (********* Testing if a lexp is properly typed  *********)
@@ -408,6 +412,9 @@ let rec check ctx e =
        | _ -> (U.msg_error "TC" (lexp_location e)
                           "Cons of a non-inductive type!";
               B.type_int))
+  | Metavar (idx, s, _, t)
+    -> try check ctx (push_susp (L.VMap.find idx meta_ctx) s)
+      with Not_found -> t
 
 (*********** Type erasure, before evaluation.  *****************)
 

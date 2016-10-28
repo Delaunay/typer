@@ -92,12 +92,16 @@ let pexp_fatal   = debug_message fatal pexp_name pexp_string
 let pexp_error   = debug_message error pexp_name pexp_string
 let value_fatal  = debug_message fatal value_name value_string
 
+(* :-( *)
+let global_substitution = ref (empty_subst, [])
+
 let elab_check_sort (ctx : elab_context) lsort (l, name) ltp =
-  match OL.lexp_whnf lsort (ectx_to_lctx ctx) VMap.empty with
+  let meta_ctx, _ = !global_substitution in
+  match OL.lexp_whnf lsort (ectx_to_lctx ctx) meta_ctx with
   | Sort (_, _) -> () (* All clear!  *)
-  | _ -> lexp_error l ltp
+  | k -> lexp_error l ltp
                    ("Type of `" ^ name ^ "` is not a proper type: "
-                    ^ lexp_string ltp)
+                    ^ lexp_string ltp ^ " : " ^ lexp_string lsort);
 
 let elab_check_proper_type (ctx : elab_context) ltp v =
   try elab_check_sort ctx (OL.check (ectx_to_lctx ctx) ltp) v ltp
@@ -191,17 +195,18 @@ let build_var name ctx =
     let type0_idx = senv_lookup name ctx in
         Var((dloc, name), type0_idx)
 
-(* FIXME: We need to keep track of the type of metavars.  We could keep it
- * in the `Metavar` constructor of the `lexp` type, but that's risky (it could
- * be difficult to make sure it's the same for all occurrences of that
- * metavar).  *)
+let mkMetavar t =
+  let meta = Unif.create_metavar () in
+  let name = "__metavar" (* ^ (string_of_int meta) *) in
+  Metavar (meta, S.Identity, (Util.dummy_location, name), t)
 
-(* :-( *)
-let global_substitution = ref (empty_subst, [])
+let mkMetalevel () =
+  let meta = Unif.create_metavar () in
+  let name = "__metalevel" (* ^ (string_of_int meta) *) in
+  Metavar (meta, S.Identity, (Util.dummy_location, name),
+           Sort (dummy_location, StypeLevel))
 
-let mkMetavar () = let meta = Unif.create_metavar ()
-  in let name = "__Metavar_" ^ (string_of_int meta)
-  in Metavar (meta, S.Identity, (Util.dummy_location, name))
+let mkMetatype () = mkMetavar (mkMetalevel ())
 
 let rec _lexp_p_infer (p : pexp) (ctx : elab_context) trace: lexp * ltype =
   Debug_fun.do_debug (fun () ->
@@ -342,19 +347,18 @@ let rec _lexp_p_infer (p : pexp) (ctx : elab_context) trace: lexp * ltype =
             Cons(idt, sym), cons_type
 
         | Pmetavar _
-          -> let meta = mkMetavar () in (*TODO *)
-            let type_ = mkMetavar () in
-            lexp_warning dloc meta "<LEXP_P_INFER>(Pmetavar case) Check output : may be wrong lexp/type returned";
-            (meta, type_) (* FIXME return the right type *)
+          -> let t = mkMetatype () in
+            let e = mkMetavar t in
+            (e, t)
 
         | Phastype (_, pxp, ptp)
           -> let ltp, _ = lexp_infer ptp ctx in
                 (_lexp_p_check pxp ltp ctx trace), ltp
 
         | (Plambda _ | Pcase _)
-          -> let meta = mkMetavar () in
-            let lxp = _lexp_p_check p meta ctx trace in
-            (lxp, meta)
+          -> let t = mkMetatype () in
+            let lxp = _lexp_p_check p t ctx trace in
+            (lxp, t)
 
 
 and lexp_let_decls decls (body: lexp) ctx i =
@@ -385,11 +389,17 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : elab_context) trace: lexp =
     _global_lexp_ctx := ctx;
     _global_lexp_trace := trace;
 
-    let unify_with_arrow lxp kind subst =
-      let arg, body = mkMetavar (), mkMetavar ()
-      in let arrow = Arrow (kind, None, arg, Util.dummy_location, body)
-      in match Unif.unify arrow lxp subst with
-      | Some(subst) -> global_substitution := subst; arg, body
+    let unify_with_arrow lxp kind var aty subst =
+      let body = mkMetatype () in
+      let arg = match aty with
+        | None -> mkMetatype ()
+        | Some paty
+          -> let laty, lasort = lexp_infer paty ctx in
+            elab_check_sort ctx lasort var laty;
+            laty in
+      let arrow = Arrow (kind, None, arg, Util.dummy_location, body) in
+      match Unif.unify arrow lxp subst with
+      | Some subst -> global_substitution := subst; arg, body
       | None       -> lexp_error tloc lxp ("Type " ^ lexp_string lxp
                                           ^ " and "
                                           ^ lexp_string arrow
@@ -401,15 +411,10 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : elab_context) trace: lexp =
       (* Read var type from the provided type *)
       let meta_ctx, _ = !global_substitution in
       let ltp, lbtp = match OL.lexp_whnf t (ectx_to_lctx ctx) meta_ctx with
-        | Arrow(kind, _, ltp, _, lbtp) -> ltp, lbtp
-        | lxp -> unify_with_arrow lxp kind subst in
-
-      let _ = match aty with
-        | Some paty
-          -> let laty, lasort = lexp_infer paty ctx in
-            elab_check_sort ctx lasort var laty;
-            () (* FIXME: Check `conv_p aty ltp`!  *)
-        | _ -> () in
+        | Arrow(kind, _, ltp, _, lbtp)
+          (* FIXME: Check `conv_p aty ltp`!  *)
+          -> ltp, lbtp
+        | lxp -> unify_with_arrow lxp kind var aty subst in
 
       let nctx = env_extend ctx var Variable ltp in
       let lbody = lexp_check body lbtp nctx in
@@ -629,10 +634,10 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
                let larg = _lexp_p_check parg arg_type ctx i in
                handle_fun_args ((Aexplicit, larg) :: largs) sargs
                                (L.mkSusp ret_type (S.substitute larg))
-           | Arrow _ as t ->
-              debug_messages fatal (sexp_location sarg) "Expected non-explicit arg" [
-                "ltype    : " ^ (lexp_string t);
-                "s-exp arg: " ^ (sexp_string sarg);]
+           | Arrow (kind, _, arg_type, _, ret_type)
+             -> let larg = mkMetavar arg_type in
+               handle_fun_args ((kind, larg) :: largs) (sarg::sargs)
+                               (L.mkSusp ret_type (S.substitute larg))
 
            | t ->
               print_lexp_ctx (ectx_to_lctx ctx);

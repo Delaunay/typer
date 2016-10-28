@@ -9,8 +9,8 @@ open Inverse_subst
 (* :-( *)
 let global_last_metavar = ref (-1) (*The first metavar is 0*)
 
-let create_metavar () = global_last_metavar := !global_last_metavar + 1; !global_last_metavar
-let mkMetavar subst vdef = Metavar (create_metavar (), subst, vdef)
+let create_metavar () = global_last_metavar := !global_last_metavar + 1;
+                        !global_last_metavar
 
 (* For convenience *)
 type return_type = (substitution * constraints) option
@@ -25,9 +25,10 @@ let associate (meta: int) (lxp: lexp) (subst: substitution)
 *)
 let find_or_none (value: lexp) (map: substitution) : lexp option =
   match value with
-  | Metavar (idx, _, _) -> (if VMap.mem idx map
-                         then Some (VMap.find idx map)
-                         else None)
+  | Metavar (idx, _, _, _)
+    -> if VMap.mem idx map
+      then Some (VMap.find idx map)
+      else None
   | _ -> None
 
 (** Zip while applying a function, returns <code>None</code> list if l1 & l2 have different size*)
@@ -215,15 +216,15 @@ and _unify_metavar (meta: lexp) (lxp: lexp) (subst: substitution) : return_type 
     match find_or_none metavar s with
     | Some (lxp_)   -> unify lxp_ lxp s
     | None          -> (match metavar with
-        | Metavar (_, subst_, _) -> (match inverse subst_ with
+        | Metavar (_, subst_, _, _) -> (match inverse subst_ with
             | Some s' -> Some (associate value (mkSusp lxp s') s, [])
             | None -> None)
         | _ -> None)
   in
   match (meta, lxp) with
-  | (Metavar (val1, s1, _), Metavar (val2, s2, _)) when val1 = val2 ->
+  | (Metavar (val1, s1, _, _), Metavar (val2, s2, _, _)) when val1 = val2 ->
     Some ((subst, []))
-  | (Metavar (v, s1, _), _) -> find_or_unify meta v lxp subst
+  | (Metavar (v, s1, _, _), _) -> find_or_unify meta v lxp subst
   | (_, _) -> None
 
 (** Unify a Call (call) and a lexp (lxp)
