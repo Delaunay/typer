@@ -30,7 +30,7 @@ let generate_tests (name: string)
     (test input_gen fmt tester)
 
 (* let input = "y = lambda x -> x + 1;" *)
-let input = "id = lambda (α : Type) ≡> lambda x : α -> x;
+let input = "id = lambda (α : Type) ≡> lambda (x : α) -> x;
 res = id 3;"
 
 let generate_lexp_from_str str =

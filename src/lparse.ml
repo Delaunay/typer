@@ -244,7 +244,8 @@ let rec _lexp_p_infer (p : pexp) (ctx : elab_context) trace: lexp * ltype =
                     lxp, ltp (* Return Macro[22] *)
 
             with Not_found ->
-                (pexp_error loc p ("The variable: `" ^ name ^ "` was not declared");
+                (print_lexp_ctx (ectx_to_lctx ctx);
+                 pexp_error loc p ("The variable: `" ^ name ^ "` was not declared");
                 (* Error recovery. The -1 index will raise an error later on *)
                 (make_var name (-1) loc), dltype))
 

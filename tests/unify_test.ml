@@ -58,7 +58,7 @@ let fmt (lst: (lexp * lexp * result * result) list): string list =
               ) str_lst
 
 (* Inputs for the test *)
-let str_induct = "Nat = inductive_ (dNat) (zero) (succ Nat)"
+let str_induct = "Nat : Type; Nat = inductive_ (dNat) (zero) (succ Nat)"
 let str_int_3  = "i = 3"
 let str_int_4  = "i = 4"
 let str_case   = "i = case 0
