@@ -96,14 +96,15 @@ let elab_check_sort (ctx : elab_context) lsort (l, name) ltp =
   match OL.lexp_whnf lsort (ectx_to_lctx ctx) VMap.empty with
   | Sort (_, _) -> () (* All clear!  *)
   | _ -> lexp_error l ltp
-    ("Type of `" ^ name ^ "` is not a proper type: "
-                                    ^ lexp_string ltp)
+                   ("Type of `" ^ name ^ "` is not a proper type: "
+                    ^ lexp_string ltp)
 
 let elab_check_proper_type (ctx : elab_context) ltp v =
   try elab_check_sort ctx (OL.check (ectx_to_lctx ctx) ltp) v ltp
-  with e -> print_string ("Exception while checking type `"
-                         ^ lexp_string ltp ^ "` of var `" ^
-                           (let (_, name) = v in name) ^"`\n");
+  with e -> print_string "Exception while checking type `";
+           lexp_print ltp;
+           print_string ("` of var `"
+                         ^ (let (_, name) = v in name) ^"`\n");
            print_lexp_ctx (ectx_to_lctx ctx);
            raise e
 
@@ -125,6 +126,10 @@ let elab_check_def (ctx : elab_context) var lxp ltype =
       (lexp_string lxp) ^ "!: " ^ (lexp_string ltype);
        "                    because";
       (lexp_string (OL.check lctx lxp)) ^ "!= " ^ (lexp_string ltype);])
+
+let ctx_extend (ctx: elab_context) (var : vdef option) def ltype =
+  elab_check_proper_type ctx ltype (maybev var);
+  ectx_extend ctx var def ltype
 
 let ctx_define (ctx: elab_context) var lxp ltype =
   elab_check_def ctx var lxp ltype;
@@ -252,9 +257,11 @@ let rec _lexp_p_infer (p : pexp) (ctx : elab_context) trace: lexp * ltype =
         (* ------------------------------------------------------------------ *)
         | Parrow (kind, ovar, tp, loc, expr) ->
             let ltp, _ = lexp_infer tp ctx in
+            let _ = elab_check_proper_type ctx ltp (maybev ovar) in
             let nctx = ectx_extend ctx ovar Variable ltp in
 
             let lxp, _ = lexp_infer expr nctx in
+            let _ = elab_check_proper_type nctx lxp (maybev ovar) in
 
             let v = Arrow(kind, ovar, ltp, tloc, lxp) in
                 v, type0
@@ -305,7 +312,7 @@ let rec _lexp_p_infer (p : pexp) (ctx : elab_context) trace: lexp * ltype =
 
               | lxp -> lexp_error loc lxp "Not an Inductive Type"; [], [] in
 
-            (* build Arrow type *)
+            (* Build Arrow type.  *)
             let target = if formal = [] then
                            push_susp idt (S.shift (List.length args))
                          else
@@ -325,7 +332,7 @@ let rec _lexp_p_infer (p : pexp) (ctx : elab_context) trace: lexp * ltype =
                                target
                                (List.rev args) in
 
-            (* Add Aerasable argument *)
+            (* Add Aerasable arguments.  *)
             let cons_type = List.fold_left
                               (fun ltp (kind, v, tp)
                                -> Arrow (Aerasable, Some v, tp, loc, ltp))
@@ -333,21 +340,20 @@ let rec _lexp_p_infer (p : pexp) (ctx : elab_context) trace: lexp * ltype =
 
             Cons(idt, sym), cons_type
 
-        | Pmetavar _ -> (let meta = mkMetavar () (*TODO *)
-                         and type_ = mkMetavar ()
-                         in lexp_warning dloc meta "<LEXP_P_INFER>(Pmetavar case) Check output : may be wrong lexp/type returned";
-                         (meta, type_) (* FIXME return the right type *))
+        | Pmetavar _
+          -> let meta = mkMetavar () in (*TODO *)
+            let type_ = mkMetavar () in
+            lexp_warning dloc meta "<LEXP_P_INFER>(Pmetavar case) Check output : may be wrong lexp/type returned";
+            (meta, type_) (* FIXME return the right type *)
 
-        | Phastype (_, pxp, ptp) ->
-            let ltp, _ = lexp_infer ptp ctx in
+        | Phastype (_, pxp, ptp)
+          -> let ltp, _ = lexp_infer ptp ctx in
                 (_lexp_p_check pxp ltp ctx trace), ltp
 
         | (Plambda _ | Pcase _)
           -> let meta = mkMetavar () in
             let lxp = _lexp_p_check p meta ctx trace in
             (lxp, meta)
-
-        | _ -> pexp_fatal tloc p "Unhandled Pexp"
 
 
 and lexp_let_decls decls (body: lexp) ctx i =
@@ -390,31 +396,38 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : elab_context) trace: lexp =
                      dltype, dltype
 
     in
-    let infer_lambda_body kind var body subst =
-        (* Read var type from the provided type *)
-        let ltp, lbtp = match nosusp t (* t is captured *) with
-            | Arrow(kind, _, ltp, _, lbtp) -> ltp, lbtp
-            | lxp -> (unify_with_arrow lxp kind subst)
-        in
-        let nctx = env_extend ctx var Variable ltp in
-        let lbody = _lexp_p_check body lbtp nctx trace in
-        Lambda(kind, var, ltp, lbody)
+    let infer_lambda_body kind var aty body subst =
+      (* Read var type from the provided type *)
+      let meta_ctx, _ = !global_substitution in
+      let ltp, lbtp = match OL.lexp_whnf t (ectx_to_lctx ctx) meta_ctx with
+        | Arrow(kind, _, ltp, _, lbtp) -> ltp, lbtp
+        | lxp -> unify_with_arrow lxp kind subst in
+
+      let _ = match aty with
+        | Some paty
+          -> let laty, lasort = lexp_infer paty ctx in
+            elab_check_sort ctx lasort var laty;
+            () (* FIXME: Check `conv_p aty ltp`!  *)
+        | _ -> () in
+
+      let nctx = env_extend ctx var Variable ltp in
+      let lbody = lexp_check body lbtp nctx in
+      Lambda(kind, var, ltp, lbody)
 
     in
     let subst, _ = !global_substitution in
-    let lexp_infer p ctx = _lexp_p_infer p ctx trace in
     match p with
-    | Plambda (kind, var, argtyp, body) (* FIXME: Check argtyp!  *)
-      -> infer_lambda_body kind var body subst
+    | Plambda (kind, var, aty, body)
+      -> infer_lambda_body kind var aty body subst
 
-        (* This is mostly for the case where no branches are provided *)
-        | Pcase (loc, target, patterns)
-          -> lexp_case t (loc, target, patterns) ctx trace
+    (* This is mostly for the case where no branches are provided *)
+    | Pcase (loc, target, branches)
+      -> lexp_case t (loc, target, branches) ctx trace
 
-        (* handle pcall here * )
-        | Pcall (fname, _args) -> *)
+    (* FIXME: Handle *macro* pcalls here! *)
+    (* | Pcall (fname, _args) -> *)
 
-        | _ -> lexp_p_infer_and_check p ctx t trace
+    | _ -> lexp_p_infer_and_check p ctx t trace
 
 and lexp_p_infer_and_check pexp ctx t i =
   let (e, inferred_t) = _lexp_p_infer pexp ctx i in
@@ -428,8 +441,6 @@ and lexp_p_infer_and_check pexp ctx t i =
       | Some subst -> global_substitution := subst
       | None
         -> debug_msg (
-              let print_lxp str =
-                print_string (lexp_string str) in
               Debug_fun.do_debug (fun () ->
                   prerr_endline ("0 pxp " ^ pexp_string pexp);
                   ());
@@ -441,45 +452,126 @@ and lexp_p_infer_and_check pexp ctx t i =
   e
 
 (* Lexp.case can sometimes be inferred, but we prefer to always check.  *)
-and lexp_case rtype (loc, target, patterns) ctx i =
+and lexp_case rtype (loc, target, ppatterns) ctx i =
     (* FIXME: check if case is exhaustive  *)
     (* Helpers *)
 
-    let lexp_infer p ctx = _lexp_p_infer p ctx i in
+  let lexp_infer p ctx = _lexp_p_infer p ctx i in
 
-    let uniqueness_warn name =
-        warning loc ("Pattern " ^ name ^ " is a duplicate." ^
-          " It will override previous pattern.") in
+  let pat_string p = sexp_string (pexp_u_pat p) in
 
-    let check_uniqueness loc name map =
-        try let _ = SMap.find name map in uniqueness_warn name
+    let uniqueness_warn pat =
+      warning (pexp_pat_location pat)
+              ("Pattern " ^ pat_string pat
+               ^ " is a duplicate.  It will override previous pattern.") in
+
+    let check_uniqueness pat name map =
+        try let _ = SMap.find name map in uniqueness_warn pat
             with e -> () in
 
     (* get target and its type *)
     let tlxp, tltp = lexp_infer target ctx in
+    let meta_ctx, _ = !global_substitution in
+    (* FIXME: We need to be careful with whnf: while the output is equivalent
+     * to the input, it's not necessarily as readable.  So try to reuse the
+     * "non-whnf" form whenever possible.  *)
+    let call_split e = match (OL.lexp_whnf e (ectx_to_lctx ctx) meta_ctx) with
+      | Call (f, args) -> (f, args)
+      | _ -> (e,[]) in
+    let it, targs = call_split tltp in
+    let constructors = match OL.lexp_whnf it (ectx_to_lctx ctx) meta_ctx with
+      | Inductive (_, _, fargs, constructors)
+        -> assert (List.length fargs = List.length targs);
+          constructors
+      | _ -> lexp_error (pexp_location target) tlxp
+                       ("Can't `case` on objects of this type: "
+                        ^ lexp_string tltp);
+            SMap.empty in
 
     (*  Read patterns one by one *)
-    let fold_fun (merged, dflt) (pat, exp) =
-        (*  Create pattern context *)
-        let (name, iloc, arg), nctx = lexp_read_pattern pat exp tlxp ctx i in
+    let fold_fun (lbranches, dflt) (pat, pexp) =
 
-        (*  parse using pattern context *)
+      let add_default v =
+        (if dflt != None then uniqueness_warn pat);
+        let nctx = ctx_extend ctx v Variable tltp in
         let rtype' = mkSusp rtype (S.shift (M.length (ectx_to_lctx nctx)
                                             - M.length (ectx_to_lctx ctx))) in
-        let exp = _lexp_p_check exp rtype' nctx i in
+        let lexp = _lexp_p_check pexp rtype' nctx i in
+        lbranches, Some (v, lexp) in
 
-        if name = "_" then (
-            (if dflt != None then uniqueness_warn name);
-                merged, (Some exp))
-        else (
-            check_uniqueness iloc name merged;
-            let merged = SMap.add name (iloc, arg, exp) merged in
-                merged, dflt) in
+      let add_branch pctor pargs =
+        let loc = pexp_location pctor in
+        let lctor, _ = _lexp_p_infer pctor ctx i in
+        let meta_ctx, _ = !global_substitution in
+        match OL.lexp_whnf lctor (ectx_to_lctx ctx) meta_ctx with
+        | Cons (it', (_, cons_name))
+          -> let _ = if OL.conv_p it' it then ()
+                    else lexp_error loc lctor
+                                    ("Expected pattern of type `"
+                                     ^ lexp_string it ^ "` but got `"
+                                    ^ lexp_string it' ^ "`") in
+            let _ = check_uniqueness pat cons_name lbranches in
+            let cons_args
+              = try SMap.find cons_name constructors
+                with Not_found
+                     -> lexp_error loc lctor
+                                  ("`" ^ (lexp_string it)
+                                   ^ "` does not have a `"
+                                   ^ cons_name ^ "` constructor");
+                       [] in
+
+            let subst = List.fold_right (fun (_, t) s -> S.cons t s)
+                                        targs S.identity in
+            let rec make_nctx ctx fargs s pargs cargs = match pargs, cargs with
+              | [], [] -> ctx, List.rev fargs
+              | (_, pat)::_, []
+                -> lexp_error loc lctor
+                             "Too many arguments to the constructor";
+                  make_nctx ctx fargs s [] []
+              | (None, Ppatany _)::pargs, (Aexplicit, _, fty)::cargs
+                -> let nctx = ctx_extend ctx None Variable (mkSusp fty s) in
+                  make_nctx nctx ((Aexplicit, None)::fargs)
+                            (ssink vdummy s) pargs cargs
+              | (None, Ppatsym v)::pargs, (Aexplicit, _, fty)::cargs
+                -> let nctx = ctx_extend ctx (Some v) Variable (mkSusp fty s) in
+                  make_nctx nctx ((Aexplicit, Some v)::fargs)
+                            (ssink v s) pargs cargs
+              | (_, Ppatcons (p, _))::pargs, cargs
+                -> lexp_error (pexp_location p) lctor
+                             "Nested patterns not supported!";
+                  make_nctx ctx fargs s pargs cargs
+              | pargs, (ak, _, fty)::cargs
+                -> let nctx = ctx_extend ctx None Variable (mkSusp fty s) in
+                  make_nctx nctx ((ak, None)::fargs)
+                            (ssink vdummy s) pargs cargs in
+            let nctx, fargs = make_nctx ctx [] subst pargs cons_args in
+            let rtype' = mkSusp rtype
+                                (S.shift (M.length (ectx_to_lctx nctx)
+                                          - M.length (ectx_to_lctx ctx))) in
+            let lexp = _lexp_p_check pexp rtype' nctx i in
+            SMap.add cons_name (loc, fargs, lexp) lbranches,
+            dflt
+        | _ -> lexp_error loc lctor "Not a constructor"; lbranches, dflt
+      in
+
+      match pat with
+      | Ppatany _ -> add_default None
+      | Ppatsym ((_, name) as var)
+        -> (try let idx = senv_lookup name ctx in
+               let meta_ctx, _ = !global_substitution in
+               match OL.lexp_whnf (Var (var, idx))
+                                  (ectx_to_lctx ctx) meta_ctx with
+               | Cons _         (* It's indeed a constructor!  *)
+                 -> add_branch (Pvar var) []
+               | _ -> add_default (Some var) (* A named default branch.  *)
+           with Not_found -> add_default (Some var))
+
+      | Ppatcons (pctor, pargs) -> add_branch pctor pargs in
 
     let (lpattern, dflt) =
-        List.fold_left fold_fun (SMap.empty, None) patterns in
+        List.fold_left fold_fun (SMap.empty, None) ppatterns in
 
-    Case (loc, tlxp, tltp, rtype, lpattern, dflt)
+    Case (loc, tlxp, rtype, lpattern, dflt)
 
 (*  Identify Call Type and return processed call *)
 and lexp_call (func: pexp) (sargs: sexp list) ctx i =
@@ -497,13 +589,6 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
 
     let lexp_infer p ctx = _lexp_p_infer p ctx i in
     let lexp_check p ltp ctx = _lexp_p_check p ltp ctx i in
-
-    let from_lctx ctx = try (from_lctx ctx)
-        with e ->(
-          debug_messages error loc
-            "Could not convert lexp context into rte context" [];
-          print_eval_trace None;
-          raise e) in
 
     (*  Vanilla     : sqr is inferred and (lambda x -> x * x) is returned
      *  Macro       : sqr is returned
@@ -624,104 +709,6 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
 
       (* FIXME: Handle special-forms here as well!  *)
       | _ -> handle_funcall ()
-
-(*  Read a pattern and create the equivalent representation *)
-and lexp_read_pattern pattern exp target ctx trace:
-          ((string * location * (arg_kind * vdef option) list) * elab_context) =
-
-    match pattern with
-        | Ppatany (loc) ->            (* Catch all expression nothing to do.  *)
-            ("_", loc, []), ctx
-
-        | Ppatvar ((loc, name) as var) ->(
-            try(
-                let idx = senv_lookup name ctx in
-                match env_lookup_expr ctx ((loc, name), idx) with
-                (* We are matching a constructor.  *)
-                | Some (Cons _) -> (name, loc, []), ctx
-
-                (* name is defined but is not a constructor  *)
-                (* it technically could be ... (expr option) *)
-                (* What about Var -> Cons ?                  *)
-                | _ -> let nctx = ctx_define ctx var target dltype in
-                      (name, loc, []), nctx)
-
-            (* Would it not make a default match too?  *)
-            with Not_found ->
-                (* Create a variable containing target.  *)
-                let nctx = ctx_define ctx var target dltype in
-                    (name, loc, []), nctx)
-
-        | Ppatcons (ctor, args) ->
-           (* Get cons argument types.  *)
-           let lctor, _ = _lexp_p_infer ctor ctx trace in
-           let meta_ctx, _ = !global_substitution in
-           match OL.lexp_whnf lctor (ectx_to_lctx ctx) meta_ctx with
-           | Cons (it, (loc, cons_name))
-             -> let cons_args = match OL.lexp_whnf it (ectx_to_lctx ctx)
-                                                  meta_ctx with
-                 | Inductive(_, (_, label), _, map)
-                   -> (try SMap.find cons_name map
-                      with Not_found
-                           -> warning loc ("`" ^ (lexp_string it) ^ "` does not hold a `"
-                                           ^ cons_name ^ "` constructor"); [])
-                 | it -> fatal loc
-                    ("`" ^ (lexp_string it) ^ "` is not an inductive type!") in
-
-               (* FIXME: Don't remove them, add them without names!  *)
-               (* FIXME: Add support for explicit-implicit fields!  *)
-               (* Remove non explicit argument.  *)
-               let rec remove_nexplicit args acc =
-                 match args with
-                 | [] -> List.rev acc
-                 | (Aexplicit, _, ltp)::tl -> remove_nexplicit tl (ltp::acc)
-                 | hd::tl -> remove_nexplicit tl acc in
-
-               let cons_args = remove_nexplicit cons_args [] in
-
-               (* read pattern args *)
-               let args, nctx = lexp_read_pattern_args args cons_args ctx in
-               (cons_name, loc, args), nctx
-           | _ -> warning (pexp_location ctor)
-                  ("Invalid constructor `" ^ (pexp_string ctor) ^ "`");
-
-                 ("_", pexp_location ctor, []), ctx
-
-(*  Read patterns inside a constructor *)
-and lexp_read_pattern_args args (args_type : lexp list) ctx:
-                   (((arg_kind * vdef option) list) * elab_context)=
-
-    let length_type = List.length args_type in
-    let length_pat = List.length args in
-
-    let make_list elem size =
-      let rec loop i acc =
-        if i < size then loop (i + 1) (elem::acc) else acc
-        in loop 0 [] in
-
-    let args_type = if length_type != length_pat then
-      make_list dltype length_pat else args_type in
-
-    (if length_type != length_pat then warning dloc "Size Mismatch");
-
-    let rec loop args args_type acc ctx =
-        match args, args_type with
-            | [], _ -> (List.rev acc), ctx
-            | hd::tl, ltp::type_tl -> (
-                let (_, pat) = hd in
-                match pat with
-                    (* Nothing to do *)
-                    | Ppatany (loc) -> loop tl type_tl ((Aexplicit, None)::acc) ctx
-                    | Ppatvar ((loc, name) as var) ->
-                        (*  Add var *)
-                        let nctx = env_extend ctx var Variable ltp in
-                        let nacc = (Aexplicit, Some var)::acc in
-                            loop tl type_tl nacc nctx
-                    | _ -> error dloc "Constructor inside a Constructor";
-                           loop tl type_tl ((Aexplicit, None)::acc) ctx)
-            | _ -> typer_unreachable "unreachable branch"
-
-    in loop args args_type [] ctx
 
 (*  Parse inductive type definition.  *)
 and lexp_parse_inductive ctors ctx i =

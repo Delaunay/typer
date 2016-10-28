@@ -4,7 +4,7 @@ SRC_FILES := $(wildcard ./src/*.ml)
 CPL_FILES := $(wildcard ./_build/src/*.cmo)
 TEST_FILES := $(wildcard ./tests/*_test.ml)
 
-OBFLAGS = -build-dir _build
+OBFLAGS = -lflags -g -cflags -g -build-dir _build
 # COMPILE_MODE = native
 
 all: typer debug tests-build

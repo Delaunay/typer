@@ -258,12 +258,13 @@ and _unify_case (case: lexp) (lxp: lexp) (subst: substitution) : return_type =
   in
   let match_lxp_opt lxp_opt1 lxp_opt2 tail smap1 smap2 subst =
     match lxp_opt1, lxp_opt2 with
-    | Some lxp1, Some lxp2 -> match_unify_inner ((lxp1, lxp2)::tail) smap1 smap2 subst
+    | Some (_, lxp1), Some (_, lxp2)
+      -> match_unify_inner ((lxp1, lxp2)::tail) smap1 smap2 subst
     | _, _ -> None
   in
   match (case, lxp) with
-    | (Case (_, lxp, lt11, lt12, smap, lxpopt), Case (_, lxp2, lt21, lt22, smap2, lxopt2))
-      -> match_lxp_opt lxpopt lxopt2 ((lt11, lt21)::(lt12, lt22)::[]) smap smap2 subst
+    | (Case (_, lxp, lt12, smap, lxpopt), Case (_, lxp2, lt22, smap2, lxopt2))
+      -> match_lxp_opt lxpopt lxopt2 ((lt12, lt22)::[]) smap smap2 subst
     | (Case _, _)     -> Some (subst, [(case, lxp)])
     | (_, _) -> None
 

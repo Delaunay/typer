@@ -384,7 +384,9 @@ and eval_case ctx i loc target pat dflt =
 
     (* Run default *)
     with Not_found -> (match dflt with
-        | Some lxp -> _eval lxp ctx i
+        | Some (var, lxp)
+          -> let var' = match var with None -> None | Some (_, n) -> Some n in
+            _eval lxp (add_rte_variable var' v ctx) i
         | _ -> error loc "Match Failure")
 
 and build_arg_list args ctx i =

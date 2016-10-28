@@ -159,8 +159,9 @@ let rec lexp_whnf e (ctx : DB.lexp_context) meta_ctx : lexp =
                           args))
                    ctx meta_ctx
       | Call (e', xs1) -> Call (e', List.append xs1 xs)
-      | e' -> Call (e', xs))
-  | Case (l, e, bt, rt, branches, default) ->
+      | e' -> Call (e, xs))      (* Keep `e`, assuming it's more readable!  *)
+  | Case (l, e, rt, branches, default) ->
+     let e' = lexp_whnf e ctx meta_ctx in
      let reduce name aargs =
        try
          let (_, _, branch) = SMap.find name branches in
@@ -174,15 +175,17 @@ let rec lexp_whnf e (ctx : DB.lexp_context) meta_ctx : lexp =
          lexp_whnf (push_susp branch subst) ctx meta_ctx
        with Not_found
             -> match default
-              with | Some default -> lexp_whnf default ctx meta_ctx
+              with | Some (v,default)
+                     -> lexp_whnf (push_susp default (S.substitute e'))
+                                 ctx meta_ctx
                    | _ -> U.msg_error "WHNF" l
                                      ("Unhandled constructor " ^
                                         name ^ "in case expression");
-                         Case (l, e, bt, rt, branches, default) in
-     (match lexp_whnf e ctx meta_ctx with
+                         Case (l, e, rt, branches, default) in
+     (match e' with
       | Cons (_, (_, name)) -> reduce name []
       | Call (Cons (_, (_, name)), aargs) -> reduce name aargs
-      | e' -> Case (l, e', bt, rt, branches, default))
+      | _ -> Case (l, e', rt, branches, default))
   | Metavar (idx, _, _) -> lexp_whnf (L.VMap.find idx meta_ctx) ctx meta_ctx
   | e -> e
 
@@ -222,6 +225,7 @@ let sort_compose l s1 s2 =
 (* "check ctx e" should return τ when "Δ ⊢ e : τ"  *)
 let rec check ctx e =
   (* let mustfind = assert_type e t in *)
+  let meta_ctx = VMap.empty in
   match e with
   | Imm (Float (_, _)) -> B.type_float
   | Imm (Integer (_, _)) -> B.type_int
@@ -244,7 +248,7 @@ let rec check ctx e =
   | Let (_, defs, e)
     -> let tmp_ctx =
         List.fold_left (fun ctx (v, e, t)
-                        -> (match lexp_whnf (check ctx t) ctx VMap.empty with
+                        -> (match lexp_whnf (check ctx t) ctx meta_ctx with
                            | Sort (_, Stype _) -> ()
                            | _ -> (U.msg_error "TC" (lexp_location t)
                                               "Def type is not a type!"; ()));
@@ -261,7 +265,7 @@ let rec check ctx e =
     -> (let k1 = check ctx t1 in
        let nctx = DB.lexp_ctx_cons ctx 0 v Variable t1 in
        let k2 = check nctx t2 in
-       match lexp_whnf k1 ctx VMap.empty, lexp_whnf k2 nctx VMap.empty with
+       match lexp_whnf k1 ctx meta_ctx, lexp_whnf k2 nctx meta_ctx with
        | (Sort (_, s1), Sort (_, s2))
          -> if ak == P.Aerasable && impredicative_erase then k2
            else Sort (l, sort_compose l s1 s2)
@@ -272,7 +276,7 @@ let rec check ctx e =
                                "Not a proper type";
                    Sort (l, StypeOmega)))
   | Lambda (ak, ((l,_) as v), t, e)
-    -> ((match lexp_whnf (check ctx t) ctx VMap.empty with
+    -> ((match lexp_whnf (check ctx t) ctx meta_ctx with
         | Sort _ -> ()
         | _ -> (U.msg_error "TC" (lexp_location t)
                            "Formal arg type is not a type!"; ()));
@@ -284,7 +288,7 @@ let rec check ctx e =
     -> let ft = check ctx f in
       List.fold_left (fun ft (ak,arg)
                    -> let at = check ctx arg in
-                     match lexp_whnf ft ctx VMap.empty with
+                     match lexp_whnf ft ctx meta_ctx with
                      | Arrow (ak', v, t1, l, t2)
                        -> if not (ak == ak') then
                             (U.msg_error "TC" (lexp_location arg)
@@ -307,19 +311,20 @@ let rec check ctx e =
                     let level, _ =
                       List.fold_left
                         (fun (level, ctx) (ak, v, t) ->
-                          (if ak == P.Aerasable && impredicative_erase
-                           then level
-                           else match lexp_whnf (check ctx t) ctx VMap.empty with
-                                | Sort (_, Stype level')
-                                  (* FIXME: scoping of level vars!  *)
-                                  -> sort_level_max level level'
-                                | tt -> U.msg_error "TC" (lexp_location t)
-                                                   ("Field type "
-                                                    ^ lexp_string t
-                                                    ^ " is not a Type! ("
-                                                    ^ lexp_string tt ^")");
-                                       DB.print_lexp_ctx ctx;
-                                       SortLevel SLz),
+                          (match lexp_whnf (check ctx t) ctx meta_ctx with
+                           | Sort _ when ak == P.Aerasable && impredicative_erase
+                             -> level
+                           | Sort (_, Stype level')
+                             (* FIXME: scoping of level vars!  *)
+                             -> sort_level_max level level'
+                           | tt -> U.msg_error "TC" (lexp_location t)
+                                              ("Field type "
+                                               ^ lexp_string t
+                                               ^ " is not a Type! ("
+                                               ^ lexp_string tt ^")");
+                                  (* DB.print_lexp_ctx ctx;
+                                   * U.internal_error "Oops"; *)
+                                  level),
                           DB.lctx_extend ctx v Variable t)
                         (level, ctx)
                         case in
@@ -331,12 +336,13 @@ let rec check ctx e =
                    arg_loop args (DB.lctx_extend ctx (Some v) Variable t)) in
       let tct = arg_loop args ctx in
       tct
-  | Case (l, e, it, ret, branches, default)
-    -> let rec call_split e =
-        match e with
-        | Call (f, args) -> let (f',args') = call_split f in (f', args' @ args)
+  | Case (l, e, ret, branches, default)
+    -> let rec call_split e = match e with
+        | Call (f, args) -> (f, args)
         | _ -> (e,[]) in
-      (match call_split (lexp_whnf (check ctx e) ctx VMap.empty) with
+      let etype = lexp_whnf (check ctx e) ctx meta_ctx in
+      let it, aargs = call_split etype in
+      (match lexp_whnf it ctx meta_ctx, aargs with
        | Inductive (_, _, fargs, constructors), aargs ->
           let rec mksubst s fargs aargs =
             match fargs, aargs with
@@ -370,12 +376,14 @@ let rec check ctx e =
                assert_type branch ret (check nctx branch))
             branches;
           (match default with
-           | Some d -> assert_type d ret (check ctx d)
+           | Some (v, d)
+             -> assert_type d (mkSusp ret (S.shift 1))
+                           (check (DB.lctx_extend ctx v (LetDef e) etype) d)
            | _ -> ())
        | _,_ -> U.msg_error "TC" l "Case on a non-inductive type!");
       ret
   | Cons (t, (_, name))
-    -> (match lexp_whnf t ctx VMap.empty with
+    -> (match lexp_whnf t ctx meta_ctx with
        | Inductive (l, _, fargs, constructors) as it
          -> let fieldtypes = SMap.find name constructors in
            let rec indtype fargs start_index =
@@ -424,7 +432,7 @@ let rec erase_type (lxp: L.lexp): E.elexp =
         | L.Call(fct, args) ->
             E.Call((erase_type fct), (filter_arg_list args))
 
-        | L.Case(l, target, _, _, cases, default) ->
+        | L.Case(l, target, _, cases, default) ->
             E.Case(l, (erase_type target), (clean_map cases),
                                          (clean_maybe default))
 
@@ -452,7 +460,7 @@ and clean_decls decls =
 
 and clean_maybe lxp =
     match lxp with
-        | Some lxp -> Some (erase_type lxp)
+        | Some (v, lxp) -> Some (v, erase_type lxp)
         | None -> None
 
 and clean_map cases =

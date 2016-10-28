@@ -1710,9 +1710,20 @@ So we'd define
     numbers = numbers' 0
 
 * Papers
-** BigBang: Designing a statically typed scripting language
-** Dependently typed Racket
-** Dependently typed Haskell
+** Macros and tactics
+*** Rtac
+[1] Dissertation:
+https://gmalecha.github.io/publication/2015/02/01/extensible-proof-engineering-in-intensional-type-theory/
+[2] ESOP'16:
+https://gmalecha.github.io/publication/2016/01/01/extensible-and-efficient-automation-through-reflective-tactics/
+[3] ITP'14:
+https://gmalecha.github.io/publication/2014/07/14/compositional-computational-reflection/
+*** ssreflect
+*** Mtac
+** Other
+*** BigBang: Designing a statically typed scripting language
+*** Dependently typed Racket
+*** Dependently typed Haskell
 "My dissertation (github.com/goldfirere/thesis) is about adding dependent
 types to GHC. I believe I've solved the first problem, basically by copying
 Adam Gundry's approach (http://adam.gundry.co.uk/pub/thesis/). Still working
@@ -1720,36 +1731,36 @@ on that practical problem, though. Expect some changes in time for 7.12
 though. (See https://ghc.haskell.org/trac/ghc/wiki/DependentHaskell/Phase1
 for some discussion here.)"
 
-** On Irrelevance and Algorithmic Equality in Predicative Type Theory,
+*** On Irrelevance and Algorithmic Equality in Predicative Type Theory,
 Andreas Abel & Gabriel Scherer, FOSSACS 2011.
-** "A few constructions on constructors"
-** How to Make Ad Hoc Proof Automation Less Ad Hoc, Beta Ziliani
-** http://homotopytypetheory.org/book/
-** CMU's 2013 Fall: 15-819 Advanced Topics in Programming Languages
+*** "A few constructions on constructors"
+*** How to Make Ad Hoc Proof Automation Less Ad Hoc, Beta Ziliani
+*** http://homotopytypetheory.org/book/
+*** CMU's 2013 Fall: 15-819 Advanced Topics in Programming Languages
 http://scs.hosted.panopto.com/Panopto/Pages/Sessions/List.aspx#folderID=%2207756bb0-b872-4a4a-95b1-b77ad206dab3%22
-** Propositions as Sessions, Philip Wadler
-** A few constructions on constructors, by Conor et al.
-** Constructive selection principle (Markov's principle)
+*** Propositions as Sessions, Philip Wadler
+*** A few constructions on constructors, by Conor et al.
+*** Constructive selection principle (Markov's principle)
 http://www.encyclopediaofmath.org/index.php/Constructive_selection_principle
 https://en.wikipedia.org/wiki/Markov%27s_principle
-** size-change termination, Lee, Jones and Ben-Amram, doi:10.1145/360204.360210
-** A Predicative Analysis of Structural Recursion, Andreas Abel and Thorsten Altenkirch, http://www.cs.nott.ac.uk/~txa/publ/jfp02.pdf
-** A New Look at Generalized Rewriting in Type Theory, Matthieu Sozeau
-** http://moca.inria.fr/ On the implementation of construction functions for non-free concrete
+*** size-change termination, Lee, Jones and Ben-Amram, doi:10.1145/360204.360210
+*** A Predicative Analysis of Structural Recursion, Andreas Abel and Thorsten Altenkirch, http://www.cs.nott.ac.uk/~txa/publ/jfp02.pdf
+*** A New Look at Generalized Rewriting in Type Theory, Matthieu Sozeau
+*** http://moca.inria.fr/ On the implementation of construction functions for non-free concrete
 data types. F. Blanqui, T. Hardin and P. Weis. ESOP'07.
-** The Nemerle language
-** "A Theory of Typed Hygienic Macros" de David Herman
+*** The Nemerle language
+*** "A Theory of Typed Hygienic Macros" de David Herman
 http://www.ccs.neu.edu/home/dherman/research/papers/dissertation.pdf
-** http://www.mpi-sws.org/~beta/mtac/
-** Non-strictly positive and elimination
+*** http://www.mpi-sws.org/~beta/mtac/
+*** Non-strictly positive and elimination
 "Inductively defined types", by Thierry Coquand and
 Christine Paulin, COLOG'88, LNCS 417
-** Dependently Typed Programming based on Automated Theorem Proving, Alasdair Armstrong, Simon Foster, and Georg Struth.
+*** Dependently Typed Programming based on Automated Theorem Proving, Alasdair Armstrong, Simon Foster, and Georg Struth.
 http://arxiv.org/pdf/1112.3833v1
 
-** Strong Normalization for Coq (CiC).
+*** Strong Normalization for Coq (CiC).
 http://www.cs.rice.edu/~emw4/uniform-lr.pdf
-** Irrelevant/erasable args
+*** Irrelevant/erasable args
 
 *** The Implicit Calculus of Constructions as a Programming Language with Dependent Types, Bruno Barras and Bruno Bernardo, fossacs08.
 
@@ -1779,7 +1790,7 @@ Finally we show that in these theories, because of the additional
 extentionality, the axiom of choice implies the decidability of equality,
 that is, almost classical logic.
 
-** Parametricity and variants of Girard's J operator, Robert Harper and John C. Mitchell,  Journal Information Processing Letters archive, Volume 70 Issue 1, April 01, 1999
+*** Parametricity and variants of Girard's J operator, Robert Harper and John C. Mitchell,  Journal Information Processing Letters archive, Volume 70 Issue 1, April 01, 1999
 The Girard-Reynolds polymorphic λ-calculus is generally regarded
 as a calculus of parametric polymorphism in which all well-formed terms are
 strongly normalizing with respect to β-reductions.  Girard demonstrated that
@@ -1793,10 +1804,10 @@ impredicativity is essential to the argument; predicative variants of the
 polymorphic λ-calculus admit non-parametric operations without
 sacrificing normalization.
 
-** Idris (Edwin Brady)
-** http://albatross-lang.sourceforge.net
-** Idris's Effects http://eb.host.cs.st-andrews.ac.uk/drafts/dep-eff.pdf
-** Read
+*** Idris (Edwin Brady)
+*** http://albatross-lang.sourceforge.net
+*** Idris's Effects http://eb.host.cs.st-andrews.ac.uk/drafts/dep-eff.pdf
+*** Read
 *** (Co)Iteration for higher-order nested datatypes, Andreas Abel and Ralph Matthes, [Abel03]
 *** Inductive Families Need Not Store Their Indices, Edwin Brady, Conor McBride and James McKinna.
 http://www.cs.st-andrews.ac.uk/~eb/writings/types2003.pdf

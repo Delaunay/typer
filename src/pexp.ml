@@ -57,8 +57,8 @@ and ppat =
   (* This data type allows nested patterns, but in reality we don't
    * support them.  I.e. we don't want Ppatcons within Ppatcons.  *)
   | Ppatany of location
-  | Ppatvar of pvar
-  | Ppatcons of pexp * ((arg_kind * symbol) option * ppat) list
+  | Ppatsym of pvar (* A named default pattern, or a 0-ary constructor.  *)
+  | Ppatcons of pexp * (symbol option * ppat) list
 
 and pdecl =
   | Ptype of symbol * pexp        (* identifier : expr  *)
@@ -83,7 +83,7 @@ let rec pexp_location e =
 
 let rec pexp_pat_location e = match e with
   | Ppatany l -> l
-  | Ppatvar (l,_) -> l
+  | Ppatsym (l,_) -> l
   | Ppatcons (e, _) -> pexp_location e
 
 (* In the following "pexp_p" the prefix for "parse a sexp, returning a pexp"
@@ -241,29 +241,23 @@ and pexp_u_ind_arg arg = match arg with
 
 and pexp_p_pat_arg (s : sexp) = match s with
   | Symbol _ -> (None, pexp_p_pat s)
-  | Node (Symbol (_, "_:-_"), [Symbol f; Symbol s])
-    -> (Some (Aexplicit, f), Ppatvar s)
   | Node (Symbol (_, "_:=_"), [Symbol f; Symbol s])
-    -> (Some (Aimplicit, f), Ppatvar s)
-  | Node (Symbol (_, "_:≡_"), [Symbol f; Symbol s])
-    -> (Some (Aerasable, f), Ppatvar s)
+    -> (Some f, Ppatsym s)
   | _ -> let loc = sexp_location s in
         pexp_error loc "Unknown pattern arg";
         (None, Ppatany loc)
 
-and pexp_u_pat_arg (arg : (arg_kind * symbol) option * ppat) : sexp =
+and pexp_u_pat_arg (arg : symbol option * ppat) : sexp =
   match arg with
   | (None, p) -> pexp_u_pat p
-  | (Some (k, ((l,_) as n)), p) ->
-     Node (Symbol (l, match k with Aexplicit -> "_:-_"
-                                 | Aimplicit -> "_:=_"
-                                 | Aerasable -> "_:≡_"),
+  | (Some ((l,_) as n), p) ->
+     Node (Symbol (l, "_:=_"),
            (* FIXME: the label is wrong!  *)
            [Symbol (pexp_u_id (Some n)); pexp_u_pat p])
 
 and pexp_p_pat (s : sexp) : ppat = match s with
   | Symbol (l, "_") -> Ppatany l
-  | Symbol s -> Ppatvar s
+  | Symbol s -> Ppatsym s
   | Node (c, args)
     -> Ppatcons (pexp_parse c, List.map pexp_p_pat_arg args)
   | _ -> let l = sexp_location s in
@@ -271,7 +265,7 @@ and pexp_p_pat (s : sexp) : ppat = match s with
 
 and pexp_u_pat (p : ppat) : sexp = match p with
   | Ppatany l -> Symbol (l, "_")
-  | Ppatvar s -> Symbol s
+  | Ppatsym s -> Symbol s
   | Ppatcons (c, args) -> Node (pexp_unparse c, List.map pexp_u_pat_arg args)
 
 and pexp_p_decls e: pdecl list =

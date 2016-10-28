@@ -52,8 +52,9 @@ type elexp =
     | Lambda of vdef * elexp
     | Call of elexp * elexp list
     | Cons of symbol
-    | Case of U.location * elexp *
-        (U.location * (vdef option) list * elexp) SMap.t * elexp option
+    | Case of U.location * elexp
+              * (U.location * (vdef option) list * elexp) SMap.t
+              * (vdef option * elexp) option
     (* Type place-holder just in case *)
     | Type
     (* Inductive takes a slot in the env that is why it need to be here *)
@@ -90,8 +91,10 @@ let rec elexp_print lxp = print_string (elexp_string lxp)
 and elexp_string lxp =
     let maybe_str lxp =
         match lxp with
-            | Some lxp -> " | _ => " ^ (elexp_string lxp)
-            | None -> "" in
+        | Some (v, lxp)
+          -> " | " ^ (match v with None -> "_" | Some (_,name) -> name)
+            ^ " => " ^ elexp_string lxp
+        | None -> "" in
 
     let str_decls d =
         List.fold_left (fun str ((_, s), lxp) ->
