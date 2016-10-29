@@ -1,10 +1,12 @@
 RM=rm -f
 
+BUILDDIR        := _build
+
 SRC_FILES := $(wildcard ./src/*.ml)
-CPL_FILES := $(wildcard ./_build/src/*.cmo)
+CPL_FILES := $(wildcard ./$(BUILDDIR)/src/*.cmo)
 TEST_FILES := $(wildcard ./tests/*_test.ml)
 
-OBFLAGS = -lflags -g -cflags -g -build-dir _build
+OBFLAGS = -lflags -g -cflags -g -build-dir $(BUILDDIR)
 # COMPILE_MODE = native
 
 all: typer debug tests-build
@@ -23,7 +25,7 @@ debug:
 	#     Build debug utils
 	# ============================
 	ocamlbuild src/debug_util.$(COMPILE_MODE)  -I src $(OBFLAGS)
-	@mv _build/src/debug_util.$(COMPILE_MODE)  _build/debug_util
+	@mv $(BUILDDIR)/src/debug_util.$(COMPILE_MODE)  $(BUILDDIR)/debug_util
 
 # interactive typer
 typer:
@@ -31,22 +33,25 @@ typer:
 	#    Build typer
 	# ============================
 	ocamlbuild src/REPL.$(COMPILE_MODE)  -I src $(OBFLAGS)
-	@mv _build/src/REPL.$(COMPILE_MODE)  _build/typer
+	@mv $(BUILDDIR)/src/REPL.$(COMPILE_MODE)  $(BUILDDIR)/typer
 
 tests-build:
 	# ============================
 	#     Build tests
 	# ============================
-	@$(foreach test, $(TEST_FILES), ocamlbuild $(subst ./,,$(subst .ml,.$(COMPILE_MODE) ,$(test))) -I src $(OBFLAGS);)
+	@$(foreach test, $(TEST_FILES), 				  \
+	   ocamlbuild $(subst ./,,$(subst .ml,.$(COMPILE_MODE) ,$(test))) \
+	              -I src $(OBFLAGS);)
 	@ocamlbuild tests/utest_main.$(COMPILE_MODE)  -I src $(OBFLAGS)
-	@mv _build/tests/utest_main.$(COMPILE_MODE)  _build/tests/utests
+	@mv $(BUILDDIR)/tests/utest_main.$(COMPILE_MODE) \
+	    $(BUILDDIR)/tests/utests
 
 tests-run:
-	@./_build/tests/utests --verbose= 3
+	@./$(BUILDDIR)/tests/utests --verbose= 3
 
 test-file:
 	ocamlbuild src/test.$(COMPILE_MODE)  -I src $(OBFLAGS)
-	@mv _build/src/test.$(COMPILE_MODE)  _build/test
+	@mv $(BUILDDIR)/src/test.$(COMPILE_MODE)  $(BUILDDIR)/test
 
 # There is nothing here. I use this to test if opam integration works
 install: tests
@@ -59,28 +64,29 @@ doc-tex:
 
 # Make implementation doc
 doc-ocaml:
-	ocamldoc -html -d _build/doc  $(SRC_FILES)
+	ocamldoc -html -d $(BUILDDIR)/doc  $(SRC_FILES)
 
-# everything is expected to be compiled in the "./_build/" folder
+# everything is expected to be compiled in the "./$(BUILDDIR)/" folder
 clean:
-	-rm -rf _build
+	-rm -rf $(BUILDDIR)
 
 .PHONY: typer debug tests
 
 run/typecheck:
-	@./_build/debug_util ./samples/test__.typer -typecheck
+	@./$(BUILDDIR)/debug_util ./samples/test__.typer -typecheck
 
 run/debug_util:
-	@./_build/debug_util ./samples/test__.typer -fmt-type=on -fmt-index=off -fmt-pretty=on
+	@./$(BUILDDIR)/debug_util ./samples/test__.typer \
+	                          -fmt-type=on -fmt-index=off -fmt-pretty=on
 
 run/typer:
-	@./_build/typer
+	@./$(BUILDDIR)/typer
 
 run/tests:
-	@./_build/tests/utests --verbose= 1
+	@./$(BUILDDIR)/tests/utests --verbose= 1
 
 run/typer-file:
-	@./_build/typer ./samples/test__.typer
+	@./$(BUILDDIR)/typer ./samples/test__.typer
 
 run/test-file:
-	@./_build/test
+	@./$(BUILDDIR)/test

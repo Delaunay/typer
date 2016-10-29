@@ -90,19 +90,25 @@ let pexp_fatal   = debug_message fatal pexp_name pexp_string
 let pexp_error   = debug_message error pexp_name pexp_string
 let value_fatal  = debug_message fatal value_name value_string
 
-let elab_check_sort (ctx : elab_context) lsort (l, name) ltp =
+let elab_check_sort (ctx : elab_context) lsort var ltp =
   match OL.lexp_whnf lsort (ectx_to_lctx ctx) with
   | Sort (_, _) -> () (* All clear!  *)
-  | _ -> lexp_error l ltp
-                   ("Type of `" ^ name ^ "` is not a proper type: "
-                    ^ lexp_string ltp)
+  | _ -> match var with
+        | None -> lexp_error (lexp_location ltp) ltp
+                            ("`" ^ lexp_string ltp ^ "` is not a proper type")
+        | Some (l, name)
+          -> lexp_error l ltp
+                       ("Type of `" ^ name ^ "` is not a proper type: "
+                        ^ lexp_string ltp)
 
-let elab_check_proper_type (ctx : elab_context) ltp v =
-  try elab_check_sort ctx (OL.check (ectx_to_lctx ctx) ltp) v ltp
+let elab_check_proper_type (ctx : elab_context) ltp var =
+  try elab_check_sort ctx (OL.check (ectx_to_lctx ctx) ltp) var ltp
   with e -> print_string "Exception while checking type `";
            lexp_print ltp;
-           print_string ("` of var `"
-                         ^ (let (_, name) = v in name) ^"`\n");
+           (match var with
+            | None -> ()
+            | Some (_, name)
+              -> print_string ("` of var `" ^ name ^"`\n"));
            print_lexp_ctx (ectx_to_lctx ctx);
            raise e
 
@@ -118,7 +124,7 @@ let elab_check_def (ctx : elab_context) var lxp ltype =
   (* FIXME: conv_p fails too often, e.g. it fails to see that `Type` is
    * convertible to `Type_0`, because it doesn't have access to lctx. *)
   if true (* OL.conv_p ltype ltype' *) then
-    elab_check_proper_type ctx ltype var
+    elab_check_proper_type ctx ltype (Some var)
   else
     (debug_messages fatal loc "Type check error: ¡¡ctx_define error!!" [
       (lexp_string lxp) ^ "!: " ^ (lexp_string ltype);
@@ -126,7 +132,7 @@ let elab_check_def (ctx : elab_context) var lxp ltype =
       (lexp_string (OL.check lctx lxp)) ^ "!= " ^ (lexp_string ltype);])
 
 let ctx_extend (ctx: elab_context) (var : vdef option) def ltype =
-  elab_check_proper_type ctx ltype (maybev var);
+  elab_check_proper_type ctx ltype var;
   ectx_extend ctx var def ltype
 
 let ctx_define (ctx: elab_context) var lxp ltype =
@@ -137,7 +143,7 @@ let ctx_define_rec (ctx: elab_context) decls =
   let nctx = ectx_extend_rec ctx decls in
   let _ = List.fold_left (fun n (var, lxp, ltp)
                           -> elab_check_proper_type
-                              nctx (push_susp ltp (S.shift n)) var;
+                              nctx (push_susp ltp (S.shift n)) (Some var);
                             n - 1)
                          (List.length decls)
                          decls in
@@ -195,152 +201,152 @@ let rec _lexp_p_infer (p : pexp) (ctx : elab_context) trace: lexp * ltype =
     let tloc = pexp_location p in
     let lexp_infer p ctx = _lexp_p_infer p ctx trace in
 
-    (* Save current trace in a global variable. If an error occur,
-       we will be able to retrieve the most recent trace and context *)
+    (* Save current trace in a global variable.  If an error occur,
+       we will be able to retrieve the most recent trace and context.  *)
     _global_lexp_ctx := ctx;
     _global_lexp_trace := trace;
 
     match p with
-        (*  Block/String/Integer/Float *)
-        | Pimm v -> (Imm(v),
-            match v with
-                | Integer _ -> type_int
-                | Float _   -> type_float
-                | String _  -> type_string;
-                | _ -> pexp_error tloc p "Could not find type";
-                  dltype)
+    (* Block/String/Integer/Float.  *)
+    | Pimm v
+      -> (Imm(v),
+         match v with
+         | Integer _ -> type_int
+         | Float _   -> type_float
+         | String _  -> type_string;
+         | _ -> pexp_error tloc p "Could not find type";
+               dltype)
 
-        (*  Symbol i.e identifier *)
-        | Pvar (loc, name) ->(
-            try
-                let idx = (senv_lookup name ctx) in
-                let lxp = (make_var name idx loc) in
+    (* Symbol i.e identifier.  *)
+    | Pvar (loc, name)
+      -> (try
+           let idx = (senv_lookup name ctx) in
+           let lxp = (make_var name idx loc) in
 
-                (* search type *)
-                let ltp = env_lookup_type ctx ((loc, name), idx) in
-                    lxp, ltp (* Return Macro[22] *)
+           (* Search type.  *)
+           let ltp = env_lookup_type ctx ((loc, name), idx) in
+           lxp, ltp (* Return Macro[22] *)
 
-            with Not_found ->
-                (pexp_error loc p ("The variable: `" ^ name ^ "` was not declared");
-                (* Error recovery. The -1 index will raise an error later on *)
-                (make_var name (-1) loc), dltype))
+         with Not_found ->
+           (pexp_error loc p ("The variable: `" ^ name ^ "` was not declared");
+            (* Error recovery. The -1 index will raise an error later on *)
+            (make_var name (-1) loc), dltype))
 
-        (*  Let, Variable declaration + local scope *)
-        | Plet(loc, decls, body) ->
-            let decls, nctx = _lexp_decls decls ctx trace in
-            let bdy, ltp = lexp_infer body nctx in
-              (lexp_let_decls decls bdy nctx trace), ltp
+    (* Let, Variable declaration + local scope.  *)
+    | Plet(loc, decls, body)
+      -> let decls, nctx = _lexp_decls decls ctx trace in
+        let bdy, ltp = lexp_infer body nctx in
+        (* FIXME: Bring `ltp` back from `nctx` scope to `ctx` scope!  *)
+        (lexp_let_decls decls bdy nctx trace), ltp
 
-        (* ------------------------------------------------------------------ *)
-        | Parrow (kind, ovar, tp, loc, expr) ->
-            let ltp, _ = lexp_infer tp ctx in
-            let _ = elab_check_proper_type ctx ltp (maybev ovar) in
-            let nctx = ectx_extend ctx ovar Variable ltp in
+    (* ------------------------------------------------------------------ *)
+    | Parrow (kind, ovar, tp, loc, expr)
+      -> let ltp = lexp_type_infer tp ctx ovar trace in
+        let nctx = ectx_extend ctx ovar Variable ltp in
 
-            let lxp, _ = lexp_infer expr nctx in
-            let _ = elab_check_proper_type nctx lxp (maybev ovar) in
+        let lxp = lexp_type_infer expr nctx None trace in
 
-            let v = Arrow(kind, ovar, ltp, tloc, lxp) in
-                v, type0
+        let v = Arrow(kind, ovar, ltp, tloc, lxp) in
+        v, type0
 
-        (* Pinductive *)
-        | Pinductive (label, formal_args, ctors) ->
-            let nctx = ref ctx in
-            (* (arg_kind * pvar * pexp option) list *)
-            let formal = List.map (fun (kind, var, opxp) ->
-                let ltp, _ = match opxp with
-                    | Some pxp -> _lexp_p_infer pxp !nctx trace
-                    | None -> dltype, dltype in
+    | Pinductive (label, formal_args, ctors)
+      -> let nctx = ref ctx in
+        (* (arg_kind * pvar * pexp option) list *)
+        let formal = List.map (fun (kind, var, opxp)
+                               -> let ltp, _ = match opxp with
+                                   | Some pxp -> _lexp_p_infer pxp !nctx trace
+                                   | None -> dltype, dltype in
 
-                nctx := env_extend !nctx var Variable ltp;
-                    (kind, var, ltp)
-                ) formal_args in
+                                 nctx := env_extend !nctx var Variable ltp;
+                                 (kind, var, ltp))
+                              formal_args in
 
-            let nctx = !nctx in
-            let ltp = List.fold_left (fun tp (kind, v, ltp)
-                                      -> (Arrow (kind, Some v, ltp, tloc, tp)))
-                                     (* FIXME: See OL.check for how to
-                                      * compute the real target sort
-                                      * (not always type0).  *)
-                                     type0 (List.rev formal) in
+        let nctx = !nctx in
+        let ltp = List.fold_left (fun tp (kind, v, ltp)
+                                  -> (Arrow (kind, Some v, ltp, tloc, tp)))
+                                 (* FIXME: See OL.check for how to
+                                  * compute the real target sort
+                                  * (not always type0).  *)
+                                 type0 (List.rev formal) in
 
-            let map_ctor = lexp_parse_inductive ctors nctx trace in
-            let v = Inductive(tloc, label, formal, map_ctor) in
-                v, ltp
+        let map_ctor = lexp_parse_inductive ctors nctx trace in
+        let v = Inductive(tloc, label, formal, map_ctor) in
+        v, ltp
 
-        (* This case can be inferred *)
-        | Plambda (kind, var, optype, body) ->
-            let ltp, _ = match optype with
-                | Some ptype -> lexp_infer ptype ctx
-                (* This case must have been lexp_p_check *)
-                | None -> pexp_error tloc p "Lambda require type annotation";
-                    dltype, dltype in
+    (* This case can be inferred *)
+    | Plambda (kind, var, optype, body)
+      -> let ltp, _ = match optype with
+          | Some ptype -> lexp_infer ptype ctx
+          (* This case must have been lexp_p_check *)
+          | None -> pexp_error tloc p "Lambda require type annotation";
+                   dltype, dltype in
 
-            let nctx = env_extend ctx var Variable ltp in
-            let lbody, lbtp = lexp_infer body nctx in
+        let nctx = env_extend ctx var Variable ltp in
+        let lbody, lbtp = lexp_infer body nctx in
 
-            let lambda_type = Arrow(kind, None, ltp, tloc, lbtp) in
-                Lambda(kind, var, ltp, lbody), lambda_type
+        let lambda_type = Arrow(kind, None, ltp, tloc, lbtp) in
+        Lambda(kind, var, ltp, lbody), lambda_type
 
-        | Pcall (fname, _args) ->
-            lexp_call fname _args ctx trace
+    | Pcall (fname, _args) -> lexp_call fname _args ctx trace
 
-        (* Pcons *)
-        | Pcons(t, sym) ->
-            let idt, _ = lexp_infer t ctx in
-            let (loc, cname) = sym in
+    | Pcons(t, sym)
+      -> let idt, _ = lexp_infer t ctx in
+        let (loc, cname) = sym in
 
-            (* Get constructor args *)
-            let formal, args = match OL.lexp_whnf idt (ectx_to_lctx ctx) with
-              | Inductive(_, _, formal, ctor_def) as lxp -> (
-                try formal, (SMap.find cname ctor_def)
-                with Not_found ->
-                  lexp_error loc lxp
-                             ("Constructor \"" ^ cname ^ "\" does not exist");
-                  [], [])
+        (* Get constructor args.  *)
+        let formal, args = match OL.lexp_whnf idt (ectx_to_lctx ctx) with
+          | Inductive(_, _, formal, ctor_def) as lxp
+            -> (try formal, (SMap.find cname ctor_def)
+               with Not_found ->
+                 lexp_error loc lxp
+                            ("Constructor \"" ^ cname ^ "\" does not exist");
+                 [], [])
 
-              | lxp -> lexp_error loc lxp "Not an Inductive Type"; [], [] in
+          | lxp -> lexp_error loc lxp "Not an Inductive Type"; [], [] in
 
-            (* Build Arrow type.  *)
-            let target = if formal = [] then
-                           push_susp idt (S.shift (List.length args))
-                         else
-                           let targs, _ =
-                             List.fold_right
-                               (fun (ak, v, _) (targs, i)
-                                -> ((ak, Var (v, i)) :: targs,
-                                   i - 1))
-                               formal
-                               ([], List.length formal + List.length args - 1) in
-                           Call (push_susp idt (S.shift (List.length formal
-                                                         + List.length args)),
-                                 targs) in
-            let cons_type
-              = List.fold_left (fun ltp (kind, v, tp)
-                                -> Arrow (kind, v, tp, loc, ltp))
-                               target
-                               (List.rev args) in
+        (* Build Arrow type.  *)
+        let target = if formal = [] then
+                       push_susp idt (S.shift (List.length args))
+                     else
+                       let targs, _
+                         = List.fold_right
+                             (fun (ak, v, _) (targs, i)
+                              -> ((ak, Var (v, i)) :: targs,
+                                 i - 1))
+                             formal
+                             ([], List.length formal + List.length args - 1) in
+                       Call (push_susp idt (S.shift (List.length formal
+                                                     + List.length args)),
+                             targs) in
+        let cons_type
+          = List.fold_left (fun ltp (kind, v, tp)
+                            -> Arrow (kind, v, tp, loc, ltp))
+                           target
+                           (List.rev args) in
 
-            (* Add Aerasable arguments.  *)
-            let cons_type = List.fold_left
-                              (fun ltp (kind, v, tp)
-                               -> Arrow (Aerasable, Some v, tp, loc, ltp))
-                              cons_type (List.rev formal) in
+        (* Add Aerasable arguments.  *)
+        let cons_type = List.fold_left
+                          (fun ltp (kind, v, tp)
+                           -> Arrow (Aerasable, Some v, tp, loc, ltp))
+                          cons_type (List.rev formal) in
 
-            Cons(idt, sym), cons_type
+        Cons(idt, sym), cons_type
 
-        | Phastype (_, pxp, ptp)
-          -> let ltp, _ = lexp_infer ptp ctx in
-            (_lexp_p_check pxp ltp ctx trace), ltp
+    | Phastype (_, pxp, ptp)
+      -> let ltp = lexp_type_infer ptp ctx None trace in
+        (* FIXME: Check proper type!  *)
+        (_lexp_p_check pxp ltp ctx trace), ltp
 
-        | _ -> pexp_fatal tloc p "Unhandled Pexp"
+    | _ -> pexp_fatal tloc p "Unhandled Pexp"
 
+and lexp_type_infer pexp ectx var trace =
+  let t, s = _lexp_p_infer pexp ectx trace in
+  elab_check_sort ectx s var t;
+  t
 
-and lexp_let_decls decls (body: lexp) ctx i =
-  (* build the weird looking let *)
-  let decls = List.rev decls in
-    List.fold_left (fun lxp decls ->
-      Let(dloc, decls, lxp)) body decls
+and lexp_let_decls declss (body: lexp) ctx i =
+  List.fold_right (fun decls lxp -> Let (dloc, decls, lxp))
+                  declss body
 
 and _lexp_p_check (p : pexp) (t : ltype) (ctx : elab_context) trace: lexp =
 
@@ -366,7 +372,7 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : elab_context) trace: lexp =
        let _ = match aty with
          | Some paty
            -> let laty, lasort = _lexp_p_infer paty ctx trace in
-             elab_check_sort ctx lasort var laty;
+             elab_check_sort ctx lasort (Some var) laty;
              () (* FIXME: Check `conv_p aty ltp`!  *)
          | _ -> () in
 
@@ -749,7 +755,7 @@ and lexp_decls_1
                           pending_defs then
         (error l ("Variable `" ^ vname ^ "` already defined!");
          lexp_decls_1 pdecls ectx nctx pending_decls pending_defs)
-      else (elab_check_sort nctx lsort v ltp;
+      else (elab_check_sort nctx lsort (Some v) ltp;
             lexp_decls_1 pdecls ectx
                          (env_extend nctx v ForwardRef ltp)
                          (SMap.add vname (l, ltp) pending_decls)
