@@ -233,11 +233,12 @@ let rec _lexp_p_infer (p : pexp) (ctx : elab_context) trace: lexp * ltype =
             (make_var name (-1) loc), dltype))
 
     (* Let, Variable declaration + local scope.  *)
-    | Plet(loc, decls, body)
-      -> let decls, nctx = _lexp_decls decls ctx trace in
+    | Plet (loc, decls, body)
+      -> let declss, nctx = _lexp_decls decls ctx trace in
         let bdy, ltp = lexp_infer body nctx in
-        (* FIXME: Bring `ltp` back from `nctx` scope to `ctx` scope!  *)
-        (lexp_let_decls decls bdy nctx trace), ltp
+        let s = List.fold_left (OL.lexp_defs_subst loc) S.identity declss in
+        (lexp_let_decls declss bdy nctx trace),
+        mkSusp ltp s
 
     (* ------------------------------------------------------------------ *)
     | Parrow (kind, ovar, tp, loc, expr)
@@ -334,7 +335,6 @@ let rec _lexp_p_infer (p : pexp) (ctx : elab_context) trace: lexp * ltype =
 
     | Phastype (_, pxp, ptp)
       -> let ltp = lexp_type_infer ptp ctx None trace in
-        (* FIXME: Check proper type!  *)
         (_lexp_p_check pxp ltp ctx trace), ltp
 
     | _ -> pexp_fatal tloc p "Unhandled Pexp"

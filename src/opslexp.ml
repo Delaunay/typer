@@ -113,6 +113,11 @@ and conv_p' (s1:lexp S.subst) (s2:lexp S.subst) e1 e2 : bool =
 
 and conv_p e1 e2 = conv_p' S.identity S.identity e1 e2
 
+(* Extend a substitution S with a (mutually recursive) set
+ * of definitions DEFS.  *)
+let lexp_defs_subst l s defs =
+  List.fold_left (fun s (_, lexp, _) -> S.cons (Let (l, defs, lexp)) s)
+                 s defs
 
 (* Reduce to weak head normal form.
  * WHNF implies:
@@ -131,7 +136,6 @@ and conv_p e1 e2 = conv_p' S.identity S.identity e1 e2
  * return value as little as possible since WHNF will inherently introduce
  * call-by-name behavior.  *)
 let rec lexp_whnf e (ctx : DB.lexp_context) = match e with
-  (* | Let (_, defs, body) -> FIXME!!  Need recursive substitutions!  *)
   | Var v -> (match lookup_value ctx v with
              | None -> e
              (* We can do this blindly even for recursive definitions!
@@ -175,7 +179,17 @@ let rec lexp_whnf e (ctx : DB.lexp_context) = match e with
      (match e' with
       | Cons (_, (_, name)) -> reduce name []
       | Call (Cons (_, (_, name)), aargs) -> reduce name aargs
-      | _ -> Case (l, e', rt, branches, default))
+      | _ -> Case (l, e, rt, branches, default))
+
+  (* FIXME:
+   * - This should be correct, but requires improvements in conv_p
+   *   to avoid inf-looping!
+   * - I'd really prefer to use "native" recursive substitutions, using
+   *   ideally a trick similar to the db_offsets in lexp_context!
+   *
+   * | Let (l, defs, body)
+   *   -> push_susp body (lexp_defs_subst l S.identity defs) *)
+
   | e -> e
 
 
