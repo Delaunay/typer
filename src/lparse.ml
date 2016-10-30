@@ -93,13 +93,14 @@ let value_fatal  = debug_message fatal value_name value_string
 let elab_check_sort (ctx : elab_context) lsort var ltp =
   match OL.lexp_whnf lsort (ectx_to_lctx ctx) with
   | Sort (_, _) -> () (* All clear!  *)
-  | _ -> match var with
+  | _ -> let typestr = lexp_string ltp  ^ " : " ^ lexp_string lsort in
+        match var with
         | None -> lexp_error (lexp_location ltp) ltp
-                            ("`" ^ lexp_string ltp ^ "` is not a proper type")
+                            ("`" ^ typestr ^ "` is not a proper type")
         | Some (l, name)
           -> lexp_error l ltp
                        ("Type of `" ^ name ^ "` is not a proper type: "
-                        ^ lexp_string ltp)
+                        ^ typestr)
 
 let elab_check_proper_type (ctx : elab_context) ltp var =
   try elab_check_sort ctx (OL.check (ectx_to_lctx ctx) ltp) var ltp
@@ -118,7 +119,7 @@ let elab_check_def (ctx : elab_context) var lxp ltype =
 
   let ltype' = try OL.check lctx lxp
     with e ->
-      lexp_error dloc lxp "Error while type-checking";
+      lexp_error loc lxp "Error while type-checking";
       print_lexp_ctx (ectx_to_lctx ctx);
       raise e in
   (* FIXME: conv_p fails too often, e.g. it fails to see that `Type` is
@@ -190,10 +191,6 @@ let ctx_define_rec (ctx: elab_context) decls =
  * - use lexp_p_check whenever you can.
  *)
 
-
-let build_var name ctx =
-    let type0_idx = senv_lookup name ctx in
-        Var((dloc, name), type0_idx)
 
 let rec _lexp_p_infer (p : pexp) (ctx : elab_context) trace: lexp * ltype =
 
@@ -303,7 +300,9 @@ let rec _lexp_p_infer (p : pexp) (ctx : elab_context) trace: lexp * ltype =
                             ("Constructor \"" ^ cname ^ "\" does not exist");
                  [], [])
 
-          | lxp -> lexp_error loc lxp "Not an Inductive Type"; [], [] in
+          | lxp -> lexp_error loc lxp ("`" ^ lexp_string idt
+                                      ^ "` is not an inductive type");
+                  [], [] in
 
         (* Build Arrow type.  *)
         let target = if formal = [] then
