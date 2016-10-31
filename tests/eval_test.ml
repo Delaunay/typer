@@ -82,6 +82,15 @@ let _ = test_eval_eqv_named
   "let a = 10; x = 50; y = 60; b = 20;
     in a + b;" (* == *) "30"
 
+let _ = test_eval_eqv_named
+  "Let2"
+
+  "c = 3; e = 1; f = 2; d = 4;"
+
+  "let TrueProp = inductive_ TrueProp I; I = inductive-cons TrueProp I;
+       x = let a = 1; b = 2 in I
+    in (case x | I => c) : Int;" (* == *) "3"
+
 (*      Lambda
  * ------------------------ *)
 
