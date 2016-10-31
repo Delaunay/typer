@@ -363,16 +363,11 @@ let rec _lexp_p_infer (p : pexp) (ctx : elab_context) trace: lexp * ltype =
 
         Cons(idt, sym), cons_type
 
-    | Pmetavar _
-      -> let t = mkMetatype () in
-         let e = mkMetavar t in
-         (e, t)
-
     | Phastype (_, pxp, ptp)
       -> let ltp = lexp_type_infer ptp ctx None trace in
         (_lexp_p_check pxp ltp ctx trace), ltp
 
-    | (Plambda _ | Pcase _)
+    | (Plambda _ | Pcase _ | Pmetavar _)
       -> let t = mkMetatype () in
          let lxp = _lexp_p_check p t ctx trace in
          (lxp, t)
@@ -453,6 +448,8 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : elab_context) trace: lexp =
 
     (* FIXME: Handle *macro* pcalls here! *)
     (* | Pcall (fname, _args) -> *)
+
+    | Pmetavar _ -> mkMetavar t
 
     | _ -> lexp_p_infer_and_check p ctx t trace
 
