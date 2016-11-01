@@ -318,6 +318,36 @@ let _ = (add_test "EVAL" "Monads" (fun () ->
             | _ -> failure ()
 ))
 
+let _ = test_eval_eqv_named
+  "Argument Reordering"
+
+  "fun : (x : Int) => (y : Int) -> (z : Int) -> Int;
+   fun x y z = x * y + z;"
+
+  "fun (x := 3) 2 1;
+   fun 2 1 (x := 3);
+   fun (z := 3) (y := 2) (x := 1);
+   fun (z := 1) (y := 2) (x := 3);
+   fun (x := 3) (y := 2) (z := 1);"
+
+  "7; 7; 5; 7; 7"
+
+
+let _ = test_eval_eqv_named
+  "Implicit Arguments"
+
+  "default = new-attribute (List Sexp -> Sexp);
+   attribute Int default (lambda (lst : List Sexp) -> integer_ 1);
+
+   fun : (x : Int) => (y : Int) -> (z : Int) -> Int;
+   fun x y z = x * y + z;"
+
+  "fun 2 1;
+   fun (z := 1) (y := 2)"
+
+  "3; 3"
+
+
 (* run all tests *)
 let _ = run_all ()
 

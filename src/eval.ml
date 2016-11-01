@@ -92,9 +92,10 @@ let debug_messages error_type loc message messages =
       error_type loc (msg ^ "\n")
 
 let root_string () =
-  match !_global_eval_trace with
-    | [], _ -> ""
-    | e::_, _ -> OL.pol_string e
+  let a, _ = !_global_eval_trace in
+  match List.rev a with
+    | [] -> ""
+    | e::_ -> OL.pol_string e
 
 let debug_message error_type type_name type_string loc expr message =
   debug_messages error_type loc

@@ -363,6 +363,7 @@ let lexp_name e =
     | Case   _ -> "case"
     | Inductive _ -> "inductive_"
     | Builtin   _ -> "Builtin"
+    | Susp      _ -> "Susp"
     | _ -> "lexp_to_string: not implemented"
 
 (*

@@ -282,7 +282,7 @@ let rec _lexp_p_infer (p : pexp) (ctx : elab_context) trace: lexp * ltype =
         let nctx = env_extend ctx var Variable ltp in
         let lbody, lbtp = lexp_infer body nctx in
 
-        let lambda_type = Arrow(kind, None, ltp, tloc, lbtp) in
+        let lambda_type = Arrow(kind, Some var, ltp, tloc, lbtp) in
         Lambda(kind, var, ltp, lbody), lambda_type
 
     | Pcall (fname, _args) -> lexp_call fname _args ctx trace
@@ -361,24 +361,26 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : elab_context) trace: lexp =
 
     match p with
     (* This case cannot be inferred *)
-    | Plambda (kind, var, aty, body)
+    | Plambda (kind, var, obtype, body)
       -> (* Read var type from the provided type *)
-       let ltp, lbtp = match OL.lexp_whnf t (ectx_to_lctx ctx) with
+       let latp, lbtp = match OL.lexp_whnf t (ectx_to_lctx ctx) with
          | Arrow(kind, _, ltp, _, lbtp) -> ltp, lbtp
          | expr ->
             lexp_fatal tloc expr "Expected Type Arrow ( _ -> _ )" in
 
-       let _ = match aty with
-         | Some paty
-           -> let laty, lasort = _lexp_p_infer paty ctx trace in
-             elab_check_sort ctx lasort (Some var) laty;
+       let _ = match obtype with
+         | Some btype
+           -> let body_type, lasort = _lexp_p_infer btype ctx trace in
+             elab_check_sort ctx lasort (Some var) body_type;
+             (* While Type checking *)
+
              () (* FIXME: Check `conv_p aty ltp`!  *)
          | _ -> () in
 
-       let nctx = env_extend ctx var Variable ltp in
+       let nctx = env_extend ctx var Variable latp in
        let lbody = lexp_check body lbtp nctx in
-      
-       Lambda(kind, var, ltp, lbody)
+
+       Lambda(kind, var, latp, lbody)
 
     (* This is mostly for the case where no branches are provided *)
     | Pcase (loc, target, branches)
@@ -527,13 +529,15 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
       | [] -> largs, ltp
       | (Node (Symbol (_, "_:=_"), [Symbol (_, aname); sarg])) :: sargs
         (* Explicit-implicit argument.  *)
+        (* check if a = b in (a : Type) -> ... and (b := val) *)
         -> (match OL.lexp_whnf ltp (ectx_to_lctx ctx) with
            | Arrow (ak, Some (_, aname'), arg_type, _, ret_type)
-                when aname = aname'
+                when (aname = aname' || aname = "_")
              -> let parg = pexp_parse sarg in
                let larg = lexp_check parg arg_type ctx in
                handle_fun_args ((ak, larg) :: largs) sargs
                                (L.mkSusp ret_type (S.substitute larg))
+
            | _ -> fatal (sexp_location sarg)
                   ("Explicit arg `" ^ aname ^ "` to non-function " ^
                     "(type = " ^ (lexp_string ltp) ^ ")"))
@@ -580,6 +584,81 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
 
       | _ ->
         (*  Process Arguments *)
+
+        (* Extract correct ordering *)
+        let rec extract_order ltp aargs eargs =
+          match nosusp ltp with
+            | Arrow (kind, Some (_, varname), ltp, _, ret) ->
+                extract_order ret ((kind, varname, ltp)::aargs)
+                  (if kind = Aexplicit then (varname::eargs) else eargs)
+
+            | _ -> (List.rev aargs), List.rev eargs in
+
+        (* first list has all the arguments, second only holds explicit arguments *)
+        let order, eorder = extract_order ltp [] [] in
+
+        (* from arg order build a dictionnary that will hold the defined args *)
+        let args_dict = List.fold_left
+          (fun map (kind, key, _) -> SMap.add key (kind, None) map) SMap.empty order in
+
+        let args_dict, eargs = List.fold_left (fun (map, eargs) sexp ->
+          match sexp with
+            | Node (Symbol (_, "_:=_"), [Symbol (_, aname); sarg]) ->
+              let kind, _ = SMap.find aname map in
+                (SMap.add aname (kind, Some sarg) map),
+                (if kind = Aexplicit then
+                  (match eargs with
+                    | _::tl -> tl
+                    | _ -> []) else eargs)
+
+            | _ -> (match eargs with
+              | name::tl -> (SMap.add name (Aexplicit, Some sexp) map), tl
+              | _ -> map, []))
+                (args_dict, eorder) sargs in
+
+        (*
+        print_string "Type :"; lexp_print ltp; print_string "\n";
+        print_string "Order:"; List.iter (fun (a, b) -> print_string (b ^ " ")) (order); print_string "\n";
+        print_string "Sarg1: ";
+        List.iter (fun lxp -> sexp_print lxp; print_string ", ") sargs; *)
+
+        (* Generate an argument list with the correct order *)
+        let sargs2 = List.map (fun (_, name, ltp) ->
+          try match SMap.find name args_dict with
+            | Aimplicit, (Some sexp) -> Node (Symbol (dloc, "_:=_"), [Symbol (dloc, name); sexp])
+            | Aerasable,  Some sexp  -> Node (Symbol (dloc, "_:=_"), [Symbol (dloc, name); sexp])
+            | Aexplicit, (Some sexp) -> sexp
+            | Aexplicit, None        -> fatal dloc "Explicit argument expected"
+            | Aimplicit, None        -> (
+                (* get variable info *)
+                let vidx, vname = match ltp with
+                  | Var ((_, name), idx) -> idx, name
+                  | _ -> lexp_fatal loc ltp "Unable to find default attribute" in
+
+                (* get default property *)
+                let pidx, pname = (senv_lookup "default" ctx), "default" in
+
+                (* get macro *)
+                let default_macro = try get_property ctx (vidx, vname) (pidx, pname)
+                  with _ -> dump_properties ctx; dltype in
+
+                lexp_print default_macro;
+
+                print_string ((lexp_name ltp) ^ ": ");
+                lexp_print ltp; print_string "\n";
+                fatal dloc "Default Arg lookup not implemented")
+
+
+            with Not_found -> fatal dloc (name ^ " not found")
+          ) order in
+
+        (*
+        print_string "\nSarg2: "; List.iter (fun lxp -> sexp_print lxp; print_string ", ") sargs2;
+        print_string "\n"; *)
+
+        (* check if we had enough information to reorder args *)
+        let sargs = if (List.length order >= List.length sargs) then sargs2 else sargs in
+
         let largs, ret_type = handle_fun_args [] sargs ltp in
         Call (body, List.rev largs), ret_type in
 
