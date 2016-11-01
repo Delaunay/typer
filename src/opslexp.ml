@@ -114,10 +114,25 @@ and conv_p' (s1:lexp S.subst) (s2:lexp S.subst) e1 e2 : bool =
 and conv_p e1 e2 = conv_p' S.identity S.identity e1 e2
 
 (* Extend a substitution S with a (mutually recursive) set
- * of definitions DEFS.  *)
-let lexp_defs_subst l s defs =
-  List.fold_left (fun s (_, lexp, _) -> S.cons (Let (l, defs, lexp)) s)
-                 s defs
+ * of definitions DEFS.
+ * This is rather tricky.  E.g. for
+ *
+ *     (x₁ = e1; x₂ = e₂)
+ *
+ * Where x₁ will be DeBuijn #1 and x₂ will be DeBruijn #0,
+ * we want a substitution of the form
+ *
+ *     (let x₂ = e₂ in e₂) · (let x₁ = e₁; x₂ = e₂ in e₁) · Id
+ *
+ * Because we want #2 in both e₂ and e₁ to refer to the nearest variable in
+ * the surrouding context, but the substitution for #0 (defined here as
+ * `let x₂ = e₂ in e₂`) will be interpreted in the remaining context,
+ * which already provides "x₁".
+ *)
+let rec lexp_defs_subst l s defs = match defs with
+  | [] -> s
+  | (_, lexp, _) :: defs'
+    -> lexp_defs_subst l (S.cons (Let (l, defs, lexp)) s) defs'
 
 (* Reduce to weak head normal form.
  * WHNF implies:
