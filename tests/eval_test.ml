@@ -87,7 +87,8 @@ let _ = test_eval_eqv_named
 
   "c = 3; e = 1; f = 2; d = 4;"
 
-  "let TrueProp = inductive_ TrueProp I; I = inductive-cons TrueProp I;
+  "let TrueProp = inductive_ TrueProp I;
+       I = inductive-cons TrueProp I;
        x = let a = 1; b = 2 in I
     in (case x | I => c) : Int;" (* == *) "3"
 
@@ -96,8 +97,10 @@ let _ = test_eval_eqv_named
 
   "c = 3; e = 1; f = 2; d = 4;"
 
-  "let TrueProp : Type; I : TrueProp;
-       TrueProp = inductive_ TrueProp I; I = inductive-cons TrueProp I;
+  "let TrueProp : Type;
+       I : TrueProp;
+       TrueProp = inductive_ TrueProp I;
+       I = inductive-cons TrueProp I;
        x = let a = 1; b = 2 in I
     in (case x | I => c) : Int;" (* == *) "3"
 

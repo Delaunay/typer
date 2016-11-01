@@ -201,7 +201,8 @@ let declexpr_impl loc largs ctx ftype =
   let lxp = match env_lookup_expr ctx ((loc, vn), vi) with
     | Some lxp -> lxp
     | None -> error loc "no expr available" in
-  let ltp = env_lookup_type ctx ((loc, vn), vi) in (* FIXME: Unused?  *)
+  (* ltp and ftype should be the same
+  let ltp = env_lookup_type ctx ((loc, vn), vi) in *)
     lxp, ftype
 
 
