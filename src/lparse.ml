@@ -197,18 +197,18 @@ let ctx_define_rec (ctx: elab_context) decls =
  *)
 
 
-let mkMetavar t =
+let newMetavar t =
   let meta = Unif.create_metavar () in
   let name = "__metavar" (* ^ (string_of_int meta) *) in
-  Metavar (meta, S.Identity, (Util.dummy_location, name), t)
+  mkMetavar (meta, S.Identity, (Util.dummy_location, name), t)
 
-let mkMetalevel () =
+let newMetalevel () =
   let meta = Unif.create_metavar () in
   let name = "__metalevel" (* ^ (string_of_int meta) *) in
-  Metavar (meta, S.Identity, (Util.dummy_location, name),
-           Sort (dummy_location, StypeLevel))
+  mkMetavar (meta, S.Identity, (Util.dummy_location, name),
+             Sort (dummy_location, StypeLevel))
 
-let mkMetatype () = mkMetavar (mkMetalevel ())
+let newMetatype () = newMetavar (newMetalevel ())
 
 let rec _lexp_p_infer (p : pexp) (ctx : elab_context) trace: lexp * ltype =
   Debug_fun.do_debug (fun () ->
@@ -366,7 +366,7 @@ let rec _lexp_p_infer (p : pexp) (ctx : elab_context) trace: lexp * ltype =
         (_lexp_p_check pxp ltp ctx trace), ltp
 
     | (Plambda _ | Pcase _ | Pmetavar _)
-      -> let t = mkMetatype () in
+      -> let t = newMetatype () in
          let lxp = _lexp_p_check p t ctx trace in
          (lxp, t)
 
@@ -404,9 +404,9 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : elab_context) trace: lexp =
     _global_lexp_trace := trace;
 
     let unify_with_arrow lxp kind var aty subst =
-      let body = mkMetatype () in
+      let body = newMetatype () in
       let arg = match aty with
-        | None -> mkMetatype ()
+        | None -> newMetatype ()
         | Some paty
           -> let laty, lasort = lexp_infer paty ctx in
             elab_check_sort ctx lasort (Some var) laty;
@@ -447,7 +447,7 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : elab_context) trace: lexp =
     (* FIXME: Handle *macro* pcalls here! *)
     (* | Pcall (fname, _args) -> *)
 
-    | Pmetavar _ -> mkMetavar t
+    | Pmetavar _ -> newMetavar t
 
     | _ -> lexp_p_infer_and_check p ctx t trace
 
@@ -651,7 +651,7 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
                handle_fun_args ((Aexplicit, larg) :: largs) sargs
                                (L.mkSusp ret_type (S.substitute larg))
            | Arrow (kind, _, arg_type, _, ret_type)
-             -> let larg = mkMetavar arg_type in
+             -> let larg = newMetavar arg_type in
                handle_fun_args ((kind, larg) :: largs) (sarg::sargs)
                                (L.mkSusp ret_type (S.substitute larg))
 
