@@ -33,6 +33,7 @@ this program.  If not, see <http://www.gnu.org/licenses/>.  *)
 
 type 'a myers =
   | Mnil
+  (* | Mcons1 of 'a * 'a myers *)
   | Mcons of 'a * 'a myers * int * 'a myers
 
 (* Contrary to Myers's presentation, we index from the top of the stack,
@@ -44,7 +45,7 @@ let nil = Mnil
 
 let cons x l =
   match l with
-  | Mcons (_, _, s1, Mcons (_, _, s2, l2)) when s1 = s2
+  | Mcons (_, _, s1, Mcons (_, _, s2, l2)) when s1 >= s2
     -> Mcons (x, l, s1 + s2 + 1, l2)
   | _ -> Mcons (x, l, 1, l)
 

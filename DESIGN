@@ -444,7 +444,21 @@ datatypes where one of the elements can be meaningfully treated as the
 "false"/"null" value (e.g. the empty list, the "none" of the option type,
 ...).
 
-* K axiom
+* Equality
+
+** Heterogenous equality
+
+*** One suggestion from Agda list ("telescopic equlity"):
+
+    [_]_≅_ : ∀ {X : Set} {x y} → (Z : X → Set) → Z x → Z y → Set
+    [_]_≅_ {x = x} {y} Z a b = (x , a) ≡ (y , b)
+
+*** Definition in Agda
+
+    data _≅_ {i} {A : Set i} (x : A) : {B : Set i} → B → Set i where
+       refl : x ≅ x
+
+** K axiom
 
 [ See article by Jesper Cockx et al.
 http://dl.acm.org/citation.cfm?id=2628139&CFID=459245005&CFTOKEN=46924550 ]

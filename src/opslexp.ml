@@ -48,72 +48,7 @@ let impredicative_erase = true (* Allows erasable args to be impredicative. *)
 let lookup_type  = DB.lctx_lookup_type
 let lookup_value = DB.lctx_lookup_value
 
-(********* Testing if two types are "convertible" aka "equivalent"  *********)
-
-let get_vardef lv = match lv with
-  | Some lv -> lv
-  | None -> (U.dummy_location, "<anon>")
-
-let rec conv_arglist_p s1 s2 args1 args2 : bool =
-  List.fold_left2
-    (fun eqp (ak1,t1) (ak2,t2) ->
-      eqp && ak1 = ak2 && conv_p' s1 s2 t1 t2)
-    true args1 args2
-
-(* Returns true if e₁ and e₂ are equal (upto alpha/beta/...).  *)
-and conv_p' (s1:lexp S.subst) (s2:lexp S.subst) e1 e2 : bool =
-  let conv_p = conv_p' s1 s2 in
-  (* e1 == e2    !! Looks obvious, but can fail because of s1 and s2 !!  *)
-  match (e1, e2) with
-    | (Imm (Integer (_, i1)), Imm (Integer (_, i2))) -> i1 = i2
-    | (Imm (Float (_, i1)), Imm (Float (_, i2))) -> i1 = i2
-    | (Imm (String (_, i1)), Imm (String (_, i2))) -> i1 = i2
-    | (SortLevel (sl1), SortLevel (sl2)) -> sl1 == sl2
-    | (Sort (_, s1), Sort (_, s2)) -> s1 = s2
-    | (Builtin ((_, s1), _), Builtin ((_, s2), _)) -> s1 == s2
-    (* BEWARE: When we'll make expand let-defined vars here, we'll have to
-     * be careful not to introduce infinite-recursion.  *)
-    | (Var (l1, v1), e2) when not (S.identity_p s1) ->
-       conv_p' S.identity s2 (slookup s1 l1 v1) e2
-    | (e1, Var (l2, v2)) when not (S.identity_p s2) ->
-       conv_p' s1 S.identity e1 (slookup s2 l2 v2)
-    | (Var (_, v1), Var (_, v2)) -> v1 == v2
-    | (Susp (e1, s1'), e2) -> conv_p' (scompose s1' s1) s2 e1 e2
-    | (e1, Susp (e2, s2')) -> conv_p' s1 (scompose s2' s2) e1 e2
-    | (Arrow (ak1, vd1, t11, _, t12), Arrow (ak2, vd2, t21, _, t22))
-      -> ak1 == ak2 && conv_p t11 t21
-        && conv_p' (ssink (get_vardef vd1) s1) (ssink (get_vardef vd2) s2)
-                  t12 t22
-    | (Lambda (ak1, l1, t1, e1), Lambda (ak2, l2, t2, e2))
-      -> ak1 == ak2 && conv_p t1 t2 && conv_p' (ssink l1 s1) (ssink l2 s2) e1 e2
-    | (Call (f1, args1), Call (f2, args2))
-      -> conv_p f1 f2 && conv_arglist_p s1 s2 args1 args2
-    | (Inductive (_, l1, args1, cases1), Inductive (_, l2, args2, cases2))
-      -> let rec conv_args s1 s2 args1 args2 =
-          match args1, args2 with
-          | ([], []) -> true
-          | ((ak1,l1,t1)::args1, (ak2,l2,t2)::args2)
-            -> ak1 == ak2 && conv_p' s1 s2 t1 t2
-              && conv_args (ssink l1 s1) (ssink l2 s2) args1 args2
-          | _,_ -> false in
-        let rec conv_fields s1 s2 fields1 fields2 =
-          match fields1, fields2 with
-          | ([], []) -> true
-          | ((ak1,vd1,t1)::fields1, (ak2,vd2,t2)::fields2)
-            -> ak1 == ak2 && conv_p' s1 s2 t1 t2
-              && conv_fields (match vd1 with None -> s1 | Some l1 -> ssink l1 s1)
-                            (match vd2 with None -> s2 | Some l2 -> ssink l2 s2)
-                            fields1 fields2
-          | _,_ -> false in
-        l1 == l2 && conv_args s1 s2 args1 args2
-        && SMap.equal (conv_fields s1 s2) cases1 cases2
-    | (Cons (t1, l1), Cons (t2, l2)) -> l1 == l2 && conv_p t1 t2
-    (* FIXME: Various missing cases, such as Let, Case, and beta-reduction.  *)
-    | (_, _) -> false
-
-and conv_p e1 e2 = conv_p' S.identity S.identity e1 e2
-
-(* Extend a substitution S with a (mutually recursive) set
+(** Extend a substitution S with a (mutually recursive) set
  * of definitions DEFS.
  * This is rather tricky.  E.g. for
  *
@@ -132,7 +67,7 @@ and conv_p e1 e2 = conv_p' S.identity S.identity e1 e2
 let rec lexp_defs_subst l s defs = match defs with
   | [] -> s
   | (_, lexp, _) :: defs'
-    -> lexp_defs_subst l (S.cons (Let (l, defs, lexp)) s) defs'
+    -> lexp_defs_subst l (S.cons (mkLet (l, defs, lexp)) s) defs'
 
 (* Reduce to weak head normal form.
  * WHNF implies:
@@ -159,17 +94,17 @@ let rec lexp_whnf e (ctx : DB.lexp_context) = match e with
              | Some e' -> lexp_whnf e' ctx)
   | Susp (e, s) -> lexp_whnf (push_susp e s) ctx
   | Call (e, []) -> lexp_whnf e ctx
-  | Call (e, (((_, arg)::args) as xs)) ->
-     (match lexp_whnf e ctx with
+  | Call (f, (((_, arg)::args) as xs)) ->
+     (match lexp_whnf f ctx with
       | Lambda (_, _, _, body) ->
          (* Here we apply whnf to the arg eagerly to kind of stay closer
           * to the idea of call-by-value, although in this context
           * we can't really make sure we always reduce the arg to a value.  *)
-         lexp_whnf (Call (push_susp body (S.substitute (lexp_whnf arg ctx)),
-                          args))
+         lexp_whnf (mkCall (push_susp body (S.substitute (lexp_whnf arg ctx)),
+                            args))
                    ctx
-      | Call (e', xs1) -> Call (e', List.append xs1 xs)
-      | e' -> Call (e, xs))      (* Keep `e`, assuming it's more readable!  *)
+      | Call (f', xs1) -> mkCall (f', List.append xs1 xs)
+      | _ -> e)                 (* Keep `e`, assuming it's more readable!  *)
   | Case (l, e, rt, branches, default) ->
      let e' = lexp_whnf e ctx in
      let reduce name aargs =
@@ -190,23 +125,110 @@ let rec lexp_whnf e (ctx : DB.lexp_context) = match e with
                    | _ -> U.msg_error "WHNF" l
                                      ("Unhandled constructor " ^
                                         name ^ "in case expression");
-                         Case (l, e, rt, branches, default) in
+                         mkCase (l, e, rt, branches, default) in
      (match e' with
       | Cons (_, (_, name)) -> reduce name []
       | Call (Cons (_, (_, name)), aargs) -> reduce name aargs
-      | _ -> Case (l, e, rt, branches, default))
+      | _ -> mkCase (l, e, rt, branches, default))
 
-  (* FIXME:
-   * - This should be correct, but requires improvements in conv_p
-   *   to avoid inf-looping!
-   * - I'd really prefer to use "native" recursive substitutions, using
-   *   ideally a trick similar to the db_offsets in lexp_context!
-   *
-   * | Let (l, defs, body)
-   *   -> push_susp body (lexp_defs_subst l S.identity defs) *)
+  (* FIXME: I'd really prefer to use "native" recursive substitutions, using
+   *   ideally a trick similar to the db_offsets in lexp_context!  *)
+  | Let (l, defs, body)
+    -> push_susp body (lexp_defs_subst l S.identity defs)
 
   | e -> e
 
+
+(** A very naive implementation of sets of lexps.  *)
+type set_lexp = lexp list
+let set_empty : set_lexp = []
+let set_member_p (s : set_lexp) (e : lexp) : bool
+  = if not (e == Lexp.hc e) then
+      (print_string "Not hashcons'd: ";
+       lexp_print e;
+       print_string "\n");
+    assert (e == Lexp.hc e);
+    List.mem e s
+let set_add (s : set_lexp) (e : lexp) : set_lexp
+  = assert (not (set_member_p s e));
+    e :: s
+let set_shift_n (s : set_lexp) (n : U.db_offset)
+  = List.map (fun e -> Lexp.push_susp e (S.shift n)) s
+let set_shift s : set_lexp = set_shift_n s 1
+
+(********* Testing if two types are "convertible" aka "equivalent"  *********)
+
+(* Returns true if e₁ and e₂ are equal (upto alpha/beta/...).  *)
+let rec conv_p' (ctx : DB.lexp_context) (vs : set_lexp) e1 e2 : bool =
+  let e1' = lexp_whnf e1 ctx in
+  let e2' = lexp_whnf e2 ctx in
+  let stop1 = not (e1 == e1') && set_member_p vs e1' in
+  let stop2 = not (e2 == e2') && set_member_p vs e2' in
+  let vs' = if not (e1 == e1') && not stop1 then set_add vs e1'
+            else if not (e2 == e2') && not stop2 then set_add vs e2'
+            else vs in
+  let conv_p = conv_p' ctx vs' in
+  let conv_p'' e1 e2 =
+    e1 == e2 ||
+      (match (e1, e2) with
+       | (Imm (Integer (_, i1)), Imm (Integer (_, i2))) -> i1 = i2
+       | (Imm (Float (_, i1)), Imm (Float (_, i2))) -> i1 = i2
+       | (Imm (String (_, i1)), Imm (String (_, i2))) -> i1 = i2
+       | (SortLevel (sl1), SortLevel (sl2)) -> sl1 = sl2
+       | (Sort (_, s1), Sort (_, s2))
+         -> s1 == s2
+           || (match (s1, s2) with
+              | (Stype e1, Stype e2) -> conv_p e1 e2
+              | _ -> false)
+       | (Builtin ((_, s1), _), Builtin ((_, s2), _)) -> s1 = s2
+       | (Var (_, v1), Var (_, v2)) -> v1 = v2
+       | (Arrow (ak1, vd1, t11, _, t12), Arrow (ak2, vd2, t21, _, t22))
+         -> ak1 == ak2
+           && conv_p t11 t21
+           && conv_p' (DB.lexp_ctx_cons ctx 0 vd1 Variable t11) (set_shift vs')
+                     t12 t22
+       | (Lambda (ak1, l1, t1, e1), Lambda (ak2, l2, t2, e2))
+         -> ak1 == ak2 && conv_p t1 t2
+           && conv_p' (DB.lexp_ctx_cons ctx 0 (Some l1) Variable t1)
+                     (set_shift vs')
+                     e1 e2
+       | (Call (f1, args1), Call (f2, args2))
+         -> let rec conv_arglist_p args1 args2 : bool =
+             List.fold_left2
+               (fun eqp (ak1,t1) (ak2,t2) -> eqp && ak1 = ak2 && conv_p t1 t2)
+               true args1 args2 in
+           conv_p f1 f2 && conv_arglist_p args1 args2
+       | (Inductive (_, l1, args1, cases1), Inductive (_, l2, args2, cases2))
+         -> let rec conv_args ctx vs args1 args2 =
+             match args1, args2 with
+             | ([], []) -> true
+             | ((ak1,l1,t1)::args1, (ak2,l2,t2)::args2)
+               -> ak1 == ak2 && conv_p' ctx vs t1 t2
+                 && conv_args (DB.lexp_ctx_cons ctx 0 (Some l1) Variable t1)
+                             (set_shift vs)
+                             args1 args2
+             | _,_ -> false in
+           let rec conv_fields ctx vs fields1 fields2 =
+             match fields1, fields2 with
+             | ([], []) -> true
+             | ((ak1,vd1,t1)::fields1, (ak2,vd2,t2)::fields2)
+               -> ak1 == ak2 && conv_p' ctx vs t1 t2
+                 && conv_fields (DB.lexp_ctx_cons ctx 0 vd1 Variable t1)
+                               (set_shift vs)
+                               fields1 fields2
+             | _,_ -> false in
+           l1 == l2 && conv_args ctx vs' args1 args2
+           && SMap.equal (conv_fields ctx vs') cases1 cases2
+       | (Cons (t1, (_, l1)), Cons (t2, (_, l2))) -> l1 = l2 && conv_p t1 t2
+       (* FIXME: Various missing cases, such as Case.  *)
+       | (_, _) -> false)
+  in if stop1 || stop2
+     then conv_p'' e1 e2
+     else conv_p'' e1' e2'
+
+let conv_p (ctx : DB.lexp_context) e1 e2
+  = if e1 == e2 then true
+    else conv_p' ctx set_empty e1 e2
 
 (********* Testing if a lexp is properly typed  *********)
 
