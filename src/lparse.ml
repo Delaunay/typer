@@ -385,7 +385,13 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : elab_context) trace: lexp =
     (* FIXME: Handle *macro* pcalls here! *)
     (* | Pcall (fname, _args) -> *)
 
-    | _ -> let (e, inferred_t) = lexp_infer p ctx in e
+    | _ -> let (e, inferred_t) = lexp_infer p ctx in
+          if not (OL.conv_p (ectx_to_lctx ctx) inferred_t t) then
+            lexp_error (pexp_location p) e
+                       ("Type mismatch!  Context expected `"
+                        ^ lexp_string t ^ "` but expression has type `"
+                        ^ lexp_string inferred_t ^ "`\n");
+          e
 
 (* Lexp.case can sometimes be inferred, but we prefer to always check.  *)
 and lexp_case rtype (loc, target, ppatterns) ctx i =

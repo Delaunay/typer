@@ -254,7 +254,7 @@ let _ = test_eval_eqv_named
    head (a := Int) my_list;
    head (a := Int) (tail (a := Int) my_list)"
 
-  "4; 1; 2"
+  "4; Some (a := Int) 1; Some (a := Int) 2"
 
 (*
  *  Special forms
@@ -299,14 +299,14 @@ let _ = (add_test "EVAL" "Infinite Recursion failure" (fun () ->
 let _ = (add_test "EVAL" "Monads" (fun () ->
 
     let dcode = "
-      c = bind (a := Type) (b := Type) (open \"./_build/w_file.txt\" \"w\")
-        (lambda (f : FileHandle) ->
-          write f \"Hello2\");
+      c = bind (a := FileHandle) (b := Unit)
+               (open \"./_build/w_file.txt\" \"w\")
+               (lambda f -> write f \"Hello2\");
     " in
 
     let rctx, lctx = eval_decl_str dcode lctx rctx in
 
-    let rcode = "run-io (a := Type) (b := Unit) c Unit" in
+    let rcode = "run-io (a := Unit) (b := Int) c 2" in
 
     (* Eval defined lambda *)
     let ret = eval_expr_str rcode lctx rctx in

@@ -399,11 +399,15 @@ let rec lexp_unparse lxp =
         | None -> pbranch
         in Pcase (loc, lexp_unparse target, pbranch)
 
-  (*
-   | SortLevel of sort_level
-   | Sort of U.location * sort *)
+    (* FIXME: The cases below are all broken!  *)
 
-    | _ as e -> Pimm (Symbol(lexp_location e, "Type"))
+    | SortLevel (SLz) -> Pimm (Integer (U.dummy_location, 0))
+    | SortLevel (SLsucc sl) -> Pcall (Pimm (Symbol (U.dummy_location, "<S>")),
+                                     [pexp_unparse (lexp_unparse sl)])
+    | Sort (l, StypeOmega) -> Pimm (Symbol (l, "<SortOmega>"))
+    | Sort (l, StypeLevel) -> Pimm (Symbol (l, "<SortLevel>"))
+    | Sort (l, Stype sl) -> Pcall (Pimm (Symbol (l, "<Type>")),
+                                  [pexp_unparse (lexp_unparse sl)])
 
 let lexp_string lxp = sexp_string (pexp_unparse (lexp_unparse lxp))
 (*
