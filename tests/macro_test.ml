@@ -47,8 +47,12 @@ let _ = (add_test "MACROS" "macros base" (fun () ->
     (* define 'lambda x -> x * x' using macros *)
     let dcode = "
     my_fun = lambda (x : List Sexp) ->
-        let hd = head(a := Sexp) x in
-            (node_ (symbol_ \"_*_\") (cons(a := Sexp) hd (cons(a := Sexp) hd (nil(a := Sexp)))));
+        let hd = case x
+          | cons hd tl => hd
+          | nil => symbol_ \"x\" in
+            (node_ (symbol_ \"_*_\")
+              (cons (a := Sexp) hd
+              (cons (a := Sexp) hd (nil (a := Sexp)))));
 
     sqr = Macro_ my_fun;
     " in

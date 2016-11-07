@@ -87,7 +87,8 @@ let _ = test_eval_eqv_named
 
   "c = 3; e = 1; f = 2; d = 4;"
 
-  "let TrueProp = inductive_ TrueProp I; I = inductive-cons TrueProp I;
+  "let TrueProp = inductive_ TrueProp I;
+       I = inductive-cons TrueProp I;
        x = let a = 1; b = 2 in I
     in (case x | I => c) : Int;" (* == *) "3"
 
@@ -96,8 +97,10 @@ let _ = test_eval_eqv_named
 
   "c = 3; e = 1; f = 2; d = 4;"
 
-  "let TrueProp : Type; I : TrueProp;
-       TrueProp = inductive_ TrueProp I; I = inductive-cons TrueProp I;
+  "let TrueProp : Type;
+       I : TrueProp;
+       TrueProp = inductive_ TrueProp I;
+       I = inductive-cons TrueProp I;
        x = let a = 1; b = 2 in I
     in (case x | I => c) : Int;" (* == *) "3"
 
@@ -316,6 +319,38 @@ let _ = (add_test "EVAL" "Monads" (fun () ->
             | [v] -> success ()
             | _ -> failure ()
 ))
+
+let _ = test_eval_eqv_named
+  "Argument Reordering"
+
+  "fun = lambda (x : Int) =>
+      lambda (y : Int) ->
+        lambda (z : Int) -> x * y + z;"
+
+  "fun (x := 3) 2 1;
+   fun 2 1 (x := 3);
+   fun (z := 3) (y := 2) (x := 1);
+   fun (z := 1) (y := 2) (x := 3);
+   fun (x := 3) (y := 2) (z := 1);"
+
+  "7; 7; 5; 7; 7"
+
+
+let _ = test_eval_eqv_named
+  "Implicit Arguments"
+
+  "default = new-attribute (List Sexp -> Sexp);
+   attribute Int default (lambda (lst : List Sexp) -> integer_ 1);
+
+   fun = lambda (x : Int) =>
+      lambda (y : Int) ->
+        lambda (z : Int) -> x * y + z;"
+
+  "fun 2 1;
+   fun (z := 1) (y := 2)"
+
+  "3; 3"
+
 
 (* run all tests *)
 let _ = run_all ()
