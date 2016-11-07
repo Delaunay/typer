@@ -280,7 +280,7 @@ let rec _lexp_p_infer (p : pexp) (ctx : elab_context) trace: lexp * ltype =
         let nctx = env_extend ctx var Variable ltp in
         let lbody, lbtp = lexp_infer body nctx in
 
-        let lambda_type = mkArrow (kind, None, ltp, tloc, lbtp) in
+        let lambda_type = mkArrow (kind, Some var, ltp, tloc, lbtp) in
         mkLambda(kind, var, ltp, lbody), lambda_type
 
     | Pcall (fname, _args) -> lexp_call fname _args ctx trace
@@ -594,10 +594,18 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
                 extract_order ret ((kind, varname, ltp)::aargs)
                   (if kind = Aexplicit then (varname::eargs) else eargs)
 
-            | _ -> (List.rev aargs), List.rev eargs in
+            | e -> (List.rev aargs), List.rev eargs in
 
         (* first list has all the arguments, second only holds explicit arguments *)
         let order, eorder = extract_order ltp [] [] in
+
+        (*)
+        print_string "Type :"; lexp_print ltp; print_string "\n";
+        print_string "Order:"; List.iter (fun (_, b, _) -> print_string (b ^ " ")) (order); print_string "\n";
+        print_string "Sarg1: ";
+        List.iter (fun lxp -> sexp_print lxp; print_string ", ") sargs;
+        print_string "\n";*)
+
 
         (* from arg order build a dictionnary that will hold the defined args *)
         let args_dict = List.fold_left
@@ -606,7 +614,10 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
         let args_dict, eargs = List.fold_left (fun (map, eargs) sexp ->
           match sexp with
             | Node (Symbol (_, "_:=_"), [Symbol (_, aname); sarg]) ->
-              let kind, _ = SMap.find aname map in
+              let kind, _ = try SMap.find aname map
+                with Not_found ->
+                  print_string (aname ^ " was not found" ^ "\n");
+                  Aerasable, None in
                 (SMap.add aname (kind, Some sarg) map),
                 (if kind = Aexplicit then
                   (match eargs with
@@ -618,11 +629,6 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
               | _ -> map, []))
                 (args_dict, eorder) sargs in
 
-        (*
-        print_string "Type :"; lexp_print ltp; print_string "\n";
-        print_string "Order:"; List.iter (fun (a, b) -> print_string (b ^ " ")) (order); print_string "\n";
-        print_string "Sarg1: ";
-        List.iter (fun lxp -> sexp_print lxp; print_string ", ") sargs; *)
 
         (* Generate an argument list with the correct order *)
         let sargs2 = List.map (fun (_, name, ltp) ->
@@ -724,10 +730,16 @@ and lexp_parse_inductive ctors ctx i =
 
 (* Macro declaration handling, return a list of declarations
  * to be processed *)
-and lexp_expand_macro macro_funct sargs ctx trace =
+and lexp_expand_macro macro_funct sargs ctx trace
+  = lexp_expand_macro_ macro_funct sargs ctx trace "expand_macro_"
+
+and lexp_expand_dmacro macro_funct sargs ctx trace
+  = lexp_expand_macro_ macro_funct sargs ctx trace "expand_dmacro_"
+
+and lexp_expand_macro_ macro_funct sargs ctx trace expand_fun =
 
   (* Build the function to be called *)
-  let macro_expand = get_predef "expand_macro_" ctx in
+  let macro_expand = get_predef expand_fun ctx in
   let args = [(Aexplicit, macro_funct); (Aexplicit, (olist2tlist_lexp sargs ctx))] in
 
   let macro = mkCall (macro_expand, args) in
@@ -773,7 +785,7 @@ and lexp_decls_macro (loc, mname) sargs ctx: (pdecl list * elab_context) =
               [], ctx)
 
           | _ ->(
-            let ret = lexp_expand_macro body sargs ctx [] in
+            let ret = lexp_expand_dmacro body sargs ctx [] in
 
             (* convert typer list to ocaml *)
             let decls = tlist2olist [] ret in
@@ -786,7 +798,7 @@ and lexp_decls_macro (loc, mname) sargs ctx: (pdecl list * elab_context) =
 
             (* read as pexp_declaraton *)
             pexp_decls_all decls, ctx)
-  with _ ->
+  with e ->
     fatal loc ("Macro `" ^ mname ^ "`not found")
 
 (*  Parse let declaration *)

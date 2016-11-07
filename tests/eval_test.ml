@@ -337,7 +337,7 @@ let _ = test_eval_eqv_named
 let _ = test_eval_eqv_named
   "Implicit Arguments"
 
-  "default = new-attribute (List Sexp -> Sexp);
+  "default = new-attribute (Int -> Bool);
    attribute Int default (lambda (lst : List Sexp) -> integer_ 1);
 
    fun = lambda (x : Int) =>

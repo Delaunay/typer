@@ -53,6 +53,7 @@ let predef_name = [
     "Bool";
     "Macro";
     "expand_macro_";
+    "expand_dmacro_";
 ]
 
 let default_predef_map : predef_table =
