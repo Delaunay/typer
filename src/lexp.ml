@@ -409,8 +409,6 @@ let rec lexp_unparse lxp =
         | None -> pbranch
         in Pcase (loc, lexp_unparse target, pbranch)
 
-    (* | _ as e -> Pimm (Symbol(lexp_location e, "<")) *)
-
     (* FIXME: The cases below are all broken!  *)
     | Metavar (idx, subst, (loc, name), _)
       -> Pimm (Symbol (loc, "?<" ^ name ^ "-" ^ string_of_int idx ^ ">"))

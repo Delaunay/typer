@@ -412,7 +412,7 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : elab_context) trace: lexp =
             elab_check_sort ctx lasort (Some var) laty;
             laty in
       let arrow = mkArrow (kind, None, arg, Util.dummy_location, body) in
-      match Unif.unify arrow lxp subst with
+      match Unif.unify arrow lxp (ectx_to_lctx ctx) subst with
       | Some subst -> global_substitution := subst; arg, body
       | None       -> lexp_error tloc lxp ("Type " ^ lexp_string lxp
                                           ^ " and "
@@ -453,24 +453,14 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : elab_context) trace: lexp =
 
 and lexp_p_infer_and_check pexp ctx t i =
   let (e, inferred_t) = _lexp_p_infer pexp ctx i in
-  (match e with
-   (* Built-in is a dummy function with no type. We cannot check
-    * Built-in *)
-   | Builtin _ -> ()
-   | _ ->
-      let subst, _ = !global_substitution in
-      match Unif.unify inferred_t t subst with
-      | Some subst -> global_substitution := subst
-      | None
-        -> debug_msg (
-              Debug_fun.do_debug (fun () ->
-                  prerr_endline ("0 pxp " ^ pexp_string pexp);
-                  ());
-              print_string "1 exp "; lexp_print e; print_string "\n";
-              print_string "2 inf "; lexp_print inferred_t; print_string "\n";
-              print_string "3 ann "; lexp_print t; print_string "\n";
-              lexp_warning (pexp_location pexp) e
-                           "Type Mismatch inferred != Annotation"));
+  let subst, _ = !global_substitution in
+  (match Unif.unify inferred_t t (ectx_to_lctx ctx) subst with
+   | Some subst -> global_substitution := subst
+   | None
+     -> lexp_error (pexp_location pexp) e
+                  ("Type mismatch!  Context expected `"
+                   ^ lexp_string t ^ "` but expression has type `"
+                   ^ lexp_string inferred_t ^ "`\n"));
   e
 
 (* Lexp.case can sometimes be inferred, but we prefer to always check.  *)

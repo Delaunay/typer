@@ -171,7 +171,7 @@ let generate_testable (_: lexp list) : ((lexp * lexp * result) list) =
   ::[]
 
 let test_input (lxp1: lexp) (lxp2: lexp) (subst: substitution): unif_res =
-  let res = unify lxp1 lxp2 subst in
+  let res = unify lxp1 lxp2 Myers.nil subst in
   let tmp = match res with
   | Some (s, []) when s = empty_subst -> (Equivalent, res, lxp1, lxp2)
   | Some (_, [])                      -> (Unification, res, lxp1, lxp2)

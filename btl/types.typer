@@ -78,18 +78,23 @@ length = lambda a ≡>
       | nil => 0
       | cons hd tl => (1 + (length (a := a) tl));
 
-head : (a : Type) ≡> List a -> a;
+% ML's typical `head` function is not total, so can't be defined
+% as-is in Typer.  There are several workarounds:
+% - Provide a default value : (a : Type) ≡> List a -> a -> a;
+% - Disallow problem case   : (a : Type) ≡> (l : List a) -> (l != nil) -> a;
+% - Return an Option/Error.
+head : (a : Type) ≡> List a -> Option a;
 head = lambda a ≡>
   lambda xs ->
     case xs
-      | nil => nil
-      | cons hd tl => hd;
+      | nil => None (a := a)
+      | cons hd tl => Some (a := a) hd;
 
 tail : (a : Type) ≡> List a -> List a;
 tail = lambda a ≡>
   lambda xs ->
     case xs
-      | nil => nil
+      | nil => nil (a := a)
       | cons hd tl => tl;
 
 
