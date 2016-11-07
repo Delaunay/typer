@@ -43,6 +43,38 @@ module S = Subst
 let error l m = msg_error "DEBRUIJN" l m; internal_error m
 let warning = msg_warning "DEBRUIJN"
 
+(* Handling scoping/bindings is always tricky.  So it's always important
+ * to keep in mind for *every* expression which is its context.
+ *
+ * In particular, this holds true as well for those expressions that appear
+ * in the context.  Traditionally for dependently typed languages we expect
+ * the context's rules to say something like:
+ *
+ *      ⊢ Γ    Γ ⊢ τ:Type
+ *      —————————————————
+ *          ⊢ Γ,x:τ
+ *
+ * Which means that we expect (τ) expressions in the context to be typed
+ * within the *rest* of that context.
+ *
+ * This also means that when we look up a binding in the context, we need to
+ * adjust the result, since we need to use it in the context where we looked
+ * it up, which is different from the context where it was defined.
+ *
+ * More concretely, this means that lookup(Γ, i) should return an expression
+ * where debruijn indices have been shifted by "i".
+ *
+ * This is nice for "normal bindings", but there's a complication in the
+ * case of recursive definitions.  Typically, this is handled by using
+ * something like a μx.e construct, which works OK for the theory but tends
+ * to become rather inconvenient in practice for mutually recursive
+ * definitions.  So instead, we annotate the recursive binding with
+ * a "recursion_offset" (of type `db_offset`) to say that rather than being
+ * defined in "the rest of the context", they're defined in a slightly larger
+ * context that includes "younger" bindings.
+ *)
+
+
 (*  Type definitions
  * ---------------------------------- *)
 
@@ -59,10 +91,9 @@ type property_elem = lexp PropertyMap.t
 type property_env = property_elem PropertyMap.t
 
 (* easier to debug with type annotations *)
-type env_elem = (int * vdef option * varbind * ltype)
+type env_elem = (db_offset * vdef option * varbind * ltype)
 type lexp_context = env_elem M.myers
 
-type db_idx  = int (* DeBruijn index.  *)
 type db_ridx = int (* DeBruijn reverse index (i.e. counting from the root).  *)
 
 (*  Map matching variable name and its distance in the current scope *)
