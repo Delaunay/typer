@@ -87,14 +87,6 @@ let rec lexp_defs_subst l s defs = match defs with
  * call-by-name behavior.  *)
 let lexp_whnf e (ctx : DB.lexp_context) meta_ctx : lexp =
   let rec lexp_whnf e (ctx : DB.lexp_context) : lexp =
-  Debug_fun.do_debug (fun () ->
-      prerr_endline ("[StackTrace] ------------------------------------------");
-      prerr_endline ("[StackTrace] let lexp_whnf e ctx meta_ctx");
-      prerr_endline ("[StackTrace] e        = " ^ lexp_string e);
-      prerr_endline ("[StackTrace] ctx      = ???");
-      prerr_endline ("[StackTrace] meta_ctx = ???");
-      prerr_endline ("[StackTrace] ------------------------------------------");
-      ());
   match e with
   | Var v -> (match lookup_value ctx v with
              | None -> e

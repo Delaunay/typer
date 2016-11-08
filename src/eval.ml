@@ -245,14 +245,6 @@ let write_impl loc depth args_val ctx =
 (* This is an internal definition
  * 'i' is the recursion depth used to print the call trace *)
 let rec _eval lxp (ctx : Env.runtime_env) (trace : eval_debug_info): (value_type) =
-  Debug_fun.do_debug (fun () ->
-      prerr_endline ("[StackTrace] ------------------------------------------");
-      prerr_endline ("[StackTrace] let rec _eval lxp ctx i");
-      prerr_endline ("[StackTrace] lxp = " ^ Elexp.elexp_string lxp);
-      prerr_endline ("[StackTrace] ctx = ???");
-      (* prerr_endline ("[StackTrace] i   = " ^ (string_of_int trace)); *)
-      prerr_endline ("[StackTrace] ------------------------------------------");
-    ());
 
     let trace = append_eval_trace trace lxp in
     let tloc = elexp_location lxp in
@@ -305,19 +297,6 @@ and get_predef_eval name ctx =
 
 and eval_var ctx lxp v =
     let ((loc, name), idx) = v in
-  Debug_fun.do_debug (fun () ->
-      prerr_endline ("[StackTrace] ------------------------------------------");
-      prerr_endline ("[StackTrace] let eval_var ctx lxp v");
-      prerr_endline ("[StackTrace] lxp = " ^ Elexp.elexp_string lxp);
-      prerr_endline ("[StackTrace] ctx = ???");
-      prerr_endline ("[StackTrace] v   = ((?loc?, " ^ name ^ "), " ^ (string_of_int idx) ^ ")");
-      prerr_endline ("[StackTrace] ------------------------------------------");
-    ());
-    Debug_fun.do_debug (fun () ->
-        prerr_endline ("index not shifted " ^ (string_of_int idx));
-        prerr_endline ("ctx size          " ^ (string_of_int (get_rte_size ctx)));
-        ()
-      );
     try get_rte_variable (Some name) (idx) ctx
     with e ->
       elexp_fatal loc lxp
@@ -606,13 +585,6 @@ and print_eval_trace trace =
 let eval lxp ctx = _eval lxp ctx ([], [])
 
 let debug_eval lxp ctx =
-  Debug_fun.do_debug (fun () ->
-      prerr_endline ("[StackTrace] ------------------------------------------");
-      prerr_endline ("[StackTrace] let debug_eval lxps rctx silent");
-      prerr_endline ("[StackTrace] lxp = " ^ Elexp.elexp_string lxp);
-      prerr_endline ("[StackTrace] ctx = ???");
-      prerr_endline ("[StackTrace] ------------------------------------------");
-    ());
     try eval lxp ctx
     with e -> (
         print_rte_ctx (!_global_eval_ctx);
@@ -629,14 +601,6 @@ let eval_decls_toplevel (decls: (vdef * elexp) list list) ctx =
 
 (*  Eval a list of lexp *)
 let eval_all lxps rctx silent =
-  Debug_fun.do_debug (fun () ->
-      prerr_endline ("[StackTrace] ------------------------------------------");
-      prerr_endline ("[StackTrace] let eval_all lxps rctx silent");
-      prerr_endline ("[StackTrace] lxps = ???");
-      prerr_endline ("[StackTrace] rctx = ???");
-      prerr_endline ("[StackTrace] silent = " ^ string_of_bool silent);
-      prerr_endline ("[StackTrace] ------------------------------------------");
-    ());
     let evalfun = if silent then eval else debug_eval in
     List.map (fun g -> evalfun g rctx) lxps
 

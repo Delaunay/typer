@@ -50,7 +50,7 @@ let string_sub str b e = String.sub str b (e - b)
 
 let inc_cp (cp:charpos) (c:char) =
   (* Count char positions in utf-8: don't count the non-leading bytes.  *)
-  if (Char.code c < 128 || Char.code c >= 192) then cp+1 else cp
+  if utf8_head_p c then cp+1 else cp
 
 let rec prelex (file : string) (getline : unit -> string) ln ctx acc
     : pretoken list =

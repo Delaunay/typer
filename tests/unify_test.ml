@@ -17,8 +17,6 @@ open Str
 
 open Debug
 
-open Debug_fun
-
 type result =
   | Constraint
   | Unification
@@ -48,13 +46,13 @@ let fmt (lst: (lexp * lexp * result * result) list): string list =
       (fun (l1, l2, r1, r2) -> ((lexp_string l1), (lexp_string l2), (string_of_result r1), (string_of_result r2)))
       lst
   in let l, c1, c2, r = max_dim str_lst
-  in List.map (fun (l1, l2, r1, r2) -> (Fmt_lexp.padding_right l1 l ' ')
+  in List.map (fun (l1, l2, r1, r2) -> (U.padding_right l1 l ' ')
                                        ^ ", "
-                                       ^ (Fmt_lexp.padding_right l2 c1 ' ')
+                                       ^ (U.padding_right l2 c1 ' ')
                                        ^ " -> got: "
-                                       ^ (Fmt_lexp.padding_right r2 r ' ')
+                                       ^ (U.padding_right r2 r ' ')
                                        ^ " expected: "
-                                       ^ (Fmt_lexp.padding_right r1 c2 ' ')
+                                       ^ (U.padding_right r1 c2 ' ')
               ) str_lst
 
 (* Inputs for the test *)

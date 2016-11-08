@@ -211,15 +211,6 @@ let newMetalevel () =
 let newMetatype () = newMetavar (newMetalevel ())
 
 let rec _lexp_p_infer (p : pexp) (ctx : elab_context) trace: lexp * ltype =
-  Debug_fun.do_debug (fun () ->
-      prerr_endline ("[StackTrace] ------------------------------------------");
-      prerr_endline ("[StackTrace] let _lexp_p_infer p ctx i");
-      prerr_endline ("[StackTrace] p        = " ^ pexp_string p);
-      prerr_endline ("[StackTrace] ctx      = ???");
-      (* prerr_endline ("[StackTrace] i        = " ^ string_of_int trace); *)
-      (* prerr_endline (Printexc.raw_backtrace_to_string (Printexc.get_callstack 20)); *)
-      prerr_endline ("[StackTrace] ------------------------------------------");
-      ());
 
     let trace = ((OL.Pexp p)::trace) in
     let tloc = pexp_location p in
@@ -382,15 +373,6 @@ and lexp_let_decls declss (body: lexp) ctx i =
 and _lexp_p_check (p : pexp) (t : ltype) (ctx : elab_context) trace: lexp =
 
     let trace = ((OL.Pexp p)::trace) in
-  Debug_fun.do_debug (fun () ->
-      prerr_endline ("[StackTrace] ------------------------------------------");
-      prerr_endline ("[StackTrace] let _lexp_p_check p t ctx i");
-      prerr_endline ("[StackTrace] p        = " ^ pexp_string p);
-      prerr_endline ("[StackTrace] t        = " ^ lexp_string t);
-      prerr_endline ("[StackTrace] ctx      = ???");
-      (* prerr_endline ("[StackTrace] i        = " ^ string_of_int trace); *)
-      prerr_endline ("[StackTrace] ------------------------------------------");
-      ());
     let tloc = pexp_location p
     in
     let lexp_infer p ctx = _lexp_p_infer p ctx trace in
@@ -597,15 +579,6 @@ and lexp_case rtype (loc, target, ppatterns) ctx i =
 
 (*  Identify Call Type and return processed call *)
 and lexp_call (func: pexp) (sargs: sexp list) ctx i =
-  Debug_fun.do_debug (fun () ->
-      prerr_endline ("[StackTrace] ------------------------------------------");
-      prerr_endline ("[StackTrace] let lexp_call func sargs ctx i");
-      prerr_endline ("[StackTrace] func     = " ^ pexp_string func);
-      prerr_endline ("[StackTrace] sargs    = ???");
-      prerr_endline ("[StackTrace] ctx      = ???");
-      (* prerr_endline ("[StackTrace] i        = " ^ string_of_int trace); *)
-      prerr_endline ("[StackTrace] ------------------------------------------");
-      ());
     let loc = pexp_location func in
     let meta_ctx, _ = !global_substitution in
 
@@ -622,12 +595,6 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
     let ltp = nosusp ltp in
 
     let rec handle_fun_args largs sargs ltp =
-    Debug_fun.do_debug (fun () ->
-        print_endline ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>";
-        print_lexp_ctx (ectx_to_lctx ctx);
-        flush stdout;
-        prerr_endline "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<";
-        print_newline ();(););
       match sargs with
       | [] -> largs, ltp
       | (Node (Symbol (_, "_:=_"), [Symbol (_, aname); sarg])) :: sargs
@@ -810,14 +777,6 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
 
 (*  Parse inductive type definition.  *)
 and lexp_parse_inductive ctors ctx i =
-  Debug_fun.do_debug (fun () ->
-      prerr_endline ("[StackTrace] ------------------------------------------");
-      prerr_endline ("[StackTrace] let lexp_parse_inductive ctors ctx i");
-      prerr_endline ("[StackTrace] ctors    = ???");
-      prerr_endline ("[StackTrace] ctx      = ???");
-      (* prerr_endline ("[StackTrace] i        = " ^ string_of_int trace); *)
-      prerr_endline ("[StackTrace] ------------------------------------------");
-      ());
     let lexp_parse p ctx = _lexp_p_infer p ctx i in
 
     let make_args (args:(arg_kind * pvar option * pexp) list) ctx
@@ -1129,15 +1088,6 @@ let lexp_decl_str str lctx =
 (* Because we cant include lparse in eval.ml *)
 
 let _eval_expr_str str lctx rctx silent =
-  Debug_fun.do_debug (fun () ->
-      prerr_endline ("[StackTrace] ------------------------------------------");
-      prerr_endline ("[StackTrace] let _eval_expr_str str lctx rctx silent");
-      prerr_endline ("[StackTrace] str = " ^ str);
-      prerr_endline ("[StackTrace] lctx = ???");
-      prerr_endline ("[StackTrace] rctx = ???");
-      prerr_endline ("[StackTrace] silent = " ^ string_of_bool silent);
-      prerr_endline ("[StackTrace] ------------------------------------------");
-    ());
     let lxps = lexp_expr_str str lctx in
     let elxps = List.map OL.erase_type lxps in
         (eval_all elxps rctx silent)

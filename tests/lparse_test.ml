@@ -1,6 +1,5 @@
 
 open Lparse
-open Fmt_lexp
 open Utest_lib
 
 open Pexp
@@ -25,7 +24,7 @@ let generate_tests (name: string)
   in List.map (fun (sub, res) ->
       idx := !idx + 1;
       add_test name
-        ((padding_left (string_of_int (!idx)) 2 '0') ^ " - " ^ sub)
+        ((U.padding_left (string_of_int (!idx)) 2 '0') ^ " - " ^ sub)
         (fun () -> if res then success () else failure ()))
     (test input_gen fmt tester)
 

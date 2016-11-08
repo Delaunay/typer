@@ -17,9 +17,6 @@ open Str
 
 open Debug
 
-open Fmt_lexp
-open Debug_fun
-
 let mkShift2 shift subst =
   S.mkShift subst shift
 
@@ -92,7 +89,7 @@ let generate_tests (name: string)
   in List.map (fun (sub, res) ->
       idx := !idx + 1;
       add_test name
-        ((padding_left (string_of_int (!idx)) 2 '0') ^ " - " ^ sub)
+        ((U.padding_left (string_of_int (!idx)) 2 '0') ^ " - " ^ sub)
         (fun () -> if res then success () else failure ()))
     (test input_gen fmt tester)
 
@@ -107,10 +104,10 @@ let get_dim lst =
 
 let fmt_res str =
   let (ds, ds', dcomp) = get_dim str
-  in List.map (fun (s, s', com) -> (padding_right s ds ' ') ^ " -> " ^
-                                   (padding_right s' ds' ' ') ^ " = " ^
-                                   (com)
-              ) str
+  in List.map (fun (s, s', com) -> (U.padding_right s ds ' ') ^ " -> "
+                                ^ (U.padding_right s' ds' ' ') ^ " = "
+                                ^ com)
+              str
 
 let get_dim lst =
   let max i s = max i (String.length s)
