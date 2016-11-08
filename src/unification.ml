@@ -114,16 +114,16 @@ and unify' (e1: lexp) (e2: lexp)
        | (Var _, Var _) |  (Inductive _, Inductive _))
       -> if OL.conv_p subst ctx e1' e2' then Some (subst, []) else None
     | (l, (Metavar _ as r)) -> _unify_metavar  r l subst
-    | (l, (Call _ as r))    -> _unify_call     r l ctx vs subst
+    | (l, (Call _ as r))    -> _unify_call     r l ctx vs' subst
     (* | (l, (Case _ as r))    -> _unify_case     r l subst *)
-    | (Arrow _ as l, r)     -> _unify_arrow    l r ctx vs subst
-    | (Lambda _ as l, r)    -> _unify_lambda   l r ctx vs subst
+    | (Arrow _ as l, r)     -> _unify_arrow    l r ctx vs' subst
+    | (Lambda _ as l, r)    -> _unify_lambda   l r ctx vs' subst
     | (Metavar _ as l, r)   -> _unify_metavar  l r subst
-    | (Call _ as l, r)      -> _unify_call     l r ctx vs subst
+    | (Call _ as l, r)      -> _unify_call     l r ctx vs' subst
     (* | (Case _ as l, r)      -> _unify_case     l r subst *)
     (* | (Inductive _ as l, r) -> _unify_induct   l r subst *)
-    | (Sort _ as l, r)      -> _unify_sort     l r ctx vs subst
-    | (SortLevel _ as l, r) -> _unify_sortlvl  l r ctx vs subst
+    | (Sort _ as l, r)      -> _unify_sort     l r ctx vs' subst
+    | (SortLevel _ as l, r) -> _unify_sortlvl  l r ctx vs' subst
     | _ -> Some (subst, [(e1, e2)])
 
 (********************************* Type specific unify *******************************)

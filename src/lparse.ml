@@ -370,8 +370,6 @@ let rec _lexp_p_infer (p : pexp) (ctx : elab_context) trace: lexp * ltype =
          let lxp = _lexp_p_check p t ctx trace in
          (lxp, t)
 
-    | _ -> pexp_fatal tloc p "Unhandled Pexp"
-
 and lexp_type_infer pexp ectx var trace =
   let t, s = _lexp_p_infer pexp ectx trace in
   elab_check_sort ectx s var t;
@@ -422,7 +420,7 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : elab_context) trace: lexp =
       (* Check argument type annotation, if any.  *)
       let def_arg_type = match def_arg_type with
         | Some def_arg_type
-          -> let def_arg_type, lasort = _lexp_p_infer def_arg_type ctx trace in
+          -> let def_arg_type, lasort = lexp_infer def_arg_type ctx in
             elab_check_sort ctx lasort (Some var) def_arg_type;
             Some def_arg_type
         | _ -> None in
@@ -435,7 +433,7 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : elab_context) trace: lexp =
           -> (match def_arg_type with
              | None -> ()
              | Some def_arg_type
-               -> if not (OL.conv_p (ectx_to_lctx ctx) def_arg_type ltp) then
+               -> if not (OL.conv_p meta_ctx (ectx_to_lctx ctx) def_arg_type ltp) then
                    lexp_error (lexp_location def_arg_type) def_arg_type
                               ("Type mismatch!  Context expected `"
                                ^ lexp_string ltp ^ "`\n"));
@@ -688,18 +686,19 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
           dlxp, dltype)
 
       | e ->
-        (*  Process Arguments *)
+        (*  Process Arguments.  *)
 
-        (* Extract correct ordering aargs: all args and eargs: explicit args*)
+        (* Extract correct ordering aargs: all args and eargs: explicit args.  *)
+        let meta_ctx, _ = !global_substitution in
         let rec extract_order ltp aargs eargs =
-          match OL.lexp_whnf ltp (ectx_to_lctx ctx) with
+          match OL.lexp_whnf ltp (ectx_to_lctx ctx) meta_ctx with
             | Arrow (kind, Some (_, varname), ltp, _, ret) ->
                 extract_order ret ((kind, varname, ltp)::aargs)
                   (if kind = Aexplicit then (varname::eargs) else eargs)
 
             | e -> (List.rev aargs), List.rev eargs in
 
-        (* first list has all the arguments, second only holds explicit arguments *)
+        (* First list has all the arguments, second only holds explicit arguments.  *)
         let order, eorder = extract_order ltp [] [] in
 
         (*
@@ -710,7 +709,7 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
         print_string "\n";*)
 
 
-        (* from arg order build a dictionnary that will hold the defined args *)
+        (* from arg order build a dictionnary that will hold the defined args.  *)
         let args_dict = List.fold_left
           (fun map (kind, key, _) -> SMap.add key (kind, None) map) SMap.empty order in
 
@@ -733,34 +732,34 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
                 (args_dict, eorder) sargs in
 
 
-        (* Generate an argument list with the correct order *)
+        (* Generate an argument list with the correct order.  *)
         let sargs2 = List.map (fun (_, name, ltp) ->
           try match SMap.find name args_dict with
             | Aimplicit, (Some sexp) -> Node (Symbol (dloc, "_:=_"), [Symbol (dloc, name); sexp])
             | Aerasable,  Some sexp  -> Node (Symbol (dloc, "_:=_"), [Symbol (dloc, name); sexp])
             | Aexplicit, (Some sexp) -> sexp
             | Aexplicit, None        -> fatal dloc "Explicit argument expected"
-            | Aimplicit, None        -> (
-                (* get variable info *)
-                let vidx, vname = match ltp with
-                  | Var ((_, name), idx) -> idx, name
-                  | _ -> lexp_fatal loc ltp "Unable to find default attribute" in
+            | (Aimplicit | Aerasable), None
+              -> (* get variable info *)
+               let vidx, vname = match ltp with
+                 | Var ((_, name), idx) -> idx, name
+                 | _ -> lexp_fatal loc ltp "Unable to find default attribute" in
 
-                (* get default property *)
-                let pidx, pname = (senv_lookup "default" ctx), "default" in
+               (* get default property *)
+               let pidx, pname = (senv_lookup "default" ctx), "default" in
 
-                (* get macro *)
-                let default_macro = try get_property ctx (vidx, vname) (pidx, pname)
-                  with _ -> dump_properties ctx; dltype in
+               (* get macro *)
+               let default_macro = try get_property ctx (vidx, vname) (pidx, pname)
+                                   with _ -> dump_properties ctx; dltype in
 
-                lexp_print default_macro;
+               lexp_print default_macro;
 
-                print_string ((lexp_name ltp) ^ ": ");
-                lexp_print ltp; print_string "\n";
-                fatal dloc "Default Arg lookup not implemented")
+               print_string ((lexp_name ltp) ^ ": ");
+               lexp_print ltp; print_string "\n";
+               fatal dloc "Default Arg lookup not implemented"
 
 
-            with Not_found -> fatal dloc (name ^ " not found")
+          with Not_found -> fatal dloc (name ^ " not found")
           ) order in
 
         (*
