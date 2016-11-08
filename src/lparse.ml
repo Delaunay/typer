@@ -359,24 +359,25 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : elab_context) trace: lexp =
 
     match p with
     (* This case cannot be inferred *)
-    | Plambda (kind, var, obtype, body)
+    | Plambda (kind, var, def_arg_type, body)
       -> (* Read var type from the provided type *)
-       let latp, lbtp = match OL.lexp_whnf t (ectx_to_lctx ctx) with
+       let given_arg_type, given_body_type = match OL.lexp_whnf t (ectx_to_lctx ctx) with
          | Arrow(kind, _, ltp, _, lbtp) -> ltp, lbtp
          | expr ->
             lexp_fatal tloc expr "Expected Type Arrow ( _ -> _ )" in
 
-       let _ = match obtype with
-         | Some btype
-           -> let body_type, lasort = _lexp_p_infer btype ctx trace in
-             elab_check_sort ctx lasort (Some var) body_type;
-             () (* FIXME: Check `conv_p aty ltp`!  *)
+       (* Check argument type *)
+       let _ = match def_arg_type with
+         | Some def_arg_type
+           -> let def_arg_type, lasort = _lexp_p_infer def_arg_type ctx trace in
+             elab_check_sort ctx lasort (Some var) def_arg_type;
+             () (* FIXME: Check `conv_p def_arg_type given_arg_type`!  *)
          | _ -> () in
 
        let nctx = env_extend ctx var Variable latp in
-       let lbody = lexp_check body lbtp nctx in
+       let lbody = lexp_check body given_body_type nctx in
 
-       mkLambda(kind, var, latp, lbody)
+       mkLambda(kind, var, given_arg_type, lbody)
 
     (* This is mostly for the case where no branches are provided *)
     | Pcase (loc, target, branches)
@@ -587,9 +588,9 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
       | _ ->
         (*  Process Arguments *)
 
-        (* Extract correct ordering *)
+        (* Extract correct ordering aargs: all args and eargs: explicit args*)
         let rec extract_order ltp aargs eargs =
-          match nosusp ltp with
+          match OL.lexp_whnf ltp (ectx_to_lctx ctx) with
             | Arrow (kind, Some (_, varname), ltp, _, ret) ->
                 extract_order ret ((kind, varname, ltp)::aargs)
                   (if kind = Aexplicit then (varname::eargs) else eargs)
