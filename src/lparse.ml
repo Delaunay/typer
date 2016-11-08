@@ -374,7 +374,7 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : elab_context) trace: lexp =
              () (* FIXME: Check `conv_p def_arg_type given_arg_type`!  *)
          | _ -> () in
 
-       let nctx = env_extend ctx var Variable latp in
+       let nctx = env_extend ctx var Variable given_arg_type in
        let lbody = lexp_check body given_body_type nctx in
 
        mkLambda(kind, var, given_arg_type, lbody)
@@ -589,16 +589,16 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
         (*  Process Arguments *)
 
         (* Extract correct ordering aargs: all args and eargs: explicit args*)
-        let rec extract_order ltp aargs eargs =
-          match OL.lexp_whnf ltp (ectx_to_lctx ctx) with
+        let rec extract_order ltp aargs eargs nctx =
+          match OL.lexp_whnf ltp nctx with
             | Arrow (kind, Some (_, varname), ltp, _, ret) ->
                 extract_order ret ((kind, varname, ltp)::aargs)
-                  (if kind = Aexplicit then (varname::eargs) else eargs)
+                  (if kind = Aexplicit then (varname::eargs) else eargs) (lctx_extend nctx None (ForwardRef) ltp)
 
             | e -> (List.rev aargs), List.rev eargs in
 
         (* first list has all the arguments, second only holds explicit arguments *)
-        let order, eorder = extract_order ltp [] [] in
+        let order, eorder = extract_order ltp [] [] (ectx_to_lctx ctx) in
 
         (*)
         print_string "Type :"; lexp_print ltp; print_string "\n";
