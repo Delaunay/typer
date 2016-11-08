@@ -19,6 +19,12 @@ more details.
 You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.  *)
 
+(* FIXME: Needs occurs-check.
+ * Also needs to add a notion of scope-level, as described in
+ * http://okmij.org/ftp/ML/generalization.html (aka ranks in
+ * ftp://ftp.inria.fr/INRIA/Projects/cristal/Didier.Remy/eq-theory-on-types.ps.gz)
+ *)
+
 open Lexp
 (* open Sexp *)
 (* open Inverse_subst *)
@@ -51,25 +57,6 @@ let find_or_none (value: lexp) (map: substitution) : lexp option =
       then Some (VMap.find idx map)
       else None
   | _ -> None
-
-(** Zip while applying a function, returns <code>None</code> list if l1 & l2 have different size*)
-let zip_map (l1: 'a list ) (l2: 'b list ) (f: ('a -> 'b -> 'c)): 'c list option =
-  let rec zip_ ll1 ll2 f =
-    match ll1, ll2 with
-    | (h1::t1, h2::t2) -> (f h1 h2)::(zip_ t1 t2 f)
-    | ([], []) -> []
-    | _, _ -> [] (* Should never happen since we check length before actually calling the recursion but without this case, the compiler complains*)
-  in if List.length l1 = List.length l2 then Some (zip_ l1 l2 f) else None
-
-(** Custom zip (<i>List.combine</i>), return a list of couple if the two list have the same size,
-return <code>None</code> if not*)
-let zip (l1: 'a list) (l2: 'b list): (('a * 'b) list option) = zip_map l1 l2 (fun x z -> (x, z))
-
-(** Fold the two lists, and zip the result *)
-let zip_fold list1 list2 f =
-  let l1 = List.fold_right (f) list1 []
-  and l2 = List.fold_right (f) list2 []
-  in zip l1 l2
 
 (**
  lexp is equivalent to _ in ocaml
@@ -124,7 +111,8 @@ and unify' (e1: lexp) (e2: lexp)
     (* | (Inductive _ as l, r) -> _unify_induct   l r subst *)
     | (Sort _ as l, r)      -> _unify_sort     l r ctx vs' subst
     | (SortLevel _ as l, r) -> _unify_sortlvl  l r ctx vs' subst
-    | _ -> Some (subst, [(e1, e2)])
+    | _ -> Some (subst,
+                if OL.conv_p subst ctx e1' e2' then [] else [(e1, e2)])
 
 (********************************* Type specific unify *******************************)
 
@@ -367,32 +355,4 @@ and is_same arglist arglist2 =
  *        | None -> None)
  *     | _, _ -> None
  *   in test l1 l2 subst *)
-
-(***** general *****)
-
-(** take two list [(vdef * ltype * lexp), (vdef2 * ltype2 * lexp2)...]
-    map them to [ltype, lexp, ltype2, lexp2, ...]
-    and zip them to
-    [(ltype * ltype), (lexp * lexp), (ltype2 * ltype2), (lexp2 * lexp2), ...]
-*)
-(* and _unify_inner (lxp_l: (lexp * lexp) list) ctx vs (subst: substitution) : return_type =
- *   let merge ((s, c): (substitution * constraints))
- *       (lxp_list: (lexp * lexp) list) : return_type =
- *     match _unify_inner lxp_list ctx vs s with
- *     (\*| None -> Some (s, c)*\)
- *     | None -> None
- *     | Some (s_,c_) -> Some (s_, c@c_)
- *   in
- *   let tmp = match lxp_l with
- *   | (lxp1, lxp2)::tail -> ( match unify lxp1 lxp2 ctx vs subst with
- *       | Some (s, c) -> merge (s, c) tail
- *       | None -> None)
- *   | [] -> Some (subst, [])
- *   in match tmp with
- *   | None -> ( match lxp_l with
- *       | []          -> tmp
- *       | (l1, l2)::_ -> tmp )
- *   | Some _ -> ( match lxp_l with
- *       | []          -> tmp
- *       | (l1, l2)::_ -> tmp ) *)
 
