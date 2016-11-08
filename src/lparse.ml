@@ -371,7 +371,10 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : elab_context) trace: lexp =
          | Some def_arg_type
            -> let def_arg_type, lasort = _lexp_p_infer def_arg_type ctx trace in
              elab_check_sort ctx lasort (Some var) def_arg_type;
-             () (* FIXME: Check `conv_p def_arg_type given_arg_type`!  *)
+          if not (OL.conv_p (ectx_to_lctx ctx) def_arg_type given_arg_type) then
+            lexp_error (lexp_location def_arg_type) def_arg_type
+                       ("Type mismatch!  Context expected `"
+                        ^ lexp_string given_arg_type ^ "`\n")
          | _ -> () in
 
        let nctx = env_extend ctx var Variable given_arg_type in
@@ -600,7 +603,7 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
         (* first list has all the arguments, second only holds explicit arguments *)
         let order, eorder = extract_order ltp [] [] (ectx_to_lctx ctx) in
 
-        (*)
+        (*
         print_string "Type :"; lexp_print ltp; print_string "\n";
         print_string "Order:"; List.iter (fun (_, b, _) -> print_string (b ^ " ")) (order); print_string "\n";
         print_string "Sarg1: ";
