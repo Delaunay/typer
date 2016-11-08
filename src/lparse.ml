@@ -690,16 +690,16 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
 
         (* Extract correct ordering aargs: all args and eargs: explicit args.  *)
         let meta_ctx, _ = !global_substitution in
-        let rec extract_order ltp aargs eargs =
-          match OL.lexp_whnf ltp (ectx_to_lctx ctx) meta_ctx with
+        let rec extract_order ltp aargs eargs nctx =
+          match OL.lexp_whnf ltp nctx meta_ctx with
             | Arrow (kind, Some (_, varname), ltp, _, ret) ->
                 extract_order ret ((kind, varname, ltp)::aargs)
-                  (if kind = Aexplicit then (varname::eargs) else eargs)
+                  (if kind = Aexplicit then (varname::eargs) else eargs) (lctx_extend nctx None (ForwardRef) ltp)
 
             | e -> (List.rev aargs), List.rev eargs in
 
         (* First list has all the arguments, second only holds explicit arguments.  *)
-        let order, eorder = extract_order ltp [] [] in
+        let order, eorder = extract_order ltp [] [] (ectx_to_lctx ctx) in
 
         (*
         print_string "Type :"; lexp_print ltp; print_string "\n";
