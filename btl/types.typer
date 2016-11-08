@@ -109,12 +109,20 @@ node_    = Built-in "node_"    (Sexp -> List Sexp -> Sexp);
 integer_ = Built-in "integer_" (Int       -> Sexp);
 float_   = Built-in "float_"   (Float     -> Sexp);
 
-Macro  = inductive_ (Macro) (Macro_ (List Sexp -> Sexp));
+Macro  = inductive_ (Macro)
+  (Macro_ (List Sexp -> Sexp))
+  (DMacro_ (List Sexp -> List Sexp));
+
 Macro_ = inductive-cons Macro Macro_ ;
+DMacro_ = inductive-cons Macro DMacro_ ;
 
 expand_macro_ : Macro -> List Sexp -> Sexp;
 expand_macro_ m args = case m
   | Macro_ f => (f args);
+
+expand_dmacro_ : Macro -> List Sexp -> List Sexp;
+expand_dmacro_ m args = case m
+  | DMacro_ f => (f args);
 
 sexp_dispatch_ = Built-in "sexp_dispatch_" (
                               (a : Type) ≡>
@@ -174,13 +182,12 @@ read  = Built-in "read"  (FileHandle -> Int -> IO String);
 % -----------------------------------------------------
 
 Attribute = Built-in "Attribute";
-new-attribute = Built-in "new-attribute" (Macro);
+new-attribute = Built-in "new-attribute" Macro;
+get-attribute = Built-in "get-attribute" Macro;
+has-attribute = Built-in "has-attribute" Macro;
 
 add-attribute = Built-in "add-attribute" (List Sexp -> Sexp);
 attribute = Macro_ add-attribute;
-
-get-attribute = Built-in "get-attribute" Macro;
-has-attribute = Built-in "has-attribute" (Macro);
 
 % -----------------------------------------------------
 %       Context Accessors
@@ -189,8 +196,6 @@ has-attribute = Built-in "has-attribute" (Macro);
 %% FIXME: These should be functions!
 decltype = Built-in "decltype" Macro;
 declexpr = Built-in "declexpr" Macro;
-
-
 
 
 

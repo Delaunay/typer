@@ -33,7 +33,7 @@ open Lparse     (* add_def       *)
 
 open Builtin
 
-(* default environment *)
+(* default environment * )
 let lctx = default_lctx
 
 
@@ -67,7 +67,7 @@ let _ = (add_test "LEXP" "lexp_print" (fun () ->
     let str2 = to_str ret2 in
 
     if str1 = str2 then success () else failure ()
-))
+)) *)
 
 (*
 let set_to_list s =

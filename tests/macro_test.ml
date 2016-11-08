@@ -47,9 +47,9 @@ let _ = (add_test "MACROS" "macros base" (fun () ->
     (* define 'lambda x -> x * x' using macros *)
     let dcode = "
     my_fun = lambda (x : List Sexp) ->
-        let hd = case x
+        let hd = (case x
           | cons hd tl => hd
-          | nil => symbol_ \"x\" in
+          | nil => symbol_ \"x\") : Sexp in
             (node_ (symbol_ \"_*_\")
               (cons (a := Sexp) hd
               (cons (a := Sexp) hd (nil (a := Sexp)))));
@@ -77,7 +77,7 @@ let _ = (add_test "MACROS" "macros decls" (fun () ->
        (cons(a := Sexp) (node_ (symbol_ \"_=_\")
         (cons(a := Sexp) (symbol_ \"b\") (cons(a := Sexp) (integer_ 2) (nil(a := Sexp))))) (nil(a := Sexp)));
 
-      my-decls = Macro_ decls-impl;
+      my-decls = DMacro_ decls-impl;
 
       my-decls Nat;" in
 
