@@ -1,3 +1,26 @@
+(* lparse_test.ml --- 
+ *
+ *      Copyright (C) 2016  Free Software Foundation, Inc.
+ *
+ *   Author: Vincent Bonnevalle <tiv.crb@gmail.com>
+ *
+ *   This file is part of Typer.
+ *
+ *   Typer is free software; you can redistribute it and/or modify it under the
+ *   terms of the GNU General Public License as published by the Free Software
+ *   Foundation, either version 3 of the License, or (at your option) any
+ *   later version.
+ *
+ *   Typer is distributed in the hope that it will be useful, but WITHOUT ANY
+ *   WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ *   FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ *   more details.
+ *
+ *   You should have received a copy of the GNU General Public License along
+ *   with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ * -------------------------------------------------------------------------- *)
+
 
 open Lparse
 open Utest_lib
@@ -46,39 +69,39 @@ let _ = generate_tests
     (fun x -> (x, true))
 
 let lctx = default_lctx
-let _ = (add_test "TYPECHEK_LEXP" "lexp_print" (fun () ->
-
-    let dcode = "
-        sqr = lambda (x) -> x * x;
-        cube = lambda (x) -> x * (sqr x);
-
-        mult = lambda (x) -> lambda (y) -> x * y;
-
-        twice = (mult 2);
-
-        let_fun = lambda (x) ->
-            let a = (twice x); b = (mult 2 x); in
-                a + b;" in
-
-    let ret1, _ = lexp_decl_str dcode lctx in
-
-    let to_str decls =
-        let str = _lexp_str_decls (!compact_ppctx) (List.flatten ret1) in
-            List.fold_left (fun str lxp -> str ^ lxp) "" str in
-
-    (* Cast to string *)
-    let str1 = to_str ret1 in
-
-    print_string str1;
-
-    (* read code again *)
-    let ret2, _ = lexp_decl_str str1 lctx in
-
-    (* Cast to string *)
-    let str2 = to_str ret2 in
-
-    if str1 = str2 then success () else failure ()
-))
+(* let _ = (add_test "TYPECHEK_LEXP" "lexp_print" (fun () ->
+ * 
+ *     let dcode = "
+ *         sqr = lambda (x) -> x * x;
+ *         cube = lambda (x) -> x * (sqr x);
+ * 
+ *         mult = lambda (x) -> lambda (y) -> x * y;
+ * 
+ *         twice = (mult 2);
+ * 
+ *         let_fun = lambda (x) ->
+ *             let a = (twice x); b = (mult 2 x); in
+ *                 a + b;" in
+ * 
+ *     let ret1, _ = lexp_decl_str dcode lctx in
+ * 
+ *     let to_str decls =
+ *         let str = _lexp_str_decls (!compact_ppctx) (List.flatten ret1) in
+ *             List.fold_left (fun str lxp -> str ^ lxp) "" str in
+ * 
+ *     (\* Cast to string *\)
+ *     let str1 = to_str ret1 in
+ * 
+ *     print_string str1;
+ * 
+ *     (\* read code again *\)
+ *     let ret2, _ = lexp_decl_str str1 lctx in
+ * 
+ *     (\* Cast to string *\)
+ *     let str2 = to_str ret2 in
+ * 
+ *     if str1 = str2 then success () else failure ()
+ * )) *)
 
 (*
 let set_to_list s =
