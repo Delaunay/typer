@@ -182,16 +182,16 @@ let for_all_tests sk tmap tk =
     if (must_run_title tk) then (
     let tv = StringMap.find tk tmap in
     flush stdout;
-    (* try *)
+    try
         let r = tv () in
             if r = 0 then(
                 ut_string2 (green ^ "[     OK] " ^ sk ^ " - " ^ tk ^ "\n" ^ reset))
             else(
                 ut_string2 (red ^ "[   FAIL] " ^ sk ^ " - " ^ tk ^ "\n" ^ reset);
                 _ret_code := failure ())
-    (* with e ->
-     *     _ret_code := failure ();
-     *     unexpected_throw sk tk e *)) else ()
+    with e ->
+        _ret_code := failure ();
+        unexpected_throw sk tk e) else ()
 
 let for_all_sections sk =
     let tmap, tst = StringMap.find sk (!_global_sections) in
