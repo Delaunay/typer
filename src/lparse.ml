@@ -109,7 +109,8 @@ let elab_check_sort (ctx : elab_context) lsort var ltp =
                         ^ typestr)
 
 let elab_check_proper_type (ctx : elab_context) ltp var =
-  try elab_check_sort ctx (OL.check (ectx_to_lctx ctx) ltp) var ltp
+  let meta_ctx, _ = !global_substitution in
+  try elab_check_sort ctx (OL.check meta_ctx (ectx_to_lctx ctx) ltp) var ltp
   with e -> print_string "Exception while checking type `";
            lexp_print ltp;
            (match var with
@@ -123,19 +124,19 @@ let elab_check_def (ctx : elab_context) var lxp ltype =
   let lctx = ectx_to_lctx ctx in
   let loc = lexp_location lxp in
 
-  let ltype' = try OL.check lctx lxp
+  let meta_ctx, _ = !global_substitution in
+  let ltype' = try OL.check meta_ctx lctx lxp
     with e ->
       lexp_error loc lxp "Error while type-checking";
       print_lexp_ctx (ectx_to_lctx ctx);
       raise e in
-  let meta_ctx, _ = !global_substitution in
   if OL.conv_p meta_ctx (ectx_to_lctx ctx) ltype ltype' then
     elab_check_proper_type ctx ltype (Some var)
   else
     (debug_messages fatal loc "Type check error: ¡¡ctx_define error!!" [
       (lexp_string lxp) ^ "!: " ^ (lexp_string ltype);
        "                    because";
-      (lexp_string (OL.check lctx lxp)) ^ "!= " ^ (lexp_string ltype);])
+      (lexp_string (OL.check meta_ctx lctx lxp)) ^ "!= " ^ (lexp_string ltype);])
 
 let ctx_extend (ctx: elab_context) (var : vdef option) def ltype =
   elab_check_proper_type ctx ltype var;

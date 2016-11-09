@@ -271,9 +271,8 @@ let sort_compose l s1 s2 =
            StypeOmega)
 
 (* "check ctx e" should return τ when "Δ ⊢ e : τ"  *)
-let rec check ctx e =
-  (* let mustfind = assert_type e t in *)
-  let meta_ctx = VMap.empty in
+let rec check meta_ctx ctx e =
+  let check = check meta_ctx in
   match e with
   | Imm (Float (_, _)) -> B.type_float
   | Imm (Integer (_, _)) -> B.type_int

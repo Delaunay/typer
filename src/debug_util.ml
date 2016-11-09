@@ -423,8 +423,9 @@ let main () =
 
             let cctx = lctx_to_cctx ctx in
             (* run type check *)
-            List.iter (fun (_, lxp, _) ->
-                let _ = OL.check cctx lxp in ()) flexps;
+            List.iter (fun (_, lxp, _)
+                       -> let _ = OL.check VMap.empty cctx lxp in ())
+                      flexps;
 
             print_string ("    " ^ (make_line '-' 76));
             print_string "\n";));
