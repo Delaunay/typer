@@ -76,7 +76,7 @@ type ltype = lexp
              * ltype (* The type of the return value of all branches *)
              * (U.location * (arg_kind * vdef option) list * lexp) SMap.t
              * (vdef option * lexp) option               (* Default.  *)
-   (* The substitution `s` only applies to the lexp associated
+   (* The `subst` only applies to the lexp associated
     * with the metavar's index (i.e. its "value"), not to the ltype.  *)
    | Metavar of int * subst * vdef * ltype
  (*   (\* For logical metavars, there's no substitution.  *\)
@@ -118,9 +118,9 @@ type varbind =
   | LetDef of lexp
 
 module VMap = Map.Make (struct type t = int let compare = compare end)
-type substitution = lexp VMap.t
+type meta_subst = lexp VMap.t
 type constraints  = (lexp * lexp) list
-let empty_subst = (VMap.empty)
+let empty_meta_subst = VMap.empty
 
 let builtin_size = ref 0
 
@@ -422,13 +422,13 @@ let rec lexp_unparse lxp =
     | Sort (l, Stype sl) -> Pcall (Pimm (Symbol (l, "<Type>")),
                                   [pexp_unparse (lexp_unparse sl)])
 
+(* FIXME: ¡Unify lexp_print and lexp_string!  *)
+let lexp_string lxp = sexp_string (pexp_unparse (lexp_unparse lxp))
+
 let rec subst_string s = match s with
   | S.Identity -> "Id"
   | S.Shift (s, n) -> "(" ^ subst_string s ^ "↑" ^ string_of_int n ^ ")"
   | S.Cons (l, s) -> lexp_string l ^ " · " ^ subst_string s
-
-(* FIXME: ¡Unify lexp_print and lexp_string!  *)
-and lexp_string lxp = sexp_string (pexp_unparse (lexp_unparse lxp))
 (*
  *      Printing
  * --------------------- *)

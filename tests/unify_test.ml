@@ -23,7 +23,7 @@ type result =
   | Equivalent
   | Nothing
 
-type unif_res = (result * (substitution * constraints) option * lexp * lexp)
+type unif_res = (result * (meta_subst * constraints) option * lexp * lexp)
 
 type triplet = string * string * string
 
@@ -168,29 +168,29 @@ let generate_testable (_: lexp list) : ((lexp * lexp * result) list) =
 
   ::[]
 
-let test_input (lxp1: lexp) (lxp2: lexp) (subst: substitution): unif_res =
+let test_input (lxp1: lexp) (lxp2: lexp) (subst: meta_subst): unif_res =
   let res = unify lxp1 lxp2 Myers.nil subst in
   let tmp = match res with
-  | Some (s, []) when s = empty_subst -> (Equivalent, res, lxp1, lxp2)
+  | Some (s, []) when s = empty_meta_subst -> (Equivalent, res, lxp1, lxp2)
   | Some (_, [])                      -> (Unification, res, lxp1, lxp2)
   | Some _                            -> (Constraint, res, lxp1, lxp2)
   | None                              -> (Nothing, res, lxp1, lxp2)
   in tmp
 
-let check (lxp1: lexp) (lxp2: lexp) (res: result) (subst: substitution): bool =
+let check (lxp1: lexp) (lxp2: lexp) (res: result) (subst: meta_subst): bool =
   let r, _, _, _ = test_input lxp1 lxp2 subst
   in if r = res then true else false
 
 let test_if (input: lexp list) sample_generator checker : bool =
   let rec test_if_ samples checker =
     match samples with
-    | (l1, l2, res)::t -> if checker l1 l2 res empty_subst then test_if_ t checker else false
+    | (l1, l2, res)::t -> if checker l1 l2 res empty_meta_subst then test_if_ t checker else false
     | [] -> true
   in test_if_ (sample_generator input) checker
 
 let unifications = List.map
     (fun (l1, l2, res) ->
-       let r, _, _, _ = test_input l1 l2 empty_subst
+       let r, _, _, _ = test_input l1 l2 empty_meta_subst
        in (l1, l2, res, r))
     (generate_testable [])
 

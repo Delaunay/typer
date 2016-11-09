@@ -40,17 +40,17 @@ let create_metavar () = global_last_metavar := !global_last_metavar + 1;
                         !global_last_metavar
 
 (* For convenience *)
-type return_type = (substitution * constraints) option
+type return_type = (meta_subst * constraints) option
 
 (** Alias for VMap.add*)
-let associate (meta: int) (lxp: lexp) (subst: substitution)
-  : substitution =
+let associate (meta: int) (lxp: lexp) (subst: meta_subst)
+  : meta_subst =
   (VMap.add meta lxp subst)
 
 (** If key is in map returns the value associated
  else returns <code>None</code>
 *)
-let find_or_none (value: lexp) (map: substitution) : lexp option =
+let find_or_none (value: lexp) (map: meta_subst) : lexp option =
   match value with
   | Metavar (idx, _, _, _)
     -> if VMap.mem idx map
@@ -82,12 +82,12 @@ let unify_and res op = match res with
  The metavar unifyer is the end rule, it can't call unify with it's parameter (changing their order)
 *)
 let rec unify (e1: lexp) (e2: lexp)
-              (ctx : DB.lexp_context) (subst: substitution)
+              (ctx : DB.lexp_context) (subst: meta_subst)
         : return_type =
   unify' e1 e2 ctx OL.set_empty subst
 
 and unify' (e1: lexp) (e2: lexp)
-           (ctx : DB.lexp_context) (vs : OL.set_lexp) (subst: substitution)
+           (ctx : DB.lexp_context) (vs : OL.set_lexp) (subst: meta_subst)
     : return_type =
   let e1' = OL.lexp_whnf e1 ctx subst in
   let e2' = OL.lexp_whnf e2 ctx subst in
@@ -123,7 +123,7 @@ and unify' (e1: lexp) (e2: lexp)
  - (Arrow, Var) -> Constraint
  - (_, _) -> None
 *)
-and _unify_arrow (arrow: lexp) (lxp: lexp) ctx vs (subst: substitution)
+and _unify_arrow (arrow: lexp) (lxp: lexp) ctx vs (subst: meta_subst)
   : return_type =
   match (arrow, lxp) with
   | (Arrow (var_kind1, v1, ltype1, _, lexp1),
@@ -147,7 +147,7 @@ and _unify_arrow (arrow: lexp) (lxp: lexp) ctx vs (subst: substitution)
  - Lambda    , Let                -> Constraint
  - Lambda    , lexp               -> unify lexp lambda subst
 *)
-and _unify_lambda (lambda: lexp) (lxp: lexp) ctx vs (subst: substitution) : return_type =
+and _unify_lambda (lambda: lexp) (lxp: lexp) ctx vs (subst: meta_subst) : return_type =
   match (lambda, lxp) with
   | (Lambda (var_kind1, v1, ltype1, lexp1),
      Lambda (var_kind2, _, ltype2, lexp2))
@@ -171,7 +171,7 @@ and _unify_lambda (lambda: lexp) (lxp: lexp) ctx vs (subst: substitution) : retu
  - metavar   , metavar            -> if Metavar = Metavar then OK else ERROR
  - metavar   , lexp               -> OK
 *)
-and _unify_metavar (meta: lexp) (lxp: lexp) (subst: substitution) : return_type =
+and _unify_metavar (meta: lexp) (lxp: lexp) (subst: meta_subst) : return_type =
   let find_or_unify metavar value lxp s =
     match find_or_none metavar s with
     | Some (lxp_)   -> assert false
@@ -192,7 +192,7 @@ and _unify_metavar (meta: lexp) (lxp: lexp) (subst: substitution) : return_type 
  - Call      , Call               -> UNIFY
  - Call      , lexp               -> CONSTRAINT
 *)
-and _unify_call (call: lexp) (lxp: lexp) ctx vs (subst: substitution)
+and _unify_call (call: lexp) (lxp: lexp) ctx vs (subst: meta_subst)
     : return_type =
   match (call, lxp) with
   | (Call (lxp_left, lxp_list1), Call (lxp_right, lxp_list2))
@@ -211,7 +211,7 @@ and _unify_call (call: lexp) (lxp: lexp) ctx vs (subst: substitution)
  - Case, Case -> try to unify
  - Case, _ -> Constraint
 *)
-(* and _unify_case (case: lexp) (lxp: lexp) (subst: substitution) : return_type =
+(* and _unify_case (case: lexp) (lxp: lexp) (subst: meta_subst) : return_type =
  *   let merge (_, const) subst_res = match subst_res with
  *     | None -> None
  *     | Some (s', c') -> Some (s', const@c')
@@ -239,7 +239,7 @@ and _unify_call (call: lexp) (lxp: lexp) ctx vs (subst: substitution)
  - Inductive, Call/Metavar/Case/Let -> constraint
  - Inductive, _ -> None
 *)
-(* and _unify_induct (induct: lexp) (lxp: lexp) (subst: substitution) : return_type =
+(* and _unify_induct (induct: lexp) (lxp: lexp) (subst: meta_subst) : return_type =
  *   let transform (a, b, c) (d, e, f) = ((a, Some b, c), (d, Some e, f))
  *   and merge map1 map2 (subst, const) : return_type =
  *     match (_unify_induct_sub_list (SMap.bindings map1) (SMap.bindings map2) subst) with
@@ -264,7 +264,7 @@ and _unify_call (call: lexp) (lxp: lexp) ctx vs (subst: substitution)
  - SortLevel, SortLevel -> if SortLevel ~= SortLevel then OK else ERROR
  - SortLevel, _         -> ERROR
 *)
-and _unify_sortlvl (sortlvl: lexp) (lxp: lexp) ctx vs (subst: substitution) : return_type =
+and _unify_sortlvl (sortlvl: lexp) (lxp: lexp) ctx vs (subst: meta_subst) : return_type =
   match sortlvl, lxp with
   | (SortLevel s, SortLevel s2) -> (match s, s2 with
       | SLz, SLz -> Some (subst, [])
@@ -277,7 +277,7 @@ and _unify_sortlvl (sortlvl: lexp) (lxp: lexp) ctx vs (subst: substitution) : re
  - Sort, Var  -> Constraint
  - Sort, lexp -> ERROR
 *)
-and _unify_sort (sort_: lexp) (lxp: lexp) ctx vs (subst: substitution) : return_type =
+and _unify_sort (sort_: lexp) (lxp: lexp) ctx vs (subst: meta_subst) : return_type =
   match sort_, lxp with
   | (Sort (_, srt), Sort (_, srt2)) -> (match srt, srt2 with
       | Stype lxp1, Stype lxp2 -> unify' lxp1 lxp2 ctx vs subst
