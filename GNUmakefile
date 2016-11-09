@@ -1,4 +1,6 @@
 RM=rm -f
+MV=mv
+OCAMLBUILD=ocamlbuild
 
 BUILDDIR        := _build
 
@@ -7,7 +9,14 @@ CPL_FILES := $(wildcard ./$(BUILDDIR)/src/*.cmo)
 TEST_FILES := $(wildcard ./tests/*_test.ml)
 
 OBFLAGS = -lflags -g -cflags -g -build-dir $(BUILDDIR)
+# OBFLAGS         := -I $(SRCDIR) -build-dir $(BUILDDIR) -pkg str
+# OBFLAGS_DEBUG   := -tag debug -tag profile -tag "warn(+20)"
+# OBFLAGS_RELEASE := -tag unsafe -tag inline
+COMPILE_MODE = byte
 # COMPILE_MODE = native
+
+# DEBUG           ?= 1
+# VERBOSE         ?= 1
 
 all: typer debug tests-build
 
@@ -17,41 +26,50 @@ all: typer debug tests-build
 # OBFLAGS = $(OBFLAGS) -r
 # endif
 
-COMPILE_MODE = byte
+# ifeq ($(DEBUG), 1)
+# 	OBFLAGS += $(OBFLAGS_DEBUG)
+# else
+# 	OBFLAGS += $(OBFLAGS_RELEASE)
+# endif
+
+help: ## Prints help for targets with comments
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST)   \
+		| { echo -e 'typer:  ## Build Typer'; sort; } \
+		| awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
 
 # debug file eval
 debug:
 	# ============================
 	#     Build debug utils
 	# ============================
-	ocamlbuild src/debug_util.$(COMPILE_MODE)  -I src $(OBFLAGS)
-	@mv $(BUILDDIR)/src/debug_util.$(COMPILE_MODE)  $(BUILDDIR)/debug_util
+	$(OCAMLBUILD) src/debug_util.$(COMPILE_MODE)  -I src $(OBFLAGS)
+	@$(MV) $(BUILDDIR)/src/debug_util.$(COMPILE_MODE)  $(BUILDDIR)/debug_util
 
 # interactive typer
 typer:
 	# ============================
 	#    Build typer
 	# ============================
-	ocamlbuild src/REPL.$(COMPILE_MODE)  -I src $(OBFLAGS)
-	@mv $(BUILDDIR)/src/REPL.$(COMPILE_MODE)  $(BUILDDIR)/typer
+	$(OCAMLBUILD) src/REPL.$(COMPILE_MODE)  -I src $(OBFLAGS)
+	@$(MV) $(BUILDDIR)/src/REPL.$(COMPILE_MODE)  $(BUILDDIR)/typer
 
 tests-build:
 	# ============================
 	#     Build tests
 	# ============================
 	@$(foreach test, $(TEST_FILES), 				  \
-	   ocamlbuild $(subst ./,,$(subst .ml,.$(COMPILE_MODE) ,$(test))) \
+	   $(OCAMLBUILD) $(subst ./,,$(subst .ml,.$(COMPILE_MODE) ,$(test))) \
 	              -I src $(OBFLAGS);)
-	@ocamlbuild tests/utest_main.$(COMPILE_MODE)  -I src $(OBFLAGS)
-	@mv $(BUILDDIR)/tests/utest_main.$(COMPILE_MODE) \
+	@$(OCAMLBUILD) tests/utest_main.$(COMPILE_MODE)  -I src $(OBFLAGS)
+	@$(MV) $(BUILDDIR)/tests/utest_main.$(COMPILE_MODE) \
 	    $(BUILDDIR)/tests/utests
 
 tests-run:
 	@./$(BUILDDIR)/tests/utests --verbose= 3
 
 test-file:
-	ocamlbuild src/test.$(COMPILE_MODE)  -I src $(OBFLAGS)
-	@mv $(BUILDDIR)/src/test.$(COMPILE_MODE)  $(BUILDDIR)/test
+	$(OCAMLBUILD) src/test.$(COMPILE_MODE)  -I src $(OBFLAGS)
+	@$(MV) $(BUILDDIR)/src/test.$(COMPILE_MODE)  $(BUILDDIR)/test
 
 # There is nothing here. I use this to test if opam integration works
 install: tests
