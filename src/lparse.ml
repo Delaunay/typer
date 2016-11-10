@@ -48,6 +48,8 @@ open Eval
 open Grammar
 open Builtin
 
+module Unif = Unification
+
 module OL = Opslexp
 module EL = Elexp
 module SU = Subst
@@ -90,8 +92,12 @@ let pexp_fatal   = debug_message fatal pexp_name pexp_string
 let pexp_error   = debug_message error pexp_name pexp_string
 let value_fatal  = debug_message fatal value_name value_string
 
+(* :-( *)
+let global_substitution = ref (empty_meta_subst, [])
+
 let elab_check_sort (ctx : elab_context) lsort var ltp =
-  match OL.lexp_whnf lsort (ectx_to_lctx ctx) with
+  let meta_ctx, _ = !global_substitution in
+  match OL.lexp_whnf lsort (ectx_to_lctx ctx) meta_ctx with
   | Sort (_, _) -> () (* All clear!  *)
   | _ -> let typestr = lexp_string ltp  ^ " : " ^ lexp_string lsort in
         match var with
@@ -103,7 +109,8 @@ let elab_check_sort (ctx : elab_context) lsort var ltp =
                         ^ typestr)
 
 let elab_check_proper_type (ctx : elab_context) ltp var =
-  try elab_check_sort ctx (OL.check (ectx_to_lctx ctx) ltp) var ltp
+  let meta_ctx, _ = !global_substitution in
+  try elab_check_sort ctx (OL.check meta_ctx (ectx_to_lctx ctx) ltp) var ltp
   with e -> print_string "Exception while checking type `";
            lexp_print ltp;
            (match var with
@@ -117,18 +124,19 @@ let elab_check_def (ctx : elab_context) var lxp ltype =
   let lctx = ectx_to_lctx ctx in
   let loc = lexp_location lxp in
 
-  let ltype' = try OL.check lctx lxp
+  let meta_ctx, _ = !global_substitution in
+  let ltype' = try OL.check meta_ctx lctx lxp
     with e ->
       lexp_error loc lxp "Error while type-checking";
       print_lexp_ctx (ectx_to_lctx ctx);
       raise e in
-  if OL.conv_p (ectx_to_lctx ctx) ltype ltype' then
+  if OL.conv_p meta_ctx (ectx_to_lctx ctx) ltype ltype' then
     elab_check_proper_type ctx ltype (Some var)
   else
     (debug_messages fatal loc "Type check error: ¡¡ctx_define error!!" [
       (lexp_string lxp) ^ "!: " ^ (lexp_string ltype);
        "                    because";
-      (lexp_string (OL.check lctx lxp)) ^ "!= " ^ (lexp_string ltype);])
+      (lexp_string (OL.check meta_ctx lctx lxp)) ^ "!= " ^ (lexp_string ltype);])
 
 let ctx_extend (ctx: elab_context) (var : vdef option) def ltype =
   elab_check_proper_type ctx ltype var;
@@ -189,6 +197,19 @@ let ctx_define_rec (ctx: elab_context) decls =
  * - use lexp_p_check whenever you can.
  *)
 
+
+let newMetavar t =
+  let meta = Unif.create_metavar () in
+  let name = "__metavar" (* ^ (string_of_int meta) *) in
+  mkMetavar (meta, S.Identity, (Util.dummy_location, name), t)
+
+let newMetalevel () =
+  let meta = Unif.create_metavar () in
+  let name = "__metalevel" (* ^ (string_of_int meta) *) in
+  mkMetavar (meta, S.Identity, (Util.dummy_location, name),
+             Sort (dummy_location, StypeLevel))
+
+let newMetatype () = newMetavar (newMetalevel ())
 
 let rec _lexp_p_infer (p : pexp) (ctx : elab_context) trace: lexp * ltype =
 
@@ -269,13 +290,10 @@ let rec _lexp_p_infer (p : pexp) (ctx : elab_context) trace: lexp * ltype =
         let v = mkInductive(tloc, label, formal, map_ctor) in
         v, ltp
 
-    (* This case can be inferred *)
-    | Plambda (kind, var, optype, body)
-      -> let ltp, _ = match optype with
-          | Some ptype -> lexp_infer ptype ctx
-          (* This case must have been lexp_p_check *)
-          | None -> pexp_error tloc p "Lambda require type annotation";
-                   dltype, dltype in
+    (* This case can be inferred.  *)
+    | Plambda (kind, var, Some ptype, body)
+      -> let ltp, lasort = lexp_infer ptype ctx in
+        elab_check_sort ctx lasort (Some var) ltp;
 
         let nctx = env_extend ctx var Variable ltp in
         let lbody, lbtp = lexp_infer body nctx in
@@ -288,9 +306,11 @@ let rec _lexp_p_infer (p : pexp) (ctx : elab_context) trace: lexp * ltype =
     | Pcons(t, sym)
       -> let idt, _ = lexp_infer t ctx in
         let (loc, cname) = sym in
+        let meta_ctx, _ = !global_substitution in
 
         (* Get constructor args.  *)
-        let formal, args = match OL.lexp_whnf idt (ectx_to_lctx ctx) with
+        let formal, args = match OL.lexp_whnf idt
+                                              (ectx_to_lctx ctx) meta_ctx with
           | Inductive(_, _, formal, ctor_def) as lxp
             -> (try formal, (SMap.find cname ctor_def)
                with Not_found ->
@@ -334,7 +354,10 @@ let rec _lexp_p_infer (p : pexp) (ctx : elab_context) trace: lexp * ltype =
       -> let ltp = lexp_type_infer ptp ctx None trace in
         (_lexp_p_check pxp ltp ctx trace), ltp
 
-    | _ -> pexp_fatal tloc p "Unhandled Pexp"
+    | (Plambda _ | Pcase _ | Pmetavar _)
+      -> let t = newMetatype () in
+         let lxp = _lexp_p_check p t ctx trace in
+         (lxp, t)
 
 and lexp_type_infer pexp ectx var trace =
   let t, s = _lexp_p_infer pexp ectx trace in
@@ -357,30 +380,54 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : elab_context) trace: lexp =
     _global_lexp_ctx := ctx;
     _global_lexp_trace := trace;
 
+    let unify_with_arrow lxp kind var aty subst =
+      let body = newMetatype () in
+      let arg = match aty with
+        | None -> newMetatype ()
+        | Some laty -> laty in
+      let arrow = mkArrow (kind, None, arg, Util.dummy_location, body) in
+      match Unif.unify arrow lxp (ectx_to_lctx ctx) subst with
+      | Some subst -> global_substitution := subst; arg, body
+      | None       -> lexp_error tloc lxp ("Type " ^ lexp_string lxp
+                                          ^ " and "
+                                          ^ lexp_string arrow
+                                          ^ " does not match");
+                     dltype, dltype
+
+    in
+    let infer_lambda_body kind var def_arg_type body subst =
+      (* Check argument type annotation, if any.  *)
+      let def_arg_type = match def_arg_type with
+        | Some def_arg_type
+          -> let def_arg_type, lasort = lexp_infer def_arg_type ctx in
+            elab_check_sort ctx lasort (Some var) def_arg_type;
+            Some def_arg_type
+        | _ -> None in
+
+      (* Read var type from the provided type *)
+      let meta_ctx, _ = !global_substitution in
+      let given_arg_type, given_body_type =
+        match OL.lexp_whnf t (ectx_to_lctx ctx) meta_ctx with
+        | Arrow(kind, _, ltp, _, lbtp)
+          -> (match def_arg_type with
+             | None -> ()
+             | Some def_arg_type
+               -> if not (OL.conv_p meta_ctx (ectx_to_lctx ctx) def_arg_type ltp) then
+                   lexp_error (lexp_location def_arg_type) def_arg_type
+                              ("Type mismatch!  Context expected `"
+                               ^ lexp_string ltp ^ "`\n"));
+            ltp, lbtp
+        | lxp -> unify_with_arrow lxp kind var def_arg_type subst in
+
+      let nctx = env_extend ctx var Variable given_arg_type in
+      let lbody = lexp_check body given_body_type nctx in
+      mkLambda (kind, var, given_arg_type, lbody)
+
+    in
+    let subst, _ = !global_substitution in
     match p with
-    (* This case cannot be inferred *)
     | Plambda (kind, var, def_arg_type, body)
-      -> (* Read var type from the provided type *)
-       let given_arg_type, given_body_type = match OL.lexp_whnf t (ectx_to_lctx ctx) with
-         | Arrow(kind, _, ltp, _, lbtp) -> ltp, lbtp
-         | expr ->
-            lexp_fatal tloc expr "Expected Type Arrow ( _ -> _ )" in
-
-       (* Check argument type *)
-       let _ = match def_arg_type with
-         | Some def_arg_type
-           -> let def_arg_type, lasort = _lexp_p_infer def_arg_type ctx trace in
-             elab_check_sort ctx lasort (Some var) def_arg_type;
-          if not (OL.conv_p (ectx_to_lctx ctx) def_arg_type given_arg_type) then
-            lexp_error (lexp_location def_arg_type) def_arg_type
-                       ("Type mismatch!  Context expected `"
-                        ^ lexp_string given_arg_type ^ "`\n")
-         | _ -> () in
-
-       let nctx = env_extend ctx var Variable given_arg_type in
-       let lbody = lexp_check body given_body_type nctx in
-
-       mkLambda(kind, var, given_arg_type, lbody)
+      -> infer_lambda_body kind var def_arg_type body subst
 
     (* This is mostly for the case where no branches are provided *)
     | Pcase (loc, target, branches)
@@ -389,13 +436,21 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : elab_context) trace: lexp =
     (* FIXME: Handle *macro* pcalls here! *)
     (* | Pcall (fname, _args) -> *)
 
-    | _ -> let (e, inferred_t) = lexp_infer p ctx in
-          if not (OL.conv_p (ectx_to_lctx ctx) inferred_t t) then
-            lexp_error (pexp_location p) e
-                       ("Type mismatch!  Context expected `"
-                        ^ lexp_string t ^ "` but expression has type `"
-                        ^ lexp_string inferred_t ^ "`\n");
-          e
+    | Pmetavar _ -> newMetavar t
+
+    | _ -> lexp_p_infer_and_check p ctx t trace
+
+and lexp_p_infer_and_check pexp ctx t i =
+  let (e, inferred_t) = _lexp_p_infer pexp ctx i in
+  let subst, _ = !global_substitution in
+  (match Unif.unify inferred_t t (ectx_to_lctx ctx) subst with
+   | Some subst -> global_substitution := subst
+   | None
+     -> lexp_error (pexp_location pexp) e
+                  ("Type mismatch!  Context expected `"
+                   ^ lexp_string t ^ "` but expression has type `"
+                   ^ lexp_string inferred_t ^ "`\n"));
+  e
 
 (* Lexp.case can sometimes be inferred, but we prefer to always check.  *)
 and lexp_case rtype (loc, target, ppatterns) ctx i =
@@ -417,14 +472,15 @@ and lexp_case rtype (loc, target, ppatterns) ctx i =
 
     (* get target and its type *)
     let tlxp, tltp = lexp_infer target ctx in
+    let meta_ctx, _ = !global_substitution in
     (* FIXME: We need to be careful with whnf: while the output is equivalent
      * to the input, it's not necessarily as readable.  So try to reuse the
      * "non-whnf" form whenever possible.  *)
-    let call_split e = match (OL.lexp_whnf e (ectx_to_lctx ctx)) with
+    let call_split e = match (OL.lexp_whnf e (ectx_to_lctx ctx) meta_ctx) with
       | Call (f, args) -> (f, args)
       | _ -> (e,[]) in
     let it, targs = call_split tltp in
-    let constructors = match OL.lexp_whnf it (ectx_to_lctx ctx) with
+    let constructors = match OL.lexp_whnf it (ectx_to_lctx ctx) meta_ctx with
       | Inductive (_, _, fargs, constructors)
         -> assert (List.length fargs = List.length targs);
           constructors
@@ -447,9 +503,10 @@ and lexp_case rtype (loc, target, ppatterns) ctx i =
       let add_branch pctor pargs =
         let loc = pexp_location pctor in
         let lctor, _ = _lexp_p_infer pctor ctx i in
-        match OL.lexp_whnf lctor (ectx_to_lctx ctx) with
+        let meta_ctx, _ = !global_substitution in
+        match OL.lexp_whnf lctor (ectx_to_lctx ctx) meta_ctx with
         | Cons (it', (_, cons_name))
-          -> let _ = if OL.conv_p (ectx_to_lctx ctx) it' it then ()
+          -> let _ = if OL.conv_p meta_ctx (ectx_to_lctx ctx) it' it then ()
                     else lexp_error loc lctor
                                     ("Expected pattern of type `"
                                      ^ lexp_string it ^ "` but got `"
@@ -502,7 +559,9 @@ and lexp_case rtype (loc, target, ppatterns) ctx i =
       | Ppatany _ -> add_default None
       | Ppatsym ((_, name) as var)
         -> (try let idx = senv_lookup name ctx in
-               match OL.lexp_whnf (mkVar (var, idx)) (ectx_to_lctx ctx) with
+               let meta_ctx, _ = !global_substitution in
+               match OL.lexp_whnf (mkVar (var, idx))
+                                  (ectx_to_lctx ctx) meta_ctx with
                | Cons _         (* It's indeed a constructor!  *)
                  -> add_branch (Pvar var) []
                | _ -> add_default (Some var) (* A named default branch.  *)
@@ -518,6 +577,7 @@ and lexp_case rtype (loc, target, ppatterns) ctx i =
 (*  Identify Call Type and return processed call *)
 and lexp_call (func: pexp) (sargs: sexp list) ctx i =
     let loc = pexp_location func in
+    let meta_ctx, _ = !global_substitution in
 
     let lexp_infer p ctx = _lexp_p_infer p ctx i in
     let lexp_check p ltp ctx = _lexp_p_check p ltp ctx i in
@@ -531,45 +591,70 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
     let body, ltp = lexp_infer func ctx in
     let ltp = nosusp ltp in
 
-    let rec handle_fun_args largs sargs ltp = match sargs with
-      | [] -> largs, ltp
-      | (Node (Symbol (_, "_:=_"), [Symbol (_, aname); sarg])) :: sargs
+    let rec handle_fun_args largs sargs pending ltp =
+      let ltp' = OL.lexp_whnf ltp (ectx_to_lctx ctx) meta_ctx in
+      match sargs, ltp' with
+      | _, Arrow (ak, Some (_, aname'), arg_type, _, ret_type)
+           when SMap.mem aname' pending
+        -> let sarg = SMap.find aname' pending in
+          let parg = pexp_parse sarg in
+          let larg = lexp_check parg arg_type ctx in
+          handle_fun_args ((ak, larg) :: largs) sargs
+                          (SMap.remove aname' pending)
+                          (L.mkSusp ret_type (S.substitute larg))
+
+      | [], _
+        -> (if not (SMap.is_empty pending) then
+             let pending = SMap.bindings pending in
+             let loc = match pending with (_, sarg)::_ -> sexp_location sarg in
+             pexp_error loc func
+                        ("Explicit actual args `"
+                         ^ String.concat ", " (List.map (fun (l, _) -> l)
+                                                        pending)
+                         ^ "` have no matching formal args"));
+          largs, ltp
+
+      | (Node (Symbol (_, "_:=_"), [Symbol (_, aname); sarg])) :: sargs,
+        Arrow (ak, Some (_, aname'), arg_type, _, ret_type)
+           when (aname = aname' || aname = "_")
         (* Explicit-implicit argument.  *)
-        (* check if a = b in (a : Type) -> ... and (b := val) *)
-        -> (match OL.lexp_whnf ltp (ectx_to_lctx ctx) with
-           | Arrow (ak, Some (_, aname'), arg_type, _, ret_type)
-                when (aname = aname' || aname = "_")
-             -> let parg = pexp_parse sarg in
-               let larg = lexp_check parg arg_type ctx in
-               handle_fun_args ((ak, larg) :: largs) sargs
-                               (L.mkSusp ret_type (S.substitute larg))
+        -> let parg = pexp_parse sarg in
+          let larg = lexp_check parg arg_type ctx in
+          handle_fun_args ((ak, larg) :: largs) sargs pending
+                          (L.mkSusp ret_type (S.substitute larg))
 
-           | _ -> fatal (sexp_location sarg)
-                  ("Explicit arg `" ^ aname ^ "` to non-function " ^
-                    "(type = " ^ (lexp_string ltp) ^ ")"))
-      | sarg :: sargs
-        (*  Process Argument *)
-        -> (match OL.lexp_whnf ltp (ectx_to_lctx ctx) with
-           | Arrow (Aexplicit, _, arg_type, _, ret_type)
-             -> let parg = pexp_parse sarg in
-               let larg = _lexp_p_check parg arg_type ctx i in
-               handle_fun_args ((Aexplicit, larg) :: largs) sargs
-                               (L.mkSusp ret_type (S.substitute larg))
-           | Arrow _ as t ->
-              debug_messages fatal (sexp_location sarg) "Expected non-explicit arg" [
-                "ltype    : " ^ (lexp_string t);
-                "s-exp arg: " ^ (sexp_string sarg);]
+      | (Node (Symbol (_, "_:=_"), [Symbol (l, aname); sarg])) :: sargs,
+        Arrow _
+        -> if SMap.mem aname pending then
+            sexp_error l ("Duplicate explicit arg `" ^ aname ^ "`");
+          handle_fun_args largs sargs (SMap.add aname sarg pending) ltp
 
-           | t ->
-              print_lexp_ctx (ectx_to_lctx ctx);
-              lexp_fatal (sexp_location sarg) t
-                ("Explicit arg `" ^ sexp_string sarg ^
-                 "` to non-function (type = " ^ lexp_string ltp ^ ")")) in
+      | (Node (Symbol (_, "_:=_"), Symbol (l, aname) :: _)) :: sargs, _
+        -> sexp_error l
+                     ("Explicit arg `" ^ aname ^ "` to non-function "
+                      ^ "(type = " ^ (lexp_string ltp) ^ ")");
+          handle_fun_args largs sargs pending ltp
+
+      | sarg :: sargs, Arrow (Aexplicit, _, arg_type, _, ret_type)
+        -> let parg = pexp_parse sarg in
+          let larg = _lexp_p_check parg arg_type ctx i in
+          handle_fun_args ((Aexplicit, larg) :: largs) sargs pending
+                          (L.mkSusp ret_type (S.substitute larg))
+      | sarg :: sargs, Arrow (kind, _, arg_type, _, ret_type)
+        -> let larg = newMetavar arg_type in
+          handle_fun_args ((kind, larg) :: largs) (sarg::sargs) pending
+                          (L.mkSusp ret_type (S.substitute larg))
+
+      | sarg :: sargs, t ->
+         print_lexp_ctx (ectx_to_lctx ctx);
+         lexp_fatal (sexp_location sarg) t
+                    ("Explicit arg `" ^ sexp_string sarg ^
+                       "` to non-function (type = " ^ lexp_string ltp ^ ")") in
 
     let handle_funcall () =
       (* Here we use lexp_whnf on actual code, but it's OK
        * because we only use the result when it's a "predefined constant".  *)
-      match OL.lexp_whnf body (ectx_to_lctx ctx) with
+      match OL.lexp_whnf body (ectx_to_lctx ctx) meta_ctx with
       | Builtin((_, "Built-in"), _)
         -> (
         (* ------ SPECIAL ------ *)
@@ -588,90 +673,9 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
         | false, _ -> error loc "Use of `Built-in` in user code";
           dlxp, dltype)
 
-      | _ ->
-        (*  Process Arguments *)
-
-        (* Extract correct ordering aargs: all args and eargs: explicit args*)
-        let rec extract_order ltp aargs eargs nctx =
-          match OL.lexp_whnf ltp nctx with
-            | Arrow (kind, Some (_, varname), ltp, _, ret) ->
-                extract_order ret ((kind, varname, ltp)::aargs)
-                  (if kind = Aexplicit then (varname::eargs) else eargs) (lctx_extend nctx None (ForwardRef) ltp)
-
-            | e -> (List.rev aargs), List.rev eargs in
-
-        (* first list has all the arguments, second only holds explicit arguments *)
-        let order, eorder = extract_order ltp [] [] (ectx_to_lctx ctx) in
-
-        (*
-        print_string "Type :"; lexp_print ltp; print_string "\n";
-        print_string "Order:"; List.iter (fun (_, b, _) -> print_string (b ^ " ")) (order); print_string "\n";
-        print_string "Sarg1: ";
-        List.iter (fun lxp -> sexp_print lxp; print_string ", ") sargs;
-        print_string "\n";*)
-
-
-        (* from arg order build a dictionnary that will hold the defined args *)
-        let args_dict = List.fold_left
-          (fun map (kind, key, _) -> SMap.add key (kind, None) map) SMap.empty order in
-
-        let args_dict, eargs = List.fold_left (fun (map, eargs) sexp ->
-          match sexp with
-            | Node (Symbol (_, "_:=_"), [Symbol (_, aname); sarg]) ->
-              let kind, _ = try SMap.find aname map
-                with Not_found ->
-                  print_string (aname ^ " was not found" ^ "\n");
-                  Aerasable, None in
-                (SMap.add aname (kind, Some sarg) map),
-                (if kind = Aexplicit then
-                  (match eargs with
-                    | _::tl -> tl
-                    | _ -> []) else eargs)
-
-            | _ -> (match eargs with
-              | name::tl -> (SMap.add name (Aexplicit, Some sexp) map), tl
-              | _ -> map, []))
-                (args_dict, eorder) sargs in
-
-
-        (* Generate an argument list with the correct order *)
-        let sargs2 = List.map (fun (_, name, ltp) ->
-          try match SMap.find name args_dict with
-            | Aimplicit, (Some sexp) -> Node (Symbol (dloc, "_:=_"), [Symbol (dloc, name); sexp])
-            | Aerasable,  Some sexp  -> Node (Symbol (dloc, "_:=_"), [Symbol (dloc, name); sexp])
-            | Aexplicit, (Some sexp) -> sexp
-            | Aexplicit, None        -> fatal dloc "Explicit argument expected"
-            | Aimplicit, None        -> (
-                (* get variable info *)
-                let vidx, vname = match ltp with
-                  | Var ((_, name), idx) -> idx, name
-                  | _ -> lexp_fatal loc ltp "Unable to find default attribute" in
-
-                (* get default property *)
-                let pidx, pname = (senv_lookup "default" ctx), "default" in
-
-                (* get macro *)
-                let default_macro = try get_property ctx (vidx, vname) (pidx, pname)
-                  with _ -> dump_properties ctx; dltype in
-
-                lexp_print default_macro;
-
-                print_string ((lexp_name ltp) ^ ": ");
-                lexp_print ltp; print_string "\n";
-                fatal dloc "Default Arg lookup not implemented")
-
-
-            with Not_found -> fatal dloc (name ^ " not found")
-          ) order in
-
-        (*
-        print_string "\nSarg2: "; List.iter (fun lxp -> sexp_print lxp; print_string ", ") sargs2;
-        print_string "\n"; *)
-
-        (* check if we had enough information to reorder args *)
-        let sargs = if (List.length order >= List.length sargs) then sargs2 else sargs in
-
-        let largs, ret_type = handle_fun_args [] sargs ltp in
+      | e ->
+        (*  Process Arguments.  *)
+        let largs, ret_type = handle_fun_args [] sargs SMap.empty ltp in
         mkCall (body, List.rev largs), ret_type in
 
     let handle_macro_call () =
@@ -689,14 +693,15 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
 
     (* This is the builtin Macro type *)
     let macro_type, macro_disp = match get_predef_option "Macro" ctx with
-      | Some lxp -> OL.lexp_whnf lxp (ectx_to_lctx ctx), true
+      | Some lxp -> OL.lexp_whnf lxp (ectx_to_lctx ctx) meta_ctx, true
       (* When type.typer is being parsed and the predef is not yet available *)
       | None -> dltype, false     in
 
     (* determine function type *)
     match func, ltp with
       | macro, _ when (macro_disp
-                       && OL.conv_p (ectx_to_lctx ctx) ltp macro_type) -> (
+                       && OL.conv_p meta_ctx (ectx_to_lctx ctx)
+                                   ltp macro_type) -> (
         match macro with
           | Pvar(l, name) when is_builtin_macro name ->
             let pargs = List.map pexp_parse sargs in

@@ -76,6 +76,9 @@ type ltype = lexp
              * ltype (* The type of the return value of all branches *)
              * (U.location * (arg_kind * vdef option) list * lexp) SMap.t
              * (vdef option * lexp) option               (* Default.  *)
+   (* The `subst` only applies to the lexp associated
+    * with the metavar's index (i.e. its "value"), not to the ltype.  *)
+   | Metavar of int * subst * vdef * ltype
  (*   (\* For logical metavars, there's no substitution.  *\)
   *   | Metavar of (U.location * string) * metakind * metavar ref
   * and metavar =
@@ -114,6 +117,11 @@ type varbind =
   | ForwardRef
   | LetDef of lexp
 
+module VMap = Map.Make (struct type t = int let compare = compare end)
+type meta_subst = lexp VMap.t
+type constraints  = (lexp * lexp) list
+let empty_meta_subst = VMap.empty
+
 let builtin_size = ref 0
 
 (********************** Hash-consing **********************)
@@ -137,6 +145,7 @@ let mkCall (f, es)             = hc (Call (f, es))
 let mkInductive (l, n, a, cs)  = hc (Inductive (l, n, a, cs))
 let mkCons (t, n)              = hc (Cons (t, n))
 let mkCase (l, e, rt, bs, d)   = hc (Case (l, e, rt, bs, d))
+let mkMetavar (n, s, v, t)     = hc (Metavar (n, s, v, t))
 
 (********* Helper functions to use the Subst operations  *********)
 (* This basically "ties the knot" between Subst and Lexp.
@@ -151,6 +160,7 @@ let rec mkSusp e s =
     match e with
     | Susp (e, s') -> mkSusp e (scompose s' s)
     | Var (l,v) -> slookup s l v
+    | Metavar (vn, s', vd, t) -> mkMetavar (vn, scompose s' s, vd, mkSusp t s)
     | _ -> hc (Susp (e, s))
 and scompose s1 s2 = S.compose mkSusp s1 s2
 and slookup s l v = S.lookup (fun l i -> mkVar (l, i))
@@ -175,8 +185,8 @@ let rec lexp_location e =
   | Cons (_,(l,_)) -> l
   | Case (l,_,_,_,_) -> l
   | Susp (e, _) -> lexp_location e
-  (* | Susp (_, e) -> lexp_location e
-   * | Metavar ((l,_),_,_) -> l *)
+  (* | Susp (_, e) -> lexp_location e *)
+  | Metavar (_,_,(l,_), _) -> l
 
 
 (********* Normalizing a term *********)
@@ -238,7 +248,7 @@ let rec push_susp e s =            (* Push a suspension one level down.  *)
    * But we still have to handle them here, since push_susp is called
    * in many other cases than just when we bump into a Susp.  *)
   | Susp (e,s') -> push_susp e (scompose s' s)
-  | (Var _) -> nosusp (mkSusp e s)
+  | (Var _ | Metavar _) -> nosusp (mkSusp e s)
 
 and nosusp e =                  (* Return `e` without `Susp`.  *)
   match e with
@@ -401,6 +411,8 @@ let rec lexp_unparse lxp =
         in Pcase (loc, lexp_unparse target, pbranch)
 
     (* FIXME: The cases below are all broken!  *)
+    | Metavar (idx, subst, (loc, name), _)
+      -> Pimm (Symbol (loc, "?<" ^ name ^ "-" ^ string_of_int idx ^ ">"))
 
     | SortLevel (SLz) -> Pimm (Integer (U.dummy_location, 0))
     | SortLevel (SLsucc sl) -> Pcall (Pimm (Symbol (U.dummy_location, "<S>")),
@@ -410,7 +422,13 @@ let rec lexp_unparse lxp =
     | Sort (l, Stype sl) -> Pcall (Pimm (Symbol (l, "<Type>")),
                                   [pexp_unparse (lexp_unparse sl)])
 
+(* FIXME: ¡Unify lexp_print and lexp_string!  *)
 let lexp_string lxp = sexp_string (pexp_unparse (lexp_unparse lxp))
+
+let rec subst_string s = match s with
+  | S.Identity -> "Id"
+  | S.Shift (s, n) -> "(" ^ subst_string s ^ "↑" ^ string_of_int n ^ ")"
+  | S.Cons (l, s) -> lexp_string l ^ " · " ^ subst_string s
 (*
  *      Printing
  * --------------------- *)
@@ -513,6 +531,9 @@ and _lexp_to_str ctx exp =
         | Susp (e, s) -> _lexp_to_str ctx (push_susp e s)
 
         | Var ((loc, name), idx) -> name ^ (index idx) ;
+
+        | Metavar (idx, subst, (loc, name), _)
+          -> "?" ^ name ^ (index idx) (*TODO : print subst*)
 
         | Let (_, decls, body)   ->
             (* Print first decls without indent *)

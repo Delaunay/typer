@@ -117,6 +117,12 @@ let ut_string2 = ut_string 2
 let unexpected_throw sk tk e =
     ut_string2 (red ^ "[   FAIL] " ^ sk ^ " - " ^ tk ^ "\n");
     ut_string2        "[       ]     UNEXPECTED THROW:\n";
+    ut_string2        "[       ]     ----------------------------- Callstack (20): -----------------------------------------\n";
+    ut_string2        ("[       ]     " ^ (Printexc.raw_backtrace_to_string (Printexc.get_callstack 20)));
+    ut_string2        "[       ]     ---------------------------------------------------------------------------------------\n";
+    ut_string2        "[       ]     ----------------------------- Backtrace: ----------------------------------------------\n";
+    ut_string2        ("[       ]     " ^ (Printexc.get_backtrace ()) ^ "\n");
+    ut_string2        "[       ]     ---------------------------------------------------------------------------------------\n";
     ut_string2        "[       ]  "; ut_string2 ((Printexc.to_string e) ^ "\n" ^ reset)
 
 let _expect_equal_t to_string value expect =

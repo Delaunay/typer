@@ -248,16 +248,16 @@ let _ = test_eval_eqv_named
 let _ = test_eval_eqv_named
   "Lists"
 
-  "my_list = cons (a := Int) 1
-            (cons (a := Int) 2
-            (cons (a := Int) 3
-            (cons (a := Int) 4 (nil (a := Int)))))"
+  "my_list = cons 1
+            (cons 2
+            (cons 3
+            (cons 4 (nil (a := Int)))))"
 
-  "length (a := Int) my_list;
-   head (a := Int) my_list;
-   head (a := Int) (tail (a := Int) my_list)"
+  "length my_list;
+   head my_list;
+   head (tail my_list)"
 
-  "4; Some (a := Int) 1; Some (a := Int) 2"
+  "4; Some 1; Some 2"
 
 (*
  *  Special forms
@@ -309,7 +309,7 @@ let _ = (add_test "EVAL" "Monads" (fun () ->
 
     let rctx, lctx = eval_decl_str dcode lctx rctx in
 
-    let rcode = "run-io (a := Unit) (b := Int) c 2" in
+    let rcode = "run-io c 2" in
 
     (* Eval defined lambda *)
     let ret = eval_expr_str rcode lctx rctx in
@@ -326,13 +326,12 @@ let _ = test_eval_eqv_named
         lambda (z : Int) -> x * y + z;"
 
   "fun (x := 3) 2 1;
-   %% fun (x := 3) (z := 1) 2;
+   fun (x := 3) (z := 1) 4;
    fun (z := 3) (y := 2) (x := 1);
    fun (z := 1) (y := 2) (x := 3);
    fun (x := 3) (y := 2) (z := 1);"
 
-  "7; %% 7;
-   5; 7; 7"
+  "7; 13; 5; 7; 7"
 
 
 let _ = test_eval_eqv_named

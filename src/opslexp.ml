@@ -85,7 +85,9 @@ let rec lexp_defs_subst l s defs = match defs with
  * but only on *types*.  If you must use it on code, be sure to use its
  * return value as little as possible since WHNF will inherently introduce
  * call-by-name behavior.  *)
-let rec lexp_whnf e (ctx : DB.lexp_context) = match e with
+let lexp_whnf e (ctx : DB.lexp_context) meta_ctx : lexp =
+  let rec lexp_whnf e (ctx : DB.lexp_context) : lexp =
+  match e with
   | Var v -> (match lookup_value ctx v with
              | None -> e
              (* We can do this blindly even for recursive definitions!
@@ -130,6 +132,9 @@ let rec lexp_whnf e (ctx : DB.lexp_context) = match e with
       | Cons (_, (_, name)) -> reduce name []
       | Call (Cons (_, (_, name)), aargs) -> reduce name aargs
       | _ -> mkCase (l, e, rt, branches, default))
+  | Metavar (idx, s, _, _)
+    -> (try lexp_whnf (mkSusp (L.VMap.find idx meta_ctx) s) ctx
+       with Not_found -> e)
 
   (* FIXME: I'd really prefer to use "native" recursive substitutions, using
    *   ideally a trick similar to the db_offsets in lexp_context!  *)
@@ -137,6 +142,8 @@ let rec lexp_whnf e (ctx : DB.lexp_context) = match e with
     -> push_susp body (lexp_defs_subst l S.identity defs)
 
   | e -> e
+
+  in lexp_whnf e ctx
 
 
 (** A very naive implementation of sets of lexps.  *)
@@ -159,9 +166,10 @@ let set_shift s : set_lexp = set_shift_n s 1
 (********* Testing if two types are "convertible" aka "equivalent"  *********)
 
 (* Returns true if e₁ and e₂ are equal (upto alpha/beta/...).  *)
-let rec conv_p' (ctx : DB.lexp_context) (vs : set_lexp) e1 e2 : bool =
-  let e1' = lexp_whnf e1 ctx in
-  let e2' = lexp_whnf e2 ctx in
+let rec conv_p' meta_ctx (ctx : DB.lexp_context) (vs : set_lexp) e1 e2 : bool =
+  let conv_p' = conv_p' meta_ctx in
+  let e1' = lexp_whnf e1 ctx meta_ctx in
+  let e2' = lexp_whnf e2 ctx meta_ctx in
   let stop1 = not (e1 == e1') && set_member_p vs e1' in
   let stop2 = not (e2 == e2') && set_member_p vs e2' in
   let vs' = if not (e1 == e1') && not stop1 then set_add vs e1'
@@ -226,9 +234,9 @@ let rec conv_p' (ctx : DB.lexp_context) (vs : set_lexp) e1 e2 : bool =
      then conv_p'' e1 e2
      else conv_p'' e1' e2'
 
-let conv_p (ctx : DB.lexp_context) e1 e2
+let conv_p meta_ctx (ctx : DB.lexp_context) e1 e2
   = if e1 == e2 then true
-    else conv_p' ctx set_empty e1 e2
+    else conv_p' meta_ctx ctx set_empty e1 e2
 
 (********* Testing if a lexp is properly typed  *********)
 
@@ -263,8 +271,8 @@ let sort_compose l s1 s2 =
            StypeOmega)
 
 (* "check ctx e" should return τ when "Δ ⊢ e : τ"  *)
-let rec check ctx e =
-  (* let mustfind = assert_type e t in *)
+let rec check meta_ctx ctx e =
+  let check = check meta_ctx in
   match e with
   | Imm (Float (_, _)) -> B.type_float
   | Imm (Integer (_, _)) -> B.type_int
@@ -287,7 +295,7 @@ let rec check ctx e =
   | Let (_, defs, e)
     -> let tmp_ctx =
         List.fold_left (fun ctx (v, e, t)
-                        -> (match lexp_whnf (check ctx t) ctx with
+                        -> (match lexp_whnf (check ctx t) ctx meta_ctx with
                            | Sort (_, Stype _) -> ()
                            | _ -> (U.msg_error "TC" (lexp_location t)
                                               "Def type is not a type!"; ()));
@@ -304,7 +312,7 @@ let rec check ctx e =
     -> (let k1 = check ctx t1 in
        let nctx = DB.lexp_ctx_cons ctx 0 v Variable t1 in
        let k2 = check nctx t2 in
-       match lexp_whnf k1 ctx, lexp_whnf k2 nctx with
+       match lexp_whnf k1 ctx meta_ctx, lexp_whnf k2 nctx meta_ctx with
        | (Sort (_, s1), Sort (_, s2))
          -> if ak == P.Aerasable && impredicative_erase then k2
            else Sort (l, sort_compose l s1 s2)
@@ -315,7 +323,7 @@ let rec check ctx e =
                                "Not a proper type";
                    Sort (l, StypeOmega)))
   | Lambda (ak, ((l,_) as v), t, e)
-    -> ((match lexp_whnf (check ctx t) ctx with
+    -> ((match lexp_whnf (check ctx t) ctx meta_ctx with
         | Sort _ -> ()
         | _ -> (U.msg_error "TC" (lexp_location t)
                            "Formal arg type is not a type!"; ()));
@@ -327,7 +335,7 @@ let rec check ctx e =
     -> let ft = check ctx f in
       List.fold_left (fun ft (ak,arg)
                    -> let at = check ctx arg in
-                     match lexp_whnf ft ctx with
+                     match lexp_whnf ft ctx meta_ctx with
                      | Arrow (ak', v, t1, l, t2)
                        -> if not (ak == ak') then
                             (U.msg_error "TC" (lexp_location arg)
@@ -350,7 +358,7 @@ let rec check ctx e =
                     let level, _ =
                       List.fold_left
                         (fun (level, ctx) (ak, v, t) ->
-                          (match lexp_whnf (check ctx t) ctx with
+                          (match lexp_whnf (check ctx t) ctx meta_ctx with
                            | Sort _ when ak == P.Aerasable && impredicative_erase
                              -> level
                            | Sort (_, Stype level')
@@ -379,9 +387,9 @@ let rec check ctx e =
     -> let rec call_split e = match e with
         | Call (f, args) -> (f, args)
         | _ -> (e,[]) in
-      let etype = lexp_whnf (check ctx e) ctx in
+      let etype = lexp_whnf (check ctx e) ctx meta_ctx in
       let it, aargs = call_split etype in
-      (match lexp_whnf it ctx, aargs with
+      (match lexp_whnf it ctx meta_ctx, aargs with
        | Inductive (_, _, fargs, constructors), aargs ->
           let rec mksubst s fargs aargs =
             match fargs, aargs with
@@ -422,7 +430,7 @@ let rec check ctx e =
        | _,_ -> U.msg_error "TC" l "Case on a non-inductive type!");
       ret
   | Cons (t, (_, name))
-    -> (match lexp_whnf t ctx with
+    -> (match lexp_whnf t ctx meta_ctx with
        | Inductive (l, _, fargs, constructors) as it
          -> let fieldtypes = SMap.find name constructors in
            let rec indtype fargs start_index =
@@ -447,6 +455,9 @@ let rec check ctx e =
        | _ -> (U.msg_error "TC" (lexp_location e)
                           "Cons of a non-inductive type!";
               B.type_int))
+  | Metavar (idx, s, _, t)
+    -> try check ctx (push_susp (L.VMap.find idx meta_ctx) s)
+      with Not_found -> t
 
 (*********** Type erasure, before evaluation.  *****************)
 

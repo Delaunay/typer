@@ -20,3 +20,4 @@ _temp_hack
 test__.typer
 *.orig
 _tags
+.merlin

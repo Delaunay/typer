@@ -155,18 +155,15 @@ bind = Built-in "bind" (
 % define a dummy type that supposed to represent a file
 FileHandle = Built-in "FileHandle";
 
-% define operation on file handle
-%% runIO should have type IO Unit -> b -> b
+%% `runIO` should have type IO Unit -> b -> b
 %% or IO a -> b -> b, which means "run the IO, throw away the result,
 %% and then return the second argument unchanged".  The "dummy" b argument
 %% is actually crucial to make sure the result of runIO is used, otherwise
 %% the whole call would look like a dead function call and could be
 %% optimized away!
-run-io = Built-in "run-io" (
-  (a : Type) ≡>
-  (b : Type) ≡>
-    IO a -> b -> b);
+run-io = Built-in "run-io" ((a : Type) ≡> IO Unit -> a -> a);
 
+% Define operations on file handle.
 open  = Built-in "open"  (String -> String -> IO FileHandle);
 write = Built-in "write" (FileHandle -> String -> IO Unit);
 read  = Built-in "read"  (FileHandle -> Int -> IO String);
