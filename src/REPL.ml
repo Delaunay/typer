@@ -218,7 +218,6 @@ let rec repl i clxp rctx =
             | "%quit" | "%q" -> ()
             | "%help" | "%h" -> (print_string _help_msg;  repl clxp rctx)
             | "%calltrace"  | "%ct" -> (print_eval_trace None; repl clxp rctx)
-            | "%elabtrace"  | "%et" -> (print_lexp_trace None; repl clxp rctx)
             | "%typertrace" | "%tt" -> (print_typer_trace None; repl clxp rctx)
 
             (* command with arguments *)

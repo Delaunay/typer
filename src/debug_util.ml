@@ -392,7 +392,6 @@ let main () =
         let lexps, nctx = try lexp_p_decls pexps octx
           with e ->
             print_string reset;
-            print_lexp_trace None;
             raise e in
         print_string reset;
 

@@ -46,7 +46,7 @@ open Printf           (* IO Monad *)
 module OL = Opslexp
 
 
-type eval_debug_info = OL.pexporlexp list * elexp list
+type eval_debug_info = elexp list * elexp list
 
 let dloc = dummy_location
 let _global_eval_trace = ref ([], [])
@@ -56,7 +56,7 @@ let _builtin_lookup = ref SMap.empty
 
 let append_eval_trace trace (expr : elexp) =
   let (a, b) = trace in
-  let r = (OL.Elexp expr)::a, b in
+  let r = expr::a, b in
     _global_eval_trace := r; r
 
 let append_typer_trace trace (expr : elexp) =
@@ -95,7 +95,7 @@ let root_string () =
   let a, _ = !_global_eval_trace in
   match List.rev a with
     | [] -> ""
-    | e::_ -> OL.pol_string e
+    | e::_ -> elexp_string e
 
 let debug_message error_type type_name type_string loc expr message =
   debug_messages error_type loc
@@ -572,10 +572,7 @@ and print_trace title trace default =
   (* Print the trace*)
   print_string (Fmt.make_title title);
   print_string (Fmt.make_sep '-');
-  let _ = List.iteri (fun i expr ->
-    match expr with
-      | OL.Pexp p -> lexp_trace i p
-      | OL.Elexp e -> elexp_trace i e) trace in
+  let _ = List.iteri elexp_trace trace in
   print_string (Fmt.make_sep '=')
 
 and print_eval_trace trace =
