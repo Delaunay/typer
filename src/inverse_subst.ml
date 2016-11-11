@@ -67,8 +67,12 @@ let transfo (s: lexp S.subst) : substIR option =
 let rec sizeOf (s: (int * int) list): int = List.length s
 
 (** Returns a dummy variable with the db_index idx
-*)
-let mkVar (idx: int): lexp = Var((U.dummy_location, ""), idx)
+ *)
+let counter = ref 0
+let mkVar (idx: int) : lexp =
+  counter := !counter + 1;
+  Var((U.dummy_location, "<anon" ^ string_of_int idx ^ ">"), idx)
+let impossible = Imm Epsilon
 
 (** Fill the gap between e_i in the list of couple (e_i, i) by adding
     dummy variables.
@@ -82,7 +86,7 @@ let mkVar (idx: int): lexp = Var((U.dummy_location, ""), idx)
 let fill (l: (int * int) list) (nbVar: int) (shift: int): lexp S.subst option =
   let rec genDummyVar (beg_: int) (end_: int) (l: lexp S.subst): lexp S.subst = (* Create the filler variables *)
     if beg_ < end_
-    then S.cons (mkVar (nbVar + 1)) (genDummyVar (beg_ + 1) end_ l)
+    then S.cons impossible (genDummyVar (beg_ + 1) end_ l)
     else l
   in
   let fill_before (l: (int * int) list) (s: lexp S.subst) (nbVar: int): lexp S.subst option = (* Fill if the first var is not 0 *)

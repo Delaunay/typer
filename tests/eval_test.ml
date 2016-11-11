@@ -302,8 +302,7 @@ let _ = (add_test "EVAL" "Infinite Recursion failure" (fun () ->
 let _ = (add_test "EVAL" "Monads" (fun () ->
 
     let dcode = "
-      c = bind (a := FileHandle) (b := Unit)
-               (open \"./_build/w_file.txt\" \"w\")
+      c = bind (open \"./_build/w_file.txt\" \"w\")
                (lambda f -> write f \"Hello2\");
     " in
 

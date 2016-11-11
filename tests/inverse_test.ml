@@ -112,8 +112,11 @@ let generate_tests (name: string)
   in List.map (fun (sub, res) ->
       idx := !idx + 1;
       add_test name
-        ((U.padding_left (string_of_int (!idx)) 2 '0') ^ " - " ^ sub)
-        (fun () -> if res then success () else failure ()))
+               ((U.padding_left (string_of_int (!idx)) 2 '0')
+               (* FIXME: It's nice to see the actual tests when they fail
+                * but it's too verbose otherwise.  *)
+               (* ^ " - " ^ sub *))
+               (fun () -> if res then success () else failure ()))
     (test input_gen fmt tester)
 
 
@@ -121,7 +124,8 @@ let get_dim lst =
   let max i s = max i (String.length s)
   in
   List.fold_left
-    (fun (acs, acs', acc) (s, s', comp) -> ((max acs s), (max acs' s'), (max acc comp)))
+    (fun (acs, acs', acc) (s, s', comp)
+     -> ((max acs s), (max acs' s'), (max acc comp)))
     (0,0,0)
     lst
 

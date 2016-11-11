@@ -385,7 +385,8 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : elab_context) trace: lexp =
       let arg = match aty with
         | None -> newMetatype ()
         | Some laty -> laty in
-      let arrow = mkArrow (kind, None, arg, Util.dummy_location, body) in
+      let l, _ = var in
+      let arrow = mkArrow (kind, Some var, arg, l, body) in
       match Unif.unify arrow lxp (ectx_to_lctx ctx) subst with
       | Some subst -> global_substitution := subst; arg, body
       | None       -> lexp_error tloc lxp ("Type " ^ lexp_string lxp
@@ -429,7 +430,6 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : elab_context) trace: lexp =
     | Plambda (kind, var, def_arg_type, body)
       -> infer_lambda_body kind var def_arg_type body subst
 
-    (* This is mostly for the case where no branches are provided *)
     | Pcase (loc, target, branches)
       -> lexp_case t (loc, target, branches) ctx trace
 
@@ -467,8 +467,7 @@ and lexp_case rtype (loc, target, ppatterns) ctx i =
                ^ " is a duplicate.  It will override previous pattern.") in
 
     let check_uniqueness pat name map =
-        try let _ = SMap.find name map in uniqueness_warn pat
-            with e -> () in
+      if SMap.mem name map then uniqueness_warn pat in
 
     (* get target and its type *)
     let tlxp, tltp = lexp_infer target ctx in
@@ -764,7 +763,9 @@ and lexp_expand_macro_ macro_funct sargs ctx trace expand_fun =
 
 and lexp_decls_macro (loc, mname) sargs ctx: (pdecl list * elab_context) =
    try (* Lookup macro declaration *)
-      let idx = senv_lookup mname ctx in
+     let idx = senv_lookup mname ctx in
+     (* FIXME: We should only check that `ltp` is Macro, and not look
+      * at `lxp` here (just like we do for expression macros).  *)
       let ltp = env_lookup_type ctx ((loc, mname), idx) in
       let lxp = env_lookup_expr ctx ((loc, mname), idx) in
 
