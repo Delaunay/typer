@@ -251,7 +251,8 @@ let _ = test_eval_eqv_named
   "my_list = cons 1
             (cons 2
             (cons 3
-            (cons 4 (nil (a := Int)))))"
+            (cons 4 (nil %%(a := Int)
+            ))))"
 
   "length my_list;
    head my_list;

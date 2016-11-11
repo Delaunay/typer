@@ -388,12 +388,18 @@ and _lexp_p_check (p : pexp) (t : ltype) (ctx : elab_context) trace: lexp =
       let l, _ = var in
       let arrow = mkArrow (kind, Some var, arg, l, body) in
       match Unif.unify arrow lxp (ectx_to_lctx ctx) subst with
-      | Some subst -> global_substitution := subst; arg, body
       | None       -> lexp_error tloc lxp ("Type " ^ lexp_string lxp
                                           ^ " and "
                                           ^ lexp_string arrow
                                           ^ " does not match");
                      dltype, dltype
+      | Some (_, (t1,t2)::_)
+        -> lexp_error tloc lxp ("Types `" ^ lexp_string t1
+                               ^ " and "
+                               ^ lexp_string t2
+                               ^ " do not match");
+          dltype, dltype
+      | Some subst -> global_substitution := subst; arg, body
 
     in
     let infer_lambda_body kind var def_arg_type body subst =
@@ -444,12 +450,17 @@ and lexp_p_infer_and_check pexp ctx t i =
   let (e, inferred_t) = _lexp_p_infer pexp ctx i in
   let subst, _ = !global_substitution in
   (match Unif.unify inferred_t t (ectx_to_lctx ctx) subst with
-   | Some subst -> global_substitution := subst
    | None
      -> lexp_error (pexp_location pexp) e
                   ("Type mismatch!  Context expected `"
                    ^ lexp_string t ^ "` but expression has type `"
-                   ^ lexp_string inferred_t ^ "`\n"));
+                   ^ lexp_string inferred_t ^ "`\n")
+   | Some (_, (t1,t2)::_)
+     -> lexp_error (pexp_location pexp) e
+                  ("Type mismatch!  Context expected `"
+                   ^ lexp_string t2 ^ "` but expression has type `"
+                   ^ lexp_string t1 ^ "`\n")
+   | Some subst -> global_substitution := subst);
   e
 
 (* Lexp.case can sometimes be inferred, but we prefer to always check.  *)
