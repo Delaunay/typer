@@ -141,11 +141,15 @@ let mkVar v                    = hc (Var v)
 let mkLet (l, ds, e)           = hc (Let (l, ds, e))
 let mkArrow (k, v, t1, l, t2)  = hc (Arrow (k, v, t1, l, t2))
 let mkLambda (k, v, t, e)      = hc (Lambda (k, v, t, e))
-let mkCall (f, es)             = hc (Call (f, es))
 let mkInductive (l, n, a, cs)  = hc (Inductive (l, n, a, cs))
 let mkCons (t, n)              = hc (Cons (t, n))
 let mkCase (l, e, rt, bs, d)   = hc (Case (l, e, rt, bs, d))
 let mkMetavar (n, s, v, t)     = hc (Metavar (n, s, v, t))
+let mkCall (f, es)
+  = match f, es with
+  | Call (f', es'), _ -> hc (Call (f', es' @ es))
+  | _, [] -> f
+  | _ -> hc (Call (f, es))
 
 (********* Helper functions to use the Subst operations  *********)
 (* This basically "ties the knot" between Subst and Lexp.

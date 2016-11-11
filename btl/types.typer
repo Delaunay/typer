@@ -76,7 +76,7 @@ length = lambda a ≡>
   lambda xs ->
     case xs
       | nil => 0
-      | cons hd tl => (1 + (length (a := a) tl));
+      | cons hd tl => (1 + (length tl));
 
 % ML's typical `head` function is not total, so can't be defined
 % as-is in Typer.  There are several workarounds:
@@ -87,14 +87,14 @@ head : (a : Type) ≡> List a -> Option a;
 head = lambda a ≡>
   lambda xs ->
     case xs
-      | nil => None (a := a)
-      | cons hd tl => Some (a := a) hd;
+      | nil => None
+      | cons hd tl => Some hd;
 
 tail : (a : Type) ≡> List a -> List a;
 tail = lambda a ≡>
   lambda xs ->
     case xs
-      | nil => nil (a := a)
+      | nil => nil
       | cons hd tl => tl;
 
 

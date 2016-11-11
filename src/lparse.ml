@@ -318,19 +318,16 @@ let rec infer (p : pexp) (ctx : elab_context): lexp * ltype =
                   [], [] in
 
         (* Build Arrow type.  *)
-        let target = if formal = [] then
-                       push_susp idt (S.shift (List.length args))
-                     else
-                       let targs, _
-                         = List.fold_right
-                             (fun (ak, v, _) (targs, i)
-                              -> ((ak, Var (v, i)) :: targs,
-                                 i - 1))
-                             formal
-                             ([], List.length formal + List.length args - 1) in
-                       mkCall (push_susp idt (S.shift (List.length formal
-                                                       + List.length args)),
-                               targs) in
+        let target = let targs, _
+                       = List.fold_right
+                           (fun (ak, v, _) (targs, i)
+                            -> ((ak, Var (v, i)) :: targs,
+                               i - 1))
+                           formal
+                           ([], List.length formal + List.length args - 1) in
+                     mkCall (push_susp idt (S.shift (List.length formal
+                                                     + List.length args)),
+                             targs) in
         let cons_type
           = List.fold_left (fun ltp (kind, v, tp)
                             -> mkArrow (kind, v, tp, loc, ltp))
@@ -353,6 +350,17 @@ let rec infer (p : pexp) (ctx : elab_context): lexp * ltype =
       -> let t = newMetatype () in
          let lxp = check p t ctx in
          (lxp, t)
+
+(* Build the list of implicit arguments to instantiate.  *)
+and instantiate_implicit e t ctx =
+  let (meta_ctx, _) = !global_substitution in
+  let rec instantiate t args =
+    match OL.lexp_whnf t (ectx_to_lctx ctx) meta_ctx with
+    | Arrow ((Aerasable | Aimplicit) as ak, v, t1, _, t2)
+      -> let arg = newMetavar t1 in (* FIXME: Use `v` to make matevar name.  *)
+        instantiate (mkSusp t2 (S.substitute arg)) ((ak, arg)::args)
+    | _ -> (mkCall (e, List.rev args), t)
+  in instantiate t []
 
 and infer_type pexp ectx var =
   (* We could also use lexp_check with an argument of the form
@@ -441,6 +449,10 @@ and check (p : pexp) (t : ltype) (ctx : elab_context): lexp =
 and infer_and_check pexp ctx t =
   let (e, inferred_t) = infer pexp ctx in
   let subst, _ = !global_substitution in
+  let (e, inferred_t) = match OL.lexp_whnf t (ectx_to_lctx ctx) subst with
+    | Arrow ((Aerasable | Aimplicit), _, _, _, _)
+      -> (e, inferred_t)
+    | _ -> instantiate_implicit e inferred_t ctx in
   (match Unif.unify inferred_t t (ectx_to_lctx ctx) subst with
    | None
      -> lexp_error (pexp_location pexp) e
@@ -603,7 +615,9 @@ and infer_call (func: pexp) (sargs: sexp list) ctx =
       | [], _
         -> (if not (SMap.is_empty pending) then
              let pending = SMap.bindings pending in
-             let loc = match pending with (_, sarg)::_ -> sexp_location sarg in
+             let loc = match pending with
+               | (_, sarg)::_ -> sexp_location sarg
+               | _ -> assert false in
              pexp_error loc func
                         ("Explicit actual args `"
                          ^ String.concat ", " (List.map (fun (l, _) -> l)

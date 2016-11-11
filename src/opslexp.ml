@@ -384,7 +384,7 @@ let rec check meta_ctx ctx e =
       let tct = arg_loop args ctx in
       tct
   | Case (l, e, ret, branches, default)
-    -> let rec call_split e = match e with
+    -> let call_split e = match e with
         | Call (f, args) -> (f, args)
         | _ -> (e,[]) in
       let etype = lexp_whnf (check ctx e) ctx meta_ctx in
