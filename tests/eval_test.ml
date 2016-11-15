@@ -169,11 +169,6 @@ let nat_decl = "
             | (succ y) => (1 + (to-num y))
             | zero => 0;"
 
-let bool_decl = "
-    Bool = inductive (dBool) (true) (false);
-    false = inductive-cons Bool false;
-    true = inductive-cons Bool true;"
-
 let _ = test_eval_eqv_named
   "Inductive::Recursive Call"
 
@@ -337,6 +332,23 @@ let _ = test_eval_eqv_named "Metavars"
    f x = 2 + f (1 + x);"
 
   "1" "1"
+
+let _ = test_eval_eqv_named
+  "Explicit field patterns"
+  "Triplet = inductive_ Triplet
+             (triplet (a ::: Int) (b :: Float) (c : String));
+   triplet = inductive-cons Triplet triplet;
+   t = triplet (b := 5.0) (a := 3) (c := \"hello\");"
+
+  "case t | triplet (b := bf) cf => cf;
+   case t | triplet (b := bf) cf => bf;
+   case t | triplet ( _ := bf) cf => cf;
+   case t | triplet ( _ := af) ( _ := bf) ( _ := cf) => bf;
+   case t | triplet ( _ := af) ( _ := bf) ( _ := cf) => cf;
+  "
+
+  "\"hello\"; 5.0; \"hello\"; 5.0; \"hello\"
+  "
 
 let _ = test_eval_eqv_named
   "Implicit Arguments"

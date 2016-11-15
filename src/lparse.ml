@@ -505,9 +505,9 @@ and check_case rtype (loc, target, ppatterns) ctx =
     (* get target and its type *)
     let tlxp, tltp = infer target ctx in
     let meta_ctx, _ = !global_substitution in
-    (* FIXME: We need to be careful with whnf: while the output is equivalent
-     * to the input, it's not necessarily as readable.  So try to reuse the
-     * "non-whnf" form whenever possible.  *)
+    (* FIXME: We need to be careful with whnf: while the output is "equivalent"
+     * to the input, it's not necessarily as readable/efficient.
+     * So try to reuse the "non-whnf" form whenever possible.  *)
     let call_split e = match (OL.lexp_whnf e (ectx_to_lctx ctx) meta_ctx) with
       | Call (f, args) -> (f, args)
       | _ -> (e,[]) in
@@ -544,7 +544,7 @@ and check_case rtype (loc, target, ppatterns) ctx =
                                      ^ lexp_string it ^ "` but got `"
                                     ^ lexp_string it' ^ "`") in
             let _ = check_uniqueness pat cons_name lbranches in
-            let cons_args
+            let cargs
               = try SMap.find cons_name constructors
                 with Not_found
                      -> lexp_error loc lctor
@@ -555,29 +555,56 @@ and check_case rtype (loc, target, ppatterns) ctx =
 
             let subst = List.fold_right (fun (_, t) s -> S.cons t s)
                                         targs S.identity in
-            let rec make_nctx ctx fargs s pargs cargs = match pargs, cargs with
-              | [], [] -> ctx, List.rev fargs
+            let rec make_nctx ctx   (* elab context.  *)
+                              s     (* Pending substitution.  *)
+                              pargs (* Pattern arguments.  *)
+                              cargs (* Constructor arguments.  *)
+                              pe    (* Pending explicit pattern args.  *)
+                              acc = (* Accumulated reult.  *)
+              match (pargs, cargs) with
+              | (_, []) when not (SMap.is_empty pe)
+                -> let pending = SMap.bindings pe in
+                  pexp_error loc pctor
+                             ("Explicit pattern args `"
+                              ^ String.concat ", " (List.map (fun (l, _) -> l)
+                                                             pending)
+                              ^ "` have no matching fields");
+                  make_nctx ctx s pargs cargs SMap.empty acc
+              | [], [] -> ctx, List.rev acc
               | (_, pat)::_, []
                 -> lexp_error loc lctor
                              "Too many arguments to the constructor";
-                  make_nctx ctx fargs s [] []
-              | (None, Ppatany _)::pargs, (Aexplicit, _, fty)::cargs
-                -> let nctx = ctx_extend ctx None Variable (mkSusp fty s) in
-                  make_nctx nctx ((Aexplicit, None)::fargs)
-                            (ssink vdummy s) pargs cargs
-              | (None, Ppatsym v)::pargs, (Aexplicit, _, fty)::cargs
-                -> let nctx = ctx_extend ctx (Some v) Variable (mkSusp fty s) in
-                  make_nctx nctx ((Aexplicit, Some v)::fargs)
-                            (ssink v s) pargs cargs
+                  make_nctx ctx s [] [] pe acc
               | (_, Ppatcons (p, _))::pargs, cargs
                 -> lexp_error (pexp_location p) lctor
                              "Nested patterns not supported!";
-                  make_nctx ctx fargs s pargs cargs
+                  make_nctx ctx s pargs cargs pe acc
+              | (_, (ak, Some (_, fname), fty)::cargs)
+                   when SMap.mem fname pe
+                -> let var = SMap.find fname pe in
+                  let nctx = ctx_extend ctx var Variable (mkSusp fty s) in
+                  make_nctx nctx (ssink (maybev var) s) pargs cargs
+                            (SMap.remove fname pe)
+                            ((ak, var)::acc)
+              | ((ef, fpat)::pargs, (ak, _, fty)::cargs)
+                   when (match (ef, ak) with
+                         | (Some (_, "_"), _) | (_, Aexplicit) -> true
+                         | _ -> false)
+                -> let var = match fpat with Ppatsym v -> Some v | _ -> None in
+                  let nctx = ctx_extend ctx var Variable (mkSusp fty s) in
+                  make_nctx nctx (ssink (maybev var) s) pargs cargs pe
+                            ((ak, var)::acc)
+              | ((Some (l, fname), fpat)::pargs, cargs)
+                -> let var = match fpat with Ppatsym v -> Some v | _ -> None in
+                  if SMap.mem fname pe then
+                    pexp_error l pctor
+                               ("Duplicate explicit field `" ^ fname ^ "`");
+                  make_nctx ctx s pargs cargs (SMap.add fname var pe) acc
               | pargs, (ak, _, fty)::cargs
                 -> let nctx = ctx_extend ctx None Variable (mkSusp fty s) in
-                  make_nctx nctx ((ak, None)::fargs)
-                            (ssink vdummy s) pargs cargs in
-            let nctx, fargs = make_nctx ctx [] subst pargs cons_args in
+                  make_nctx nctx (ssink vdummy s) pargs cargs pe
+                            ((ak, None)::acc) in
+            let nctx, fargs = make_nctx ctx subst pargs cargs SMap.empty [] in
             let rtype' = mkSusp rtype
                                 (S.shift (M.length (ectx_to_lctx nctx)
                                           - M.length (ectx_to_lctx ctx))) in
