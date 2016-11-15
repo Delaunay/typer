@@ -329,26 +329,29 @@ let _ = test_eval_eqv_named
 
 let _ = test_eval_eqv_named "Metavars"
   "f : ?;
-   f x = 2 + f (1 + x);"
+   f x = 2 + f (1 + x);
+   %inf : ?;
+   %inf x = inf (1 + x);
+   test = 2;"
 
   "1" "1"
 
 let _ = test_eval_eqv_named
   "Explicit field patterns"
   "Triplet = inductive_ Triplet
-             (triplet (a ::: Int) (b :: Float) (c : String));
+             (triplet (a ::: Int) (b :: Float) (c : String) (d :: Int));
    triplet = inductive-cons Triplet triplet;
-   t = triplet (b := 5.0) (a := 3) (c := \"hello\");"
+   t = triplet (b := 5.0) (a := 3) (d := 7) (c := \"hello\");"
 
   "case t | triplet (b := bf) cf => cf;
-   case t | triplet (b := bf) cf => bf;
+   case t | triplet (b := bf) _ => bf;
    case t | triplet ( _ := bf) cf => cf;
    case t | triplet ( _ := af) ( _ := bf) ( _ := cf) => bf;
    case t | triplet ( _ := af) ( _ := bf) ( _ := cf) => cf;
+   case t | triplet ( _ := af) ( _ := bf) (d := df) cf => df;
   "
 
-  "\"hello\"; 5.0; \"hello\"; 5.0; \"hello\"
-  "
+  "\"hello\"; 5.0; \"hello\"; 5.0; \"hello\"; 7"
 
 let _ = test_eval_eqv_named
   "Implicit Arguments"

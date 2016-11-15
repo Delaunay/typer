@@ -573,7 +573,7 @@ and check_case rtype (loc, target, ppatterns) ctx =
               | [], [] -> ctx, List.rev acc
               | (_, pat)::_, []
                 -> lexp_error loc lctor
-                             "Too many arguments to the constructor";
+                             "Too many pattern args to the constructor";
                   make_nctx ctx s [] [] pe acc
               | (_, Ppatcons (p, _))::pargs, cargs
                 -> lexp_error (pexp_location p) lctor
@@ -588,7 +588,7 @@ and check_case rtype (loc, target, ppatterns) ctx =
                             ((ak, var)::acc)
               | ((ef, fpat)::pargs, (ak, _, fty)::cargs)
                    when (match (ef, ak) with
-                         | (Some (_, "_"), _) | (_, Aexplicit) -> true
+                         | (Some (_, "_"), _) | (None, Aexplicit) -> true
                          | _ -> false)
                 -> let var = match fpat with Ppatsym v -> Some v | _ -> None in
                   let nctx = ctx_extend ctx var Variable (mkSusp fty s) in
@@ -600,8 +600,13 @@ and check_case rtype (loc, target, ppatterns) ctx =
                     pexp_error l pctor
                                ("Duplicate explicit field `" ^ fname ^ "`");
                   make_nctx ctx s pargs cargs (SMap.add fname var pe) acc
-              | pargs, (ak, _, fty)::cargs
+              | pargs, (ak, fname, fty)::cargs
                 -> let nctx = ctx_extend ctx None Variable (mkSusp fty s) in
+                  if ak = Aexplicit then
+                    pexp_error loc pctor
+                               ("Missing pattern for normal field"
+                                ^ (match fname with Some (_,n) -> " `" ^ n ^ "`"
+                                                  | _ -> ""));
                   make_nctx nctx (ssink vdummy s) pargs cargs pe
                             ((ak, None)::acc) in
             let nctx, fargs = make_nctx ctx subst pargs cargs SMap.empty [] in
@@ -672,8 +677,8 @@ and infer_call (func: pexp) (sargs: sexp list) ctx =
           largs, ltp
 
       | (Node (Symbol (_, "_:=_"), [Symbol (_, aname); sarg])) :: sargs,
-        Arrow (ak, Some (_, aname'), arg_type, _, ret_type)
-           when (aname = aname' || aname = "_")
+        Arrow (ak, _, arg_type, _, ret_type)
+           when (aname = "_")
         (* Explicit-implicit argument.  *)
         -> let parg = pexp_parse sarg in
           let larg = check parg arg_type ctx in
