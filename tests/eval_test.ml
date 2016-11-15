@@ -267,12 +267,13 @@ let _ = test_eval_eqv "w = 2" "declexpr w" "2"
 
 let attr_decl = "
   w = 2;
-  greater-than = new-attribute (Int -> Bool);
-  attribute w greater-than (lambda (y : Int) -> True);"
+  greater-than = new-attribute (Int -> Int);
+  greater-than = add-attribute greater-than w (lambda (x : Int) -> x);"
 
 let _ = test_eval_eqv attr_decl
-  "has-attribute w greater-than"
-  "True"
+  "has-attribute greater-than w;
+   (get-attribute greater-than w) 3;"
+  "True; 3"
 
 (* This makes sure contexts are reinitialized between calls
  *  i.e the context should not grow                             *)
@@ -337,8 +338,8 @@ let _ = test_eval_eqv_named
 let _ = test_eval_eqv_named
   "Implicit Arguments"
 
-  "default = new-attribute (Int -> Bool);
-   attribute Int default (lambda (lst : List Sexp) -> integer_ 1);
+  "default = new-attribute Macro;
+   default = add-attribute default Int (Macro_ (lambda (lst : List Sexp) -> integer_ 1));
 
    fun = lambda (x : Int) =>
       lambda (y : Int) ->

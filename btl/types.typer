@@ -118,11 +118,17 @@ DMacro_ = inductive-cons Macro DMacro_ ;
 
 expand_macro_ : Macro -> List Sexp -> Sexp;
 expand_macro_ m args = case m
-  | Macro_ f => (f args);
+  | Macro_ f => (f args)
+  % return first sexp if a DMacro_ is used
+  | DMacro_ f => (case (f args)
+    | cons hd tl => hd
+    | nil => (symbol_ "error"));
 
 expand_dmacro_ : Macro -> List Sexp -> List Sexp;
 expand_dmacro_ m args = case m
-  | DMacro_ f => (f args);
+  | DMacro_ f => (f args)
+  % Wrap a Macro in a list of Sexp if Macro_ is used
+  | Macro_ f => cons (a := Sexp) (f args) (nil (a := Sexp));
 
 sexp_dispatch_ = Built-in "sexp_dispatch_" (
                               (a : Type) ≡>
@@ -175,13 +181,15 @@ read  = Built-in "read"  (FileHandle -> Int -> IO String);
 %       Attributes
 % -----------------------------------------------------
 
+% Despite being typed as macro those actually returns lexp.
+% not that it matters for the end user
 Attribute = Built-in "Attribute";
 new-attribute = Built-in "new-attribute" Macro;
 get-attribute = Built-in "get-attribute" Macro;
 has-attribute = Built-in "has-attribute" Macro;
+add-attribute = Built-in "add-attribute" Macro;
 
-add-attribute = Built-in "add-attribute" (List Sexp -> Sexp);
-attribute = Macro_ add-attribute;
+%  attribute = Macro_ add-attribute;
 
 % -----------------------------------------------------
 %       Context Accessors

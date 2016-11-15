@@ -410,13 +410,9 @@ let main () =
 
             ) flexps));
 
-        (if (get_p_option "dump-prop") then(
-          dump_properties ctx;
-          print_string "\n"));
-
         (* get typecheck context *)
         let lctx_to_cctx (lctx: elab_context) =
-          let (_, env, _) = ctx in env in
+          let (_, env) = ctx in env in
 
         (if (get_p_option "typecheck") then(
             print_string (make_title " TYPECHECK ");

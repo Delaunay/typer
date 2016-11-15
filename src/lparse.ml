@@ -102,6 +102,10 @@ let elab_check_sort (ctx : elab_context) lsort var ltp =
                        ("Type of `" ^ name ^ "` is not a proper type: "
                         ^ typestr)
 
+(* Builtin Macro i.e, special forms *)
+type macromap =
+  (location -> lexp list -> elab_context -> lexp -> (lexp * lexp)) SMap.t
+
 let elab_check_proper_type (ctx : elab_context) ltp var =
   try elab_check_sort ctx (OL.check (ectx_to_lctx ctx) ltp) var ltp
   with e -> print_string "Exception while checking type `";
@@ -642,31 +646,18 @@ and lexp_call (func: pexp) (sargs: sexp list) ctx i =
             | Aexplicit, (Some sexp) -> sexp
             | Aexplicit, None        -> fatal dloc "Explicit argument expected"
             | Aimplicit, None        -> (
-                (* get variable info *)
-                let vidx, vname = match ltp with
-                  | Var ((_, name), idx) -> idx, name
-                  | _ -> lexp_fatal loc ltp "Unable to find default attribute" in
-
-                (* get default property *)
                 let pidx, pname = (senv_lookup "default" ctx), "default" in
+                let default = Var((dloc, "default"), pidx) in
 
-                (* get macro *)
-                let default_macro = try get_property ctx (vidx, vname) (pidx, pname)
-                  with _ -> dump_properties ctx; dltype in
+                (* lookup default attribute of ltp *)
+                let attr, attr_type = get_attribute_impl loc [default; ltp] ctx ltp in
 
-                lexp_print default_macro;
-
-                print_string ((lexp_name ltp) ^ ": ");
-                lexp_print ltp; print_string "\n";
-                fatal dloc "Default Arg lookup not implemented")
-
-
+                let v = lexp_expand_macro attr [] ctx [] in
+                  match v with
+                    | Vsexp (sexp) -> Node (Symbol (dloc, "_:=_"), [Symbol (dloc, name); sexp])
+                    | _ ->  value_fatal loc v "default attribute should return a sexp")
             with Not_found -> fatal dloc (name ^ " not found")
           ) order in
-
-        (*
-        print_string "\nSarg2: "; List.iter (fun lxp -> sexp_print lxp; print_string ", ") sargs2;
-        print_string "\n"; *)
 
         (* check if we had enough information to reorder args *)
         let sargs = if (List.length order >= List.length sargs) then sargs2 else sargs in
@@ -771,37 +762,19 @@ and lexp_decls_macro (loc, mname) sargs ctx: (pdecl list * elab_context) =
         | None -> fatal loc "expression does not exist" in
 
       (* Special Form *)
-        match mfun with
-          | Var((_, "add-attribute"), _) ->(
-            (* Builtin macro *)
-            let pargs = List.map pexp_parse sargs in
-            let largs = _lexp_parse_all pargs ctx [] in
+      let ret = lexp_expand_dmacro body sargs ctx [] in
 
-            (* extract info *)
-            let var, att, fn = match largs with
-              | [Var((_, vn), vi); Var((_, an), ai); fn] -> (vi, vn), (ai, an), fn
-              | _ -> fatal loc "add-attribute expects 3 args" in
+      (* convert typer list to ocaml *)
+      let decls = tlist2olist [] ret in
 
-            let ctx = add_property ctx var att fn in
+      (* extract sexp from result *)
+      let decls = List.map (fun g ->
+        match g with
+          | Vsexp(sxp) -> sxp
+          | _ -> value_fatal loc g "Macro expects sexp list") decls in
 
-            (* FIXME: We need to have something in lexp to represent this
-             * add-attribute operation!  *)
-              [], ctx)
-
-          | _ ->(
-            let ret = lexp_expand_dmacro body sargs ctx [] in
-
-            (* convert typer list to ocaml *)
-            let decls = tlist2olist [] ret in
-
-            (* extract sexp from result *)
-            let decls = List.map (fun g ->
-              match g with
-                | Vsexp(sxp) -> sxp
-                | _ -> value_fatal loc g "Macro expects sexp list") decls in
-
-            (* read as pexp_declaraton *)
-            pexp_decls_all decls, ctx)
+      (* read as pexp_declaraton *)
+      pexp_decls_all decls, ctx
   with e ->
     fatal loc ("Macro `" ^ mname ^ "`not found")
 
@@ -916,6 +889,89 @@ and _lexp_parse_all (p: pexp list) (ctx: elab_context) i : lexp list =
 
     (loop p ctx [])
 
+(* --------------------------------------------------------------------------
+ *  Built-in Macro: i.e special forms
+ * -------------------------------------------------------------------------- *)
+and builtin_macro = [
+  (* FIXME: These should be functions!  *)
+  ("decltype",      decltype_impl);
+  ("declexpr",      declexpr_impl);
+  (* FIXME: These are not macros but `special-forms`.
+   * We should add here `let_in_`, `case_`, etc...  *)
+  ("get-attribute", get_attribute_impl);
+  ("new-attribute", new_attribute_impl);
+  ("has-attribute", has_attribute_impl);
+  ("add-attribute", add_attribute_impl);
+]
+
+and make_macro_map unit =
+ List.fold_left (fun map (name, funct) ->
+    SMap.add name funct map) SMap.empty builtin_macro
+
+and get_macro_impl loc name =
+  try SMap.find name (make_macro_map ())
+    with Not_found -> fatal loc ("Builtin macro" ^ name ^ " not found")
+
+and is_builtin_macro name =
+  try let _ = SMap.find name (make_macro_map ()) in true
+    with Not_found -> false
+
+(* --------------------------------------------------------------------------
+ *  Special form implementation
+ * -------------------------------------------------------------------------- *)
+and new_attribute_impl loc largs ctx ftype =
+  let ltp = match largs with
+    | [ltp] -> ltp
+    | _ -> fatal loc "new-attribute expects a single Type argument" in
+
+  let attr_table_type = type0 in
+    AttributeTable (AttributeMap.empty, ltp), attr_table_type
+
+and add_attribute_impl loc largs ctx ftype =
+  let n = get_size ctx in
+  let table, var, attr = match largs with
+    | [table; Var((_, name), idx); attr] -> table, (n - idx, name), attr
+    | _ -> fatal loc "add-attribute expects 3 arguments (table; var; attr)" in
+
+  let map, attr_type =  match OL.lexp_whnf table (ectx_to_lctx ctx) with
+      | AttributeTable (map, attr_type) -> map, attr_type
+      | _ -> fatal loc "add-attribute expects a table as first argument" in
+
+    (* FIXME: Type check (attr: type == attr_type) *)
+  let attr_table_type = type0 in
+    AttributeTable (AttributeMap.add var attr map, attr_type), attr_table_type
+
+and get_attribute_impl loc largs ctx ftype =
+  let ctx_n = get_size ctx in
+  let table, var = match largs with
+    | [table; Var((_, name), idx)] -> table, (ctx_n - idx, name)
+    | _ -> fatal loc "get-attribute expects 2 arguments (table; var)" in
+
+  let map, attr_type =  match OL.lexp_whnf table (ectx_to_lctx ctx) with
+    | AttributeTable (map, attr_type) -> map, attr_type
+    | _ -> fatal loc "get-attribute expects a table as first argument" in
+
+  let lxp = AttributeMap.find var map in
+  let (reverse_idx, _) = var in
+  (* we need to subst this expression as it was added in an older context *)
+  (* FIXME: What should be the correct shift *)
+  let s = 2 in
+    mkSusp lxp (S.shift s), mkSusp attr_type (S.shift s)
+
+and has_attribute_impl loc largs ctx ftype =
+  let n = get_size ctx in
+  let table, var = match largs with
+    | [table; Var((_, name), idx)] -> table, (n - idx, name)
+    | _ -> fatal loc "get-attribute expects 2 arguments (table; var)" in
+
+  let map, attr_type = match OL.lexp_whnf table (ectx_to_lctx ctx) with
+    | AttributeTable (map, attr_type) -> map, attr_type
+    | lxp -> lexp_fatal loc lxp "get-attribute expects a table as first argument" in
+
+    try let _ = AttributeMap.find var map in
+      (get_predef "True" ctx), (get_predef "Bool" ctx)
+    with Not_found ->
+      (get_predef "False" ctx), (get_predef "Bool" ctx)
 
 and print_lexp_trace (trace : (OL.pexporlexp list) option) =
   print_trace " ELAB TRACE " trace !_global_lexp_trace

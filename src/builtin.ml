@@ -68,13 +68,13 @@ let get_predef_raw (name: string) : lexp =
         | Some exp -> exp
         | None -> error dloc ("\""^ name ^ "\" was not predefined")
 
-let get_predef_option (name: string) ctx =
+let get_predef_option (name: string) (ctx: elab_context) =
   let r = (get_size ctx) - !builtin_size - 0 in
     match !(SMap.find name (!predef_map)) with
         | Some exp -> Some (mkSusp exp (S.shift r))
         | None -> None
 
-let get_predef (name: string) ctx =
+let get_predef (name: string) (ctx: elab_context) =
   let r = (get_size ctx) - !builtin_size - 0 in
   let p = get_predef_raw name in
     (mkSusp p (S.shift r))
@@ -155,43 +155,14 @@ let is_lbuiltin idx ctx =
     else
         false
 
-(* --------------------------------------------------------------------------
- *  Built-in Macro
- * -------------------------------------------------------------------------- *)
 
-(* Those are function that are evaluated during lexp_parse *)
+let has_attribute_impl loc largs ctx ftype = (*)
+  let table, attr_name = get_table "has-attribute" largs ctx in
+  let b = SMap.exists attr_name table in
+  let rvar = if b then get_predef "True" ctx else get_predef "False" ctx in *)
+    (get_predef "False" ctx), (get_predef "Bool" ctx)
 
-let get_attribute_impl loc largs ctx ftype =
 
-  let (vi, vn), (ai, an) = match largs with
-      | [Var((_, vn), vi); Var((_, an), ai)] -> (vi, vn), (ai, an)
-      | _ -> error loc "get-attribute expects two arguments" in
-
-  let lxp = get_property ctx (vi, vn) (ai, an) in
-  let ltype = match env_lookup_expr ctx ((loc, an), ai) with
-    | Some ltp -> ltp
-    | None -> error loc "not expression available" in
-
-    lxp, ltype
-
-let new_attribute_impl loc largs ctx ftype =
-
-  let eltp = match largs with
-    | [eltp] -> eltp
-    | _ -> warning loc "new-attribute expects one argument"; type0 in
-
-    eltp, ftype
-
-let has_attribute_impl loc largs ctx ftype =
-
-  let (vi, vn), (ai, an) = match largs with
-      | [Var((_, vn), vi); Var((_, an), ai)] -> (vi, vn), (ai, an)
-      | _ -> error loc "has-attribute expects two arguments" in
-
-  let b = has_property ctx (vi, vn) (ai, an) in
-
-  let rvar = if b then get_predef "True" ctx else get_predef "False" ctx in
-    rvar, (get_predef "Bool" ctx)
 
 let declexpr_impl loc largs ctx ftype =
 
@@ -217,31 +188,9 @@ let decltype_impl loc largs ctx ftype =
     (* mkSusp prop (S.shift (var_i + 1)) *)
     ltype, type0
 
-let builtin_macro = [
-  (* FIXME: These should be functions!  *)
-  ("decltype",      decltype_impl);
-  ("declexpr",      declexpr_impl);
-  (* FIXME: These are not macros but `special-forms`.
-   * We should add here `let_in_`, `case_`, etc...  *)
-  ("get-attribute", get_attribute_impl);
-  ("new-attribute", new_attribute_impl);
-  ("has-attribute", has_attribute_impl);
-]
 
-type macromap =
-  (location -> lexp list -> elab_context -> lexp -> (lexp * lexp)) SMap.t
 
-let macro_impl_map : macromap =
-  List.fold_left (fun map (name, funct) ->
-    SMap.add name funct map) SMap.empty builtin_macro
 
-let get_macro_impl loc name =
-  try SMap.find name macro_impl_map
-    with Not_found -> error loc ("Builtin macro" ^ name ^ " not found")
-
-let is_builtin_macro name =
-  try let _ = SMap.find name macro_impl_map in true
-    with Not_found -> false
 
 
 

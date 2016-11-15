@@ -1,0 +1,28 @@
+
+Reify = inductive_ (Reify (a : Type)) (RInt (a = Int)) (RFloat (a = Float)) (RString (a = String));
+RInt = inductive-cons Reify RInt;
+RFloat = inductive-cons Reify RFloat;
+RString = inductive-cons Reify RString;
+
+float-to-int : Float -> Int;
+float-to-int x = 1;
+
+string-to-int : String -> Int;
+string-to-int x = 1;
+
+get-type : Reify -> Type;
+get-type x = case x
+  | RInt    => Int
+  | RFloat  => Float
+  | RString => String;
+
+% Here
+to-int : (a : Type) ≡> (r : (Reify a)) => (x : a) -> Int;
+to-int = lambda a ≡> lambda r = lambda x -> case a
+  | RInt => x
+  | RFloat => float-to-int x
+  | RString => string-to-int x;
+
+a = to-int (a := Float2) (2.0);
+b = to-int (a := String2) "2";
+c = to-int (a := Int2) 2;

@@ -39,6 +39,9 @@ type vref = U.vref
 
 type label = symbol
 
+type attribute_key  = (int * string)  (* rev_dbi * Var name *)
+module AttributeMap = Map.Make (struct type t = attribute_key let compare = compare end)
+
 (*************** Elaboration to Lexp *********************)
 
 (* The scoping of `Let` is tricky:
@@ -76,6 +79,8 @@ type ltype = lexp
              * ltype (* The type of the return value of all branches *)
              * (U.location * (arg_kind * vdef option) list * lexp) SMap.t
              * (vdef option * lexp) option               (* Default.  *)
+   (* Special property table *)
+   | AttributeTable of lexp AttributeMap.t * ltype
  (*   (\* For logical metavars, there's no substitution.  *\)
   *   | Metavar of (U.location * string) * metakind * metavar ref
   * and metavar =
@@ -239,6 +244,7 @@ let rec push_susp e s =            (* Push a suspension one level down.  *)
    * in many other cases than just when we bump into a Susp.  *)
   | Susp (e,s') -> push_susp e (scompose s' s)
   | (Var _) -> nosusp (mkSusp e s)
+  | AttributeTable _ -> e
 
 and nosusp e =                  (* Return `e` without `Susp`.  *)
   match e with
@@ -258,6 +264,7 @@ let lexp_name e =
     | Inductive _ -> "inductive_"
     | Builtin   _ -> "Builtin"
     | Susp      _ -> "Susp"
+    | AttributeTable _ -> "AttributeTable"
     | _ -> "lexp_to_string: not implemented"
 
 (*
@@ -504,6 +511,7 @@ and _lexp_to_str ctx exp =
             | Aexplicit -> ":" | Aimplicit -> "::" | Aerasable -> ":::" in
 
     match exp with
+        | AttributeTable _ -> "AttributeTable"
         | Imm(value) -> (match value with
             | String (_, s) -> tval ("\"" ^ s ^ "\"")
             | Integer(_, s) -> tval (string_of_int s)

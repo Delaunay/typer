@@ -453,11 +453,11 @@ let rec check ctx e =
 let rec erase_type (lxp: L.lexp): E.elexp =
 
     match lxp with
-        | L.Imm(s)          -> E.Imm(s)
-        | L.Builtin(v, _)   -> E.Builtin(v)
-        | L.Var(v)          -> E.Var(v)
-        | L.Cons(_, s)      -> E.Cons(s)
-
+        | L.Imm(s)           -> E.Imm(s)
+        | L.Builtin(v, _)    -> E.Builtin(v)
+        | L.Var(v)           -> E.Var(v)
+        | L.Cons(_, s)       -> E.Cons(s)
+        | L.AttributeTable _ -> E.Type
         | L.Lambda (P.Aerasable, _, _, body) ->
           (* The var shouldn't appear in body, basically, but we need
            * to adjust the debruijn indices of other vars, hence the subst.  *)

@@ -82,14 +82,6 @@ let dloc   = dummy_location
 let type0  = Sort (dloc, Stype (SortLevel SLz))
 let dltype = type0
 
-type property_key = (int * string)  (* rev_dbi * Var name *)
-module PropertyMap
-    = Map.Make (struct type t = property_key let compare = compare end)
-
-(* (* rev_dbi * Var name *) => (name * lexp) *)
-type property_elem = lexp PropertyMap.t
-type property_env = property_elem PropertyMap.t
-
 (* easier to debug with type annotations *)
 type env_elem = (db_offset * vdef option * varbind * ltype)
 type lexp_context = env_elem M.myers
@@ -104,11 +96,11 @@ type senv_type = senv_length * scope
 
 (* This is the *elaboration context* (i.e. a context that holds
  * a lexp context plus some side info.  *)
-type elab_context = senv_type * lexp_context * property_env
+type elab_context = senv_type * lexp_context
 
 (* Extract the lexp context from the context used during elaboration.  *)
 let ectx_to_lctx (ectx : elab_context) : lexp_context =
-  let (_, lctx, _) = ectx in lctx
+  let (_, lctx) = ectx in lctx
 
 (*  internal definitions
  * ---------------------------------- *)
@@ -120,15 +112,15 @@ let _make_myers = M.nil
 (*  Public methods: DO USE
  * ---------------------------------- *)
 
-let make_elab_context = (_make_senv_type, _make_myers, PropertyMap.empty)
+let make_elab_context = (_make_senv_type, _make_myers)
 
 let get_roffset ctx = let (_, _, (_, rof)) = ctx in rof
 
-let get_size ctx = let ((n, _), _, _) = ctx in n
+let get_size ctx = let ((n, _), _) = ctx in n
 
 (*  return its current DeBruijn index *)
 let rec senv_lookup (name: string) (ctx: elab_context): int =
-    let ((n, map), _, _) = ctx in
+    let ((n, map), _) = ctx in
     let raw_idx =  n - (SMap.find name map) - 1 in (*
         if raw_idx > (n - csize) then
             raw_idx - rof   (* Shift if the variable is not bound *)
@@ -152,22 +144,21 @@ let lctx_extend (ctx : lexp_context) (def: vdef option) (v: varbind) (t: lexp) =
 
 let env_extend_rec r (ctx: elab_context) (def: vdef) (v: varbind) (t: lexp) =
   let (loc, name) = def in
-  let ((n, map), env, f) = ctx in
+  let ((n, map), env) = ctx in
   (try let _ = senv_lookup name ctx in
        warning loc ("Variable Shadowing " ^ name);
    with Not_found -> ());
   let nmap = SMap.add name n map in
   ((n + 1, nmap),
-   lexp_ctx_cons env r (Some def) v t,
-   f)
+   lexp_ctx_cons env r (Some def) v t)
 
 let env_extend (ctx: elab_context) (def: vdef) (v: varbind) (t: lexp) = env_extend_rec 0 ctx def v t
 
 let ectx_extend (ectx: elab_context) (def: vdef option) (v: varbind) (t: lexp)
     : elab_context =
   match def with
-  | None -> let ((n, map), lctx, f) = ectx in
-           ((n + 1, map), lexp_ctx_cons lctx 0 None v t, f)
+  | None -> let ((n, map), lctx) = ectx in
+           ((n + 1, map), lexp_ctx_cons lctx 0 None v t)
   | Some def -> env_extend ectx def v t
 
 let lctx_extend_rec (ctx : lexp_context) (defs: (vdef * lexp * ltype) list) =
@@ -180,12 +171,12 @@ let lctx_extend_rec (ctx : lexp_context) (defs: (vdef * lexp * ltype) list) =
   ctx
 
 let ectx_extend_rec (ctx: elab_context) (defs: (vdef * lexp * ltype) list) =
-  let ((n, senv), lctx, f) = ctx in
+  let ((n, senv), lctx) = ctx in
   let senv', _ = List.fold_left
                    (fun (senv, i) ((_, vname), _, _) ->
                      SMap.add vname i senv, i + 1)
                    (senv, n) defs in
-  ((n + List.length defs, senv'), lctx_extend_rec lctx defs, f)
+  ((n + List.length defs, senv'), lctx_extend_rec lctx defs)
 
 let env_lookup_by_index index (ctx: lexp_context): env_elem =
   Myers.nth index ctx
@@ -310,84 +301,4 @@ let env_lookup_type ctx (v : vref): lexp =
 
 let env_lookup_expr ctx (v : vref): lexp option =
   lctx_lookup_value (ectx_to_lctx ctx) v
-
-(* -------------------------------------------------------------------------- *)
-(*          PropertyMap                                                       *)
-(* -------------------------------------------------------------------------- *)
-
-
-let add_property ctx (var_i, var_n) (att_i, att_n) (prop: lexp)
-    : elab_context =
-
-  let (a, b, property_map) = ctx in
-  let n = get_size ctx in
-
-  (* get_var properties  *)
-  let vmap = try PropertyMap.find (var_i, var_n) property_map
-    with Not_found -> PropertyMap.empty in
-
-  (* add property *)
-  let nvmap = PropertyMap.add (n - att_i, att_n) prop vmap in
-
-  (* update properties *)
-  let property_map = PropertyMap.add (n - var_i, var_n) nvmap property_map in
-
-    (a, b, property_map)
-
-let get_property ctx (var_i, var_n) (att_i, att_n): lexp =
-  let (a, b, property_map) = ctx in
-  let n = get_size ctx in
-
-  (* /!\ input index are reversed or not ? I think not so I shift them *)
-  let pmap = try PropertyMap.find (n - var_i, var_n) property_map
-    with Not_found ->
-      error dummy_location ("Variable \"" ^ var_n ^ "\" does not have any properties") in
-
-  let prop = try PropertyMap.find (n - att_i, att_n) pmap
-    with Not_found ->
-      error dummy_location ("Property \"" ^ att_n ^ "\" not found") in
-        mkSusp prop (S.shift (var_i + 1))
-
-let has_property ctx (var_i, var_n) (att_i, att_n): bool =
-  let (a, b, property_map) = ctx in
-  let n = get_size ctx in
-
-  try
-    let pmap = PropertyMap.find (n - var_i, var_n) property_map in
-    let _ = PropertyMap.find (n - att_i, att_n) pmap in
-    true
-  with Not_found -> false
-
-
-let dump_properties ctx =
-  let (a, b, property_map) = ctx in
-  print_string (make_title " Properties ");
-
-  make_rheader [
-        (Some ('l', 10), "V-NAME");
-        (Some ('l',  4), "RIDX");
-        (Some ('l', 10), "P-NAME");
-        (Some ('l',  4), "RIDX");
-        (Some ('l', 32), "LEXP")];
-
-  print_string (make_sep '-');
-
-  PropertyMap.iter (fun (var_i, var_n) pmap ->
-    print_string "    | ";
-    lalign_print_string var_n 10; print_string " | ";
-    ralign_print_int var_i 4; print_string " | ";
-    let first = ref true in
-
-    PropertyMap.iter (fun (att_i, att_n) lxp ->
-      (if (!first = false) then
-        print_string (make_line ' ' 20)
-      else
-        first := false);
-
-      lalign_print_string att_n 10; print_string " | ";
-      ralign_print_int att_i 4; print_string " : ";
-      lexp_print lxp; print_string "\n") pmap) property_map;
-
-  print_string (make_sep '-');
-
 
