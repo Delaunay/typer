@@ -79,7 +79,8 @@ let warning = msg_warning "DEBRUIJN"
  * ---------------------------------- *)
 
 let dloc   = dummy_location
-let type0  = Sort (dloc, Stype (SortLevel SLz))
+let level0 = mkSortLevel SLz
+let type0  = mkSort (dloc, Stype level0)
 let dltype = type0
 
 type property_key = (int * string)  (* rev_dbi * Var name *)

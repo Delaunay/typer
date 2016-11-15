@@ -566,7 +566,6 @@ and print_trace title trace default =
     print_string ((type_name expr) ^ ": " ^ (type_string expr) ^ "\n")
   ) in
 
-  let lexp_trace = print_trace pexp_name pexp_string pexp_location in
   let elexp_trace = print_trace elexp_name elexp_string elexp_location in
 
   (* Print the trace*)

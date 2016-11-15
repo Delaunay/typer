@@ -332,6 +332,11 @@ let _ = test_eval_eqv_named
 
   "7; 13; 5; 7; 7"
 
+let _ = test_eval_eqv_named "Metavars"
+  "f : ?;
+   f x = 2 + f (1 + x);"
+
+  "1" "1"
 
 let _ = test_eval_eqv_named
   "Implicit Arguments"

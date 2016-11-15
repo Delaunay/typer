@@ -19,6 +19,18 @@ more details.
 You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.  *)
 
+(* During unification, we often have problems of the form
+ *
+ *     X[σ] = e
+ *
+ * Where X is a metavariable and `e` can be any term.  We can solve this
+ * problem by computing the inverse of the substitution, σ⁻¹, and use:
+ *
+ *     X = e[σ⁻¹]
+ *
+ * where σ⁻¹ is such that e[σ⁻¹][σ] = e[σ⁻¹ ∘ σ] = e
+ *)
+
 open Lexp
 open Util
 module S = Subst
@@ -72,7 +84,7 @@ let counter = ref 0
 let mkVar (idx: int) : lexp =
   counter := !counter + 1;
   Var((U.dummy_location, "<anon" ^ string_of_int idx ^ ">"), idx)
-let impossible = Imm Epsilon
+let impossible = Imm Sexp.Epsilon
 
 (** Fill the gap between e_i in the list of couple (e_i, i) by adding
     dummy variables.

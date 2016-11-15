@@ -1,4 +1,4 @@
--*- outline -*-
+-*- org -*-
 
 New:
 - extend the stt table to give precedence for "inner op chars" to use within

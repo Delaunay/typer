@@ -170,69 +170,67 @@ let rec conv_p' meta_ctx (ctx : DB.lexp_context) (vs : set_lexp) e1 e2 : bool =
   let conv_p' = conv_p' meta_ctx in
   let e1' = lexp_whnf e1 ctx meta_ctx in
   let e2' = lexp_whnf e2 ctx meta_ctx in
-  let stop1 = not (e1 == e1') && set_member_p vs e1' in
-  let stop2 = not (e2 == e2') && set_member_p vs e2' in
-  let vs' = if not (e1 == e1') && not stop1 then set_add vs e1'
-            else if not (e2 == e2') && not stop2 then set_add vs e2'
-            else vs in
-  let conv_p = conv_p' ctx vs' in
-  let conv_p'' e1 e2 =
-    e1 == e2 ||
-      (match (e1, e2) with
-       | (Imm (Integer (_, i1)), Imm (Integer (_, i2))) -> i1 = i2
-       | (Imm (Float (_, i1)), Imm (Float (_, i2))) -> i1 = i2
-       | (Imm (String (_, i1)), Imm (String (_, i2))) -> i1 = i2
-       | (SortLevel (sl1), SortLevel (sl2)) -> sl1 = sl2
-       | (Sort (_, s1), Sort (_, s2))
-         -> s1 == s2
-           || (match (s1, s2) with
-              | (Stype e1, Stype e2) -> conv_p e1 e2
-              | _ -> false)
-       | (Builtin ((_, s1), _), Builtin ((_, s2), _)) -> s1 = s2
-       | (Var (_, v1), Var (_, v2)) -> v1 = v2
-       | (Arrow (ak1, vd1, t11, _, t12), Arrow (ak2, vd2, t21, _, t22))
-         -> ak1 == ak2
-           && conv_p t11 t21
-           && conv_p' (DB.lexp_ctx_cons ctx 0 vd1 Variable t11) (set_shift vs')
-                     t12 t22
-       | (Lambda (ak1, l1, t1, e1), Lambda (ak2, l2, t2, e2))
-         -> ak1 == ak2 && conv_p t1 t2
-           && conv_p' (DB.lexp_ctx_cons ctx 0 (Some l1) Variable t1)
-                     (set_shift vs')
-                     e1 e2
-       | (Call (f1, args1), Call (f2, args2))
-         -> let rec conv_arglist_p args1 args2 : bool =
-             List.fold_left2
-               (fun eqp (ak1,t1) (ak2,t2) -> eqp && ak1 = ak2 && conv_p t1 t2)
-               true args1 args2 in
-           conv_p f1 f2 && conv_arglist_p args1 args2
-       | (Inductive (_, l1, args1, cases1), Inductive (_, l2, args2, cases2))
-         -> let rec conv_args ctx vs args1 args2 =
-             match args1, args2 with
-             | ([], []) -> true
-             | ((ak1,l1,t1)::args1, (ak2,l2,t2)::args2)
-               -> ak1 == ak2 && conv_p' ctx vs t1 t2
-                 && conv_args (DB.lexp_ctx_cons ctx 0 (Some l1) Variable t1)
-                             (set_shift vs)
-                             args1 args2
-             | _,_ -> false in
-           let rec conv_fields ctx vs fields1 fields2 =
-             match fields1, fields2 with
-             | ([], []) -> true
-             | ((ak1,vd1,t1)::fields1, (ak2,vd2,t2)::fields2)
-               -> ak1 == ak2 && conv_p' ctx vs t1 t2
-                 && conv_fields (DB.lexp_ctx_cons ctx 0 vd1 Variable t1)
-                               (set_shift vs)
-                               fields1 fields2
-             | _,_ -> false in
-           l1 == l2 && conv_args ctx vs' args1 args2
-           && SMap.equal (conv_fields ctx vs') cases1 cases2
-       | (Cons (t1, (_, l1)), Cons (t2, (_, l2))) -> l1 = l2 && conv_p t1 t2
-       (* FIXME: Various missing cases, such as Case.  *)
-       | (_, _) -> false)
-  in if stop1 || stop2
-     then conv_p'' e1 e2
-     else conv_p'' e1' e2'
+  e1' == e2' ||
+    let stop1 = not (e1 == e1') && set_member_p vs e1' in
+    let stop2 = not (e2 == e2') && set_member_p vs e2' in
+    let vs' = if not (e1 == e1') && not stop1 then set_add vs e1'
+              else if not (e2 == e2') && not stop2 then set_add vs e2'
+              else vs in
+    let conv_p = conv_p' ctx vs' in
+    match if stop1 || stop2 then (e1, e2) else (e1', e2') with
+    | (Imm (Integer (_, i1)), Imm (Integer (_, i2))) -> i1 = i2
+    | (Imm (Float (_, i1)), Imm (Float (_, i2))) -> i1 = i2
+    | (Imm (String (_, i1)), Imm (String (_, i2))) -> i1 = i2
+    | (SortLevel sl1, SortLevel sl2) -> sl1 = sl2
+    | (Sort (_, s1), Sort (_, s2))
+      -> s1 == s2
+        || (match (s1, s2) with
+           | (Stype e1, Stype e2) -> conv_p e1 e2
+           | _ -> false)
+    | (Builtin ((_, s1), _), Builtin ((_, s2), _)) -> s1 = s2
+    | (Var (_, v1), Var (_, v2)) -> v1 = v2
+    | (Arrow (ak1, vd1, t11, _, t12), Arrow (ak2, vd2, t21, _, t22))
+      -> ak1 == ak2
+        && conv_p t11 t21
+        && conv_p' (DB.lexp_ctx_cons ctx 0 vd1 Variable t11) (set_shift vs')
+                  t12 t22
+    | (Lambda (ak1, l1, t1, e1), Lambda (ak2, l2, t2, e2))
+      -> ak1 == ak2 && (conv_erase || conv_p t1 t2)
+        && conv_p' (DB.lexp_ctx_cons ctx 0 (Some l1) Variable t1)
+                  (set_shift vs')
+                  e1 e2
+    | (Call (f1, args1), Call (f2, args2))
+      -> let rec conv_arglist_p args1 args2 : bool =
+          List.fold_left2
+            (fun eqp (ak1,t1) (ak2,t2)
+             -> eqp && ak1 = ak2
+               && (conv_erase && ak1 = P.Aerasable || conv_p t1 t2))
+            true args1 args2 in
+        conv_p f1 f2 && conv_arglist_p args1 args2
+    | (Inductive (_, l1, args1, cases1), Inductive (_, l2, args2, cases2))
+      -> let rec conv_args ctx vs args1 args2 =
+          match args1, args2 with
+          | ([], []) -> true
+          | ((ak1,l1,t1)::args1, (ak2,l2,t2)::args2)
+            -> ak1 == ak2 && conv_p' ctx vs t1 t2
+              && conv_args (DB.lexp_ctx_cons ctx 0 (Some l1) Variable t1)
+                          (set_shift vs)
+                          args1 args2
+          | _,_ -> false in
+        let rec conv_fields ctx vs fields1 fields2 =
+          match fields1, fields2 with
+          | ([], []) -> true
+          | ((ak1,vd1,t1)::fields1, (ak2,vd2,t2)::fields2)
+            -> ak1 == ak2 && conv_p' ctx vs t1 t2
+              && conv_fields (DB.lexp_ctx_cons ctx 0 vd1 Variable t1)
+                            (set_shift vs)
+                            fields1 fields2
+          | _,_ -> false in
+        l1 == l2 && conv_args ctx vs' args1 args2
+        && SMap.equal (conv_fields ctx vs') cases1 cases2
+    | (Cons (t1, (_, l1)), Cons (t2, (_, l2))) -> l1 = l2 && conv_p t1 t2
+    (* FIXME: Various missing cases, such as Case.  *)
+    | (_, _) -> false
 
 let conv_p meta_ctx (ctx : DB.lexp_context) e1 e2
   = if e1 == e2 then true

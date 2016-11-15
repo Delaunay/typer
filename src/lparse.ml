@@ -96,7 +96,8 @@ let elab_check_sort (ctx : elab_context) lsort var ltp =
   let meta_ctx, _ = !global_substitution in
   match OL.lexp_whnf lsort (ectx_to_lctx ctx) meta_ctx with
   | Sort (_, _) -> () (* All clear!  *)
-  | _ -> let typestr = lexp_string ltp  ^ " : " ^ lexp_string lsort in
+  | _ -> let lexp_string e = lexp_string (L.clean meta_ctx e) in
+        let typestr = lexp_string ltp ^ " : " ^ lexp_string lsort in
         match var with
         | None -> lexp_error (lexp_location ltp) ltp
                             ("`" ^ typestr ^ "` is not a proper type")
@@ -122,6 +123,7 @@ let elab_check_def (ctx : elab_context) var lxp ltype =
   let loc = lexp_location lxp in
 
   let meta_ctx, _ = !global_substitution in
+  let lexp_string e = lexp_string (L.clean meta_ctx e) in
   let ltype' = try OL.check meta_ctx lctx lxp
     with e ->
       lexp_error loc lxp "Error while type-checking";
@@ -131,9 +133,9 @@ let elab_check_def (ctx : elab_context) var lxp ltype =
     elab_check_proper_type ctx ltype (Some var)
   else
     (debug_messages fatal loc "Type check error: ¡¡ctx_define error!!" [
-      (lexp_string lxp) ^ "!: " ^ (lexp_string ltype);
-       "                    because";
-      (lexp_string (OL.check meta_ctx lctx lxp)) ^ "!= " ^ (lexp_string ltype);])
+      lexp_string lxp ^ " !: " ^ lexp_string ltype;
+      "                    because";
+      lexp_string (OL.check meta_ctx lctx lxp) ^ " != " ^ lexp_string ltype])
 
 let ctx_extend (ctx: elab_context) (var : vdef option) def ltype =
   elab_check_proper_type ctx ltype var;
@@ -197,18 +199,14 @@ let ctx_define_rec (ctx: elab_context) decls =
  *)
 
 
-let newMetavar t =
+let newMetavar l name t =
   let meta = Unif.create_metavar () in
-  let name = "__metavar" (* ^ (string_of_int meta) *) in
-  mkMetavar (meta, S.Identity, (Util.dummy_location, name), t)
+  mkMetavar (meta, S.Identity, (l, name), t)
 
 let newMetalevel () =
-  let meta = Unif.create_metavar () in
-  let name = "__metalevel" (* ^ (string_of_int meta) *) in
-  mkMetavar (meta, S.Identity, (Util.dummy_location, name),
-             Sort (dummy_location, StypeLevel))
+  newMetavar Util.dummy_location "l" (Sort (dummy_location, StypeLevel))
 
-let newMetatype () = newMetavar (newMetalevel ())
+let newMetatype () = newMetavar Util.dummy_location "t" (newMetalevel ())
 
 let rec infer (p : pexp) (ctx : elab_context): lexp * ltype =
 
@@ -357,7 +355,9 @@ and instantiate_implicit e t ctx =
   let rec instantiate t args =
     match OL.lexp_whnf t (ectx_to_lctx ctx) meta_ctx with
     | Arrow ((Aerasable | Aimplicit) as ak, v, t1, _, t2)
-      -> let arg = newMetavar t1 in (* FIXME: Use `v` to make matevar name.  *)
+      -> let arg = newMetavar (lexp_location e)
+                             (match v with Some (_, name) -> name | _ -> "v")
+                             t1 in
         instantiate (mkSusp t2 (S.substitute arg)) ((ak, arg)::args)
     | _ -> (mkCall (e, List.rev args), t)
   in instantiate t []
@@ -367,7 +367,24 @@ and infer_type pexp ectx var =
    * Sort (?s), but in most cases the metavar would be allocated
    * unnecessarily.  *)
   let t, s = infer pexp ectx in
-  elab_check_sort ectx s var t;
+  (let meta_ctx, _ = !global_substitution in
+   match OL.lexp_whnf s (ectx_to_lctx ectx) meta_ctx with
+   | Sort (_, _) -> () (* All clear!  *)
+   | _ ->
+      (* FIXME: Here we rule out TypeLevel/TypeOmega.  *)
+      match Unif.unify (mkSort (lexp_location s, Stype (newMetalevel ()))) s
+                       (ectx_to_lctx ectx) meta_ctx with
+      | (None | Some (_, _::_))
+        -> (let lexp_string e = lexp_string (L.clean meta_ctx e) in
+           let typestr = lexp_string t ^ " : " ^ lexp_string s in
+           match var with
+           | None -> lexp_error (lexp_location t) t
+                               ("`" ^ typestr ^ "` is not a proper type")
+           | Some (l, name)
+             -> lexp_error l t
+                          ("Type of `" ^ name ^ "` is not a proper type: "
+                           ^ typestr))
+      | Some subst -> global_substitution := subst);
   t
 
 and lexp_let_decls declss (body: lexp) ctx =
@@ -442,7 +459,10 @@ and check (p : pexp) (t : ltype) (ctx : elab_context): lexp =
     (* FIXME: Handle *macro* pcalls here! *)
     (* | Pcall (fname, _args) -> *)
 
-    | Pmetavar _ -> newMetavar t
+    | Pmetavar (l,"") -> newMetavar l "v" t
+    | Pmetavar (l, name)
+      -> pexp_error l p "Named metavars not supported (yet)";
+        newMetavar l name t
 
     | _ -> infer_and_check p ctx t
 
@@ -598,7 +618,6 @@ and infer_call (func: pexp) (sargs: sexp list) ctx =
 
     (* retrieve function's body (sqr 3) sqr is a Pvar() *)
     let body, ltp = infer func ctx in
-    let ltp = nosusp ltp in
 
     let rec handle_fun_args largs sargs pending ltp =
       let ltp' = OL.lexp_whnf ltp (ectx_to_lctx ctx) meta_ctx in
@@ -651,16 +670,18 @@ and infer_call (func: pexp) (sargs: sexp list) ctx =
           let larg = check parg arg_type ctx in
           handle_fun_args ((Aexplicit, larg) :: largs) sargs pending
                           (L.mkSusp ret_type (S.substitute larg))
-      | sarg :: sargs, Arrow (kind, _, arg_type, _, ret_type)
-        -> let larg = newMetavar arg_type in
+      | sarg :: sargs, Arrow (kind, v, arg_type, _, ret_type)
+        -> let larg = newMetavar (sexp_location sarg)
+                                (match v with Some (_, name) -> name | _ -> "v")
+                                arg_type in
           handle_fun_args ((kind, larg) :: largs) (sarg::sargs) pending
                           (L.mkSusp ret_type (S.substitute larg))
 
       | sarg :: sargs, t ->
          print_lexp_ctx (ectx_to_lctx ctx);
          lexp_fatal (sexp_location sarg) t
-                    ("Explicit arg `" ^ sexp_string sarg ^
-                       "` to non-function (type = " ^ lexp_string ltp ^ ")") in
+                    ("Explicit arg `" ^ sexp_string sarg
+                     ^ "` to non-function (type = " ^ lexp_string ltp ^ ")") in
 
     let handle_funcall () =
       (* Here we use lexp_whnf on actual code, but it's OK
