@@ -239,12 +239,6 @@ let conv_p meta_ctx (ctx : DB.lexp_context) e1 e2
 (********* Testing if a lexp is properly typed  *********)
 
 
-let assert_type e t t' =
-  (* FIXME: conv_p is not up to the task yet: it needs to take the ctx
-   * into account!  *)
-  if true (* conv_p t t' *) then ()
-  else U.msg_error "TC" (lexp_location e) "Type mismatch"; ()
-
 let rec sort_level_max l1 l2 = match nosusp l1, nosusp l2 with
   | SortLevel SLz, l2 -> l2
   | l1, SortLevel SLz -> l1
@@ -271,6 +265,10 @@ let sort_compose l s1 s2 =
 (* "check ctx e" should return τ when "Δ ⊢ e : τ"  *)
 let rec check meta_ctx ctx e =
   let check = check meta_ctx in
+  let assert_type ctx e t t' =
+    if conv_p meta_ctx ctx t t' then ()
+    else U.msg_error "TC" (lexp_location e) "Type mismatch"; () in
+
   match e with
   | Imm (Float (_, _)) -> B.type_float
   | Imm (Integer (_, _)) -> B.type_int
@@ -300,7 +298,8 @@ let rec check meta_ctx ctx e =
                           DB.lctx_extend ctx (Some v) ForwardRef t)
                        ctx defs in
       let _ = List.fold_left (fun n (v, e, t)
-                              -> assert_type e (push_susp t (S.shift n))
+                              -> assert_type tmp_ctx e
+                                            (push_susp t (S.shift n))
                                             (check tmp_ctx e);
                                 n - 1)
                              (List.length defs) defs in
@@ -339,7 +338,7 @@ let rec check meta_ctx ctx e =
                             (U.msg_error "TC" (lexp_location arg)
                                          "arg kind mismatch"; ())
                           else ();
-                         assert_type arg t1 at;
+                         assert_type ctx arg t1 at;
                          mkSusp t2 (S.substitute arg)
                      | _ -> (U.msg_error "TC" (lexp_location arg)
                                         ("Calling a non function (type = "
@@ -412,19 +411,29 @@ let rec check meta_ctx ctx e =
                                              vdef Variable (mkSusp ftype s))
                            (S.cons (Var ((match vdef with Some vd -> vd
                                                         | None -> (l, "_")),
-                                         0)) s)
+                                         0))
+                                   (S.mkShift s 1))
                            vdefs fieldtypes
                  | _,_ -> (U.msg_error "TC" l
                                       "Wrong number of args to constructor!";
                           ctx) in
                let nctx = mkctx ctx s vdefs fieldtypes in
-               assert_type branch ret (check nctx branch))
+               assert_type nctx branch
+                           (mkSusp ret (S.shift (List.length fieldtypes)))
+                           (check nctx branch))
             branches;
+          let diff = SMap.cardinal constructors - SMap.cardinal branches in
           (match default with
            | Some (v, d)
-             -> assert_type d (mkSusp ret (S.shift 1))
-                           (check (DB.lctx_extend ctx v (LetDef e) etype) d)
-           | _ -> ())
+             -> if diff <= 0 then
+                 U.msg_warning "TC" l "Redundant default clause";
+               let nctx = (DB.lctx_extend ctx v (LetDef e) etype) in
+               assert_type nctx d (mkSusp ret (S.shift 1))
+                           (check nctx d)
+           | None
+             -> if diff > 0 then
+                 U.msg_error "TC" l ("Non-exhaustive match: "
+                                     ^ string_of_int diff ^ " cases missing"))
        | _,_ -> U.msg_error "TC" l "Case on a non-inductive type!");
       ret
   | Cons (t, (_, name))
