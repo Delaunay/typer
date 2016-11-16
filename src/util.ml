@@ -118,3 +118,27 @@ let str_split str sep =
             ret := (Buffer.contents buffer)::(!ret));
 
         List.rev (!ret))
+
+let utf8_head_p (c : char) : bool
+  = Char.code c < 128 || Char.code c >= 192
+
+(* Display size of `str`, assuming the byte-sequence is UTF-8.
+ * Very naive: doesn't pay attention to LF, TABs, double-width chars, ...  *)
+let string_width (s : string) : int =
+  let rec width i w =
+    if i < 0 then w
+    else width (i - 1)
+               (if utf8_head_p (String.get s i)
+                then w + 1
+                else w) in
+  width (String.length s - 1) 0
+
+let padding_right (str: string ) (dim: int ) (char_: char) : string =
+  let diff = (dim - string_width str)
+  in let rpad = max diff 0
+  in str ^ (String.make rpad char_)
+
+let padding_left (str: string ) (dim: int ) (char_: char) : string =
+  let diff = (dim - string_width str)
+  in let lpad = max diff 0
+  in (String.make lpad char_) ^ str

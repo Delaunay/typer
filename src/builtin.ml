@@ -36,7 +36,7 @@ open Sexp   (* Integer/Float *)
 open Pexp   (* arg_kind *)
 open Lexp
 
-open Debruijn
+module DB = Debruijn
 open Env       (* get_rte_variable *)
 
 let error loc msg = msg_error "BUILT-IN" loc msg; raise (internal_error msg)
@@ -68,14 +68,14 @@ let get_predef_raw (name: string) : lexp =
         | Some exp -> exp
         | None -> error dloc ("\""^ name ^ "\" was not predefined")
 
-let get_predef_option (name: string) (ctx: elab_context) =
-  let r = (get_size ctx) - !builtin_size - 0 in
+let get_predef_option (name: string) (ctx: DB.elab_context) =
+  let r = (DB.get_size ctx) - !builtin_size - 0 in
     match !(SMap.find name (!predef_map)) with
         | Some exp -> Some (mkSusp exp (S.shift r))
         | None -> None
 
-let get_predef (name: string) (ctx: elab_context) =
-  let r = (get_size ctx) - !builtin_size - 0 in
+let get_predef (name: string) (ctx: DB.elab_context) =
+  let r = (DB.get_size ctx) - !builtin_size - 0 in
   let p = get_predef_raw name in
     (mkSusp p (S.shift r))
 
@@ -91,15 +91,15 @@ let dump_predef () =
     print_string "\n") !predef_map in ()
 
 (*                Builtin types               *)
-let dloc    = dummy_location
-let level0 = SortLevel SLz
-let level1 = SortLevel (SLsucc level0)
-let level2 = SortLevel (SLsucc level1)
-let type0   = Sort (dloc, Stype level0)
-let type1   = Sort (dloc, Stype level1)
-let type2   = Sort (dloc, Stype level2)
-let type_omega = Sort (dloc, StypeOmega)
-let type_level = Sort (dloc, StypeLevel)
+let dloc    = DB.dloc
+let level0  = DB.level0
+let level1  = mkSortLevel (SLsucc level0)
+let level2  = mkSortLevel (SLsucc level1)
+let type0   = DB.type0
+let type1   = mkSort (dloc, Stype level1)
+let type2   = mkSort (dloc, Stype level2)
+let type_omega = mkSort (dloc, StypeOmega)
+let type_level = mkSort (dloc, StypeLevel)
 
 let op_binary t =  Arrow (Aexplicit, None, t, dloc,
                         Arrow (Aexplicit, None, t, dloc, t))
@@ -148,7 +148,7 @@ let rec tlist2olist acc expr =
 
 let is_lbuiltin idx ctx =
     let bsize = 1 in
-    let csize = get_size ctx in
+    let csize = DB.get_size ctx in
 
     if idx >= csize - bsize then
         true
@@ -170,7 +170,7 @@ let declexpr_impl loc largs ctx ftype =
     | [Var((_, vn), vi)] -> (vi, vn)
     | _ -> error loc "declexpr expects one argument" in
 
-  let lxp = match env_lookup_expr ctx ((loc, vn), vi) with
+  let lxp = match DB.env_lookup_expr ctx ((loc, vn), vi) with
     | Some lxp -> lxp
     | None -> error loc "no expr available" in
   (* ltp and ftype should be the same
@@ -184,7 +184,7 @@ let decltype_impl loc largs ctx ftype =
     | [Var((_, vn), vi)] -> (vi, vn)
     | _ -> error loc "decltype expects one argument" in
 
-  let ltype = env_lookup_type ctx ((loc, vn), vi) in
+  let ltype = DB.env_lookup_type ctx ((loc, vn), vi) in
     (* mkSusp prop (S.shift (var_i + 1)) *)
     ltype, type0
 

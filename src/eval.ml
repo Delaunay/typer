@@ -46,7 +46,7 @@ open Printf           (* IO Monad *)
 module OL = Opslexp
 
 
-type eval_debug_info = OL.pexporlexp list * elexp list
+type eval_debug_info = elexp list * elexp list
 
 let dloc = dummy_location
 let _global_eval_trace = ref ([], [])
@@ -56,7 +56,7 @@ let _builtin_lookup = ref SMap.empty
 
 let append_eval_trace trace (expr : elexp) =
   let (a, b) = trace in
-  let r = (OL.Elexp expr)::a, b in
+  let r = expr::a, b in
     _global_eval_trace := r; r
 
 let append_typer_trace trace (expr : elexp) =
@@ -95,7 +95,7 @@ let root_string () =
   let a, _ = !_global_eval_trace in
   match List.rev a with
     | [] -> ""
-    | e::_ -> OL.pol_string e
+    | e::_ -> elexp_string e
 
 let debug_message error_type type_name type_string loc expr message =
   debug_messages error_type loc
@@ -348,16 +348,17 @@ and eval_case ctx i loc target pat dflt =
         (* This is more robust                                     *)
         let rec fold2 nctx pats args =
             match pats, args with
-                | (Some (_, name))::pats, arg::args ->
-                    let nctx = add_rte_variable (Some name) arg nctx in
-                        fold2 nctx pats args
-                | (None)::pats, arg::args ->  fold2 nctx pats args
-                (* Errors: those should not happen but they might  *)
-                (* List.fold2 would complain. we print more info   *)
-                | _::_, [] -> warning loc "a) Eval::Case Pattern Error"; nctx
-                | [], _::_ -> warning loc "b) Eval::Case Pattern Error"; nctx
-                (* Normal case *)
-                | [], [] -> nctx in
+            | pat::pats, arg::args
+              -> let nctx = add_rte_variable (match pat with
+                                             | Some (_, name) -> Some name
+                                             | _ -> None) arg nctx in
+                fold2 nctx pats args
+            (* Errors: those should not happen but they might  *)
+            (* List.fold2 would complain. we print more info   *)
+            | _::_, [] -> warning loc "a) Eval::Case Pattern Error"; nctx
+            | [], _::_ -> warning loc "b) Eval::Case Pattern Error"; nctx
+            (* Normal case *)
+            | [], [] -> nctx in
 
         let nctx = fold2 ctx pat_args args in
             _eval exp nctx i
@@ -566,16 +567,12 @@ and print_trace title trace default =
     print_string ((type_name expr) ^ ": " ^ (type_string expr) ^ "\n")
   ) in
 
-  let lexp_trace = print_trace pexp_name pexp_string pexp_location in
   let elexp_trace = print_trace elexp_name elexp_string elexp_location in
 
   (* Print the trace*)
   print_string (Fmt.make_title title);
   print_string (Fmt.make_sep '-');
-  let _ = List.iteri (fun i expr ->
-    match expr with
-      | OL.Pexp p -> lexp_trace i p
-      | OL.Elexp e -> elexp_trace i e) trace in
+  let _ = List.iteri elexp_trace trace in
   print_string (Fmt.make_sep '=')
 
 and print_eval_trace trace =

@@ -95,7 +95,8 @@ let rec pexp_parse (s : sexp) : pexp =
   | Epsilon -> (internal_error "Epsilon in pexp_parse")
   | (Block _ | Integer _ | Float _ | String _) -> Pimm s
   (* | Symbol (l, "Type") -> Psort (l, Type) *)
-  | Symbol ((_, "_") as s) -> Pmetavar s
+  | Symbol (l, name) when String.length name > 0 && String.get name 0 == '?'
+    -> Pmetavar (l, String.sub name 1 (String.length name - 1))
   | Symbol s -> Pvar s
   | Node (Symbol (start, "_:_"), [e; t])
     -> Phastype (start, pexp_parse e, pexp_parse t)

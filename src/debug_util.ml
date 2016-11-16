@@ -392,7 +392,6 @@ let main () =
         let lexps, nctx = try lexp_p_decls pexps octx
           with e ->
             print_string reset;
-            print_lexp_trace None;
             raise e in
         print_string reset;
 
@@ -419,8 +418,9 @@ let main () =
 
             let cctx = lctx_to_cctx ctx in
             (* run type check *)
-            List.iter (fun (_, lxp, _) ->
-                let _ = OL.check cctx lxp in ()) flexps;
+            List.iter (fun (_, lxp, _)
+                       -> let _ = OL.check VMap.empty cctx lxp in ())
+                      flexps;
 
             print_string ("    " ^ (make_line '-' 76));
             print_string "\n";));

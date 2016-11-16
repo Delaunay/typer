@@ -81,6 +81,9 @@ type ltype = lexp
              * (vdef option * lexp) option               (* Default.  *)
    (* Special property table *)
    | AttributeTable of lexp AttributeMap.t * ltype
+   (* The `subst` only applies to the lexp associated
+    * with the metavar's index (i.e. its "value"), not to the ltype.  *)
+   | Metavar of int * subst * vdef * ltype
  (*   (\* For logical metavars, there's no substitution.  *\)
   *   | Metavar of (U.location * string) * metakind * metavar ref
   * and metavar =
@@ -119,6 +122,11 @@ type varbind =
   | ForwardRef
   | LetDef of lexp
 
+module VMap = Map.Make (struct type t = int let compare = compare end)
+type meta_subst = lexp VMap.t
+type constraints  = (lexp * lexp) list
+let empty_meta_subst = VMap.empty
+
 let builtin_size = ref 0
 
 (********************** Hash-consing **********************)
@@ -138,10 +146,15 @@ let mkVar v                    = hc (Var v)
 let mkLet (l, ds, e)           = hc (Let (l, ds, e))
 let mkArrow (k, v, t1, l, t2)  = hc (Arrow (k, v, t1, l, t2))
 let mkLambda (k, v, t, e)      = hc (Lambda (k, v, t, e))
-let mkCall (f, es)             = hc (Call (f, es))
 let mkInductive (l, n, a, cs)  = hc (Inductive (l, n, a, cs))
 let mkCons (t, n)              = hc (Cons (t, n))
 let mkCase (l, e, rt, bs, d)   = hc (Case (l, e, rt, bs, d))
+let mkMetavar (n, s, v, t)     = hc (Metavar (n, s, v, t))
+let mkCall (f, es)
+  = match f, es with
+  | Call (f', es'), _ -> hc (Call (f', es' @ es))
+  | _, [] -> f
+  | _ -> hc (Call (f, es))
 
 (********* Helper functions to use the Subst operations  *********)
 (* This basically "ties the knot" between Subst and Lexp.
@@ -156,6 +169,7 @@ let rec mkSusp e s =
     match e with
     | Susp (e, s') -> mkSusp e (scompose s' s)
     | Var (l,v) -> slookup s l v
+    | Metavar (vn, s', vd, t) -> mkMetavar (vn, scompose s' s, vd, mkSusp t s)
     | _ -> hc (Susp (e, s))
 and scompose s1 s2 = S.compose mkSusp s1 s2
 and slookup s l v = S.lookup (fun l i -> mkVar (l, i))
@@ -180,8 +194,8 @@ let rec lexp_location e =
   | Cons (_,(l,_)) -> l
   | Case (l,_,_,_,_) -> l
   | Susp (e, _) -> lexp_location e
-  (* | Susp (_, e) -> lexp_location e
-   * | Metavar ((l,_),_,_) -> l *)
+  (* | Susp (_, e) -> lexp_location e *)
+  | Metavar (_,_,(l,_), _) -> l
 
 
 (********* Normalizing a term *********)
@@ -192,7 +206,8 @@ let maybev mv = match mv with None -> vdummy | Some v -> v
 let rec push_susp e s =            (* Push a suspension one level down.  *)
   match e with
   | Imm _ -> e
-  | SortLevel _ -> e
+  | SortLevel (SLz) -> e
+  | SortLevel (SLsucc e') -> mkSortLevel (SLsucc (mkSusp e' s))
   | Sort (l, Stype e) -> mkSort (l, Stype (mkSusp e s))
   | Sort (l, _) -> e
   | Builtin _ -> e
@@ -202,7 +217,7 @@ let rec push_susp e s =            (* Push a suspension one level down.  *)
                                    -> (ssink v s,
                                       (v, mkSusp e s', mkSusp ty s) :: ndefs))
                                   (s, []) defs in
-      Let (l, ndefs, mkSusp e s')
+      mkLet (l, ndefs, mkSusp e s')
   | Arrow (ak, v, t1, l, t2)
     -> mkArrow (ak, v, mkSusp t1 s, l, mkSusp t2 (ssink (maybev v) s))
   | Lambda (ak, v, t, e) -> mkLambda (ak, v, mkSusp t s, mkSusp e (ssink v s))
@@ -243,13 +258,72 @@ let rec push_susp e s =            (* Push a suspension one level down.  *)
    * But we still have to handle them here, since push_susp is called
    * in many other cases than just when we bump into a Susp.  *)
   | Susp (e,s') -> push_susp e (scompose s' s)
-  | (Var _) -> nosusp (mkSusp e s)
+  | (Var _ | Metavar _) -> nosusp (mkSusp e s)
   | AttributeTable _ -> e
 
-and nosusp e =                  (* Return `e` without `Susp`.  *)
+and nosusp e =                  (* Return `e` with no outermost `Susp`.  *)
   match e with
     | Susp(e, s) -> push_susp e s
     | _ -> e
+
+
+(* Get rid of `Susp`ensions and instantiated `Maetavar`s.  *)
+let clean meta_ctx e =
+  let rec clean s e = match e with
+    | Imm _ -> e
+    | SortLevel (SLz) -> e
+    | SortLevel (SLsucc e) -> mkSortLevel (SLsucc (clean s e))
+    | Sort (l, Stype e) -> mkSort (l, Stype (clean s e))
+    | Sort (l, _) -> e
+    | Builtin _ -> e
+    | Let (l, defs, e)
+      -> let s' = L.fold_left (fun s (v, _, _) -> ssink v s) s defs in
+        let (_,ndefs) = L.fold_left (fun (s,ndefs) (v, def, ty)
+                                     -> (ssink v s,
+                                        (v, clean s' e, clean s ty) :: ndefs))
+                                  (s, []) defs in
+        mkLet (l, ndefs, clean s' e)
+    | Arrow (ak, v, t1, l, t2)
+      -> mkArrow (ak, v, clean s t1, l, clean (ssink (maybev v) s) t2)
+    | Lambda (ak, v, t, e) -> mkLambda (ak, v, clean s t, clean (ssink v s) e)
+    | Call (f, args) -> mkCall (clean s f,
+                               L.map (fun (ak, arg) -> (ak, clean s arg)) args)
+    | Inductive (l, label, args, cases)
+      -> let (s, nargs) = L.fold_left (fun (s, nargs) (ak, v, t)
+                                    -> (ssink v s, (ak, v, clean s t) :: nargs))
+                                   (s, []) args in
+      let ncases = SMap.map (fun args
+                             -> let (_, ncase)
+                                 = L.fold_left (fun (s, nargs) (ak, v, t)
+                                                -> (ssink (maybev v) s,
+                                                   (ak, v, clean s t)
+                                                   :: nargs))
+                                               (s, []) args in
+                               L.rev ncase)
+                            cases in
+      mkInductive (l, label, nargs, ncases)
+    | Cons (it, name) -> Cons (clean s it, name)
+    | Case (l, e, ret, cases, default)
+      -> mkCase (l, clean s e, clean s ret,
+                SMap.map (fun (l, cargs, e)
+                          -> let s' = L.fold_left (fun s carg
+                                                  -> match carg with
+                                                    | (_,None) -> s
+                                                    | (_,Some v) -> ssink v s)
+                                                 s cargs in
+                            (l, cargs, clean s' e))
+                         cases,
+                match default with
+                | None -> default
+                | Some (v,e) -> Some (v, clean (ssink (maybev v) s) e))
+    | Susp (e, s') -> clean (scompose s' s) e
+    | Var _ -> if S.identity_p s then e
+              else clean S.identity (mkSusp e s)
+    | Metavar (idx, s', l, t)
+      -> let s = (scompose s' s) in
+        try clean s (VMap.find idx meta_ctx)
+        with Not_found -> mkMetavar (idx, s, l, t)
+  in clean S.identity e
 
 let lexp_name e =
   match e with
@@ -266,77 +340,6 @@ let lexp_name e =
     | Susp      _ -> "Susp"
     | AttributeTable _ -> "AttributeTable"
     | _ -> "lexp_to_string: not implemented"
-
-(*
-(* In non-recursion calls, `s' is always empty.  *)
-let lexp_conv_p env = lexp_conv_p env VMap.empty
-
-let lexp_unparse_v (l,v)
-  (* FIXME: This only works for bound vars, free vars will need
-   * a different treatment!  *)
-  = let name = varname v in (l,name ^ (string_of_int v))
-let rec lexp_unparse_decls decls =
-  List.map (fun (v,_,t)
-            -> (lexp_unparse_v v, lexp_unparse t, true))
-           decls
-  @ List.map (fun (v,e,_)
-              -> (lexp_unparse_v v, lexp_unparse e, false))
-             decls
-and lexp_unparse e : pexp =
-  match e with
-  | Sort (l, StypeLevel) -> Pvar (l, "TypeLevel")
-  | Sort (l, StypeOmega) -> Pvar (l, "TypeΩ")
-  | Sort (l, Stype e)
-    -> Pcall (Pvar (l, "Type"), [pexp_unparse (lexp_unparse e)])
-  | SortLevel (SLn n) -> Pimm (Integer (U.dummy_location, n))
-  | SortLevel (SLsucc e) -> Pcall (Pvar (lexp_location e, "S"),
-                                  [pexp_unparse (lexp_unparse e)])
-  | Imm s -> Pimm s
-  | Builtin (b,name,t) -> Pvar (U.dummy_location, name)
-  | Var v -> Pvar (lexp_unparse_v v)
-  | Let (l,decls,e)
-    -> Plet (l, lexp_unparse_decls decls,
-            lexp_unparse e)
-  | Arrow (ak,v,t1,l,t2)
-    -> Parrow (ak,
-              (match v with Some v -> Some (lexp_unparse_v v) | None -> None),
-              lexp_unparse t1,
-              l, lexp_unparse t2)
-  | Lambda (ak, v, t, e)                 (* FIXME: losing `ak'.  *)
-    -> Plambda (ak, lexp_unparse_v v, Some (lexp_unparse t), lexp_unparse e)
-  | Call (f, args)                      (* FIXME: losing `ak'.  *)
-    -> Pcall (lexp_unparse f, List.map (fun (_,arg)
-                                       -> pexp_unparse (lexp_unparse arg))
-                                      args)
-  | Inductive (_,t,cases)               (* FIXME: losing `id'.  *)
-    -> Pinductive (lexp_unparse t,
-                  SMap.fold (fun name t ps
-                             -> ((lexp_location t, name), lexp_unparse t)::ps)
-                            cases [])
-  | Cons (Var v, tag)
-    -> Pcons (lexp_unparse_v v, tag)
-  | Cons (_,_)
-    -> (U.internal_error "Can't print a non-Var-typed Constructor")
-  | Case (l, e, t, branches, default)
-    -> Pcase (l, lexp_unparse e,
-             (* FIXME!!  *)
-             SMap.fold (fun name (l, args, e) cases
-                        -> ((l,name),
-                           List.map (fun (ak,v) -> (ak, lexp_unparse_v v)) args,
-                          lexp_unparse e) :: cases)
-                       branches [],
-             opt_map lexp_unparse default)
-  (* | Metavar (v,_,r) ->
-   *   (match !r with
-   *    | MetaSet e -> lexp_unparse e
-   *    | _ -> Pmetavar v) (\* FIXME: losing the ref.  *\)
-   * | Susp (s,e) -> lexp_unparse (lexp_whnf s e) *)
-    (* (U.internal_error "Can't print a Susp") *)
-
-let lexp_print e = sexp_print (pexp_unparse (lexp_unparse e))
-
-*)
-
 
 (* ugly printing (sexp_print (pexp_unparse (lexp_unparse e))) *)
 let rec lexp_unparse lxp =
@@ -408,16 +411,26 @@ let rec lexp_unparse lxp =
         in Pcase (loc, lexp_unparse target, pbranch)
 
     (* FIXME: The cases below are all broken!  *)
+    | Metavar (idx, subst, (loc, name), _)
+      -> Pimm (Symbol (loc, "?<" ^ name ^ "-" ^ string_of_int idx
+                           ^ "[" ^ subst_string subst ^ "]>"))
 
     | SortLevel (SLz) -> Pimm (Integer (U.dummy_location, 0))
     | SortLevel (SLsucc sl) -> Pcall (Pimm (Symbol (U.dummy_location, "<S>")),
                                      [pexp_unparse (lexp_unparse sl)])
-    | Sort (l, StypeOmega) -> Pimm (Symbol (l, "<SortOmega>"))
-    | Sort (l, StypeLevel) -> Pimm (Symbol (l, "<SortLevel>"))
+    | Sort (l, StypeOmega) -> Pimm (Symbol (l, "<TypeOmega>"))
+    | Sort (l, StypeLevel) -> Pimm (Symbol (l, "<TypeLevel>"))
     | Sort (l, Stype sl) -> Pcall (Pimm (Symbol (l, "<Type>")),
                                   [pexp_unparse (lexp_unparse sl)])
 
-let lexp_string lxp = sexp_string (pexp_unparse (lexp_unparse lxp))
+(* FIXME: ¡Unify lexp_print and lexp_string!  *)
+and lexp_string lxp = sexp_string (pexp_unparse (lexp_unparse lxp))
+
+and subst_string s = match s with
+  | S.Identity -> "Id"
+  | S.Shift (s, n) -> "(↑"^ string_of_int n ^ " " ^ subst_string s ^ ")"
+  | S.Cons (l, s) -> lexp_string l ^ " · " ^ subst_string s
+
 (*
  *      Printing
  * --------------------- *)
@@ -521,6 +534,9 @@ and _lexp_to_str ctx exp =
         | Susp (e, s) -> _lexp_to_str ctx (push_susp e s)
 
         | Var ((loc, name), idx) -> name ^ (index idx) ;
+
+        | Metavar (idx, subst, (loc, name), _)
+          -> "?" ^ name ^ (index idx) (*TODO : print subst*)
 
         | Let (_, decls, body)   ->
             (* Print first decls without indent *)
