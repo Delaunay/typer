@@ -53,7 +53,7 @@ let inc_cp (cp:charpos) (c:char) =
   if utf8_head_p c then cp+1 else cp
 
 let rec prelex (file : string) (getline : unit -> string) ln ctx acc
-    : pretoken list =
+        : pretoken list =
   try
     (* let fin = open_in file in *)
     let line = getline () in
@@ -63,69 +63,72 @@ let rec prelex (file : string) (getline : unit -> string) ln ctx acc
       let nexttok = prelex' ctx in
       if bpos >= limit then nextline ctx acc else
         match line.[bpos] with
-          | c when c <= ' ' -> nexttok (bpos+1) (cpos+1) acc
-          | '%' -> nextline ctx acc      (* A comment.  *)
-          | '"' ->                       (* A string.  *)
-            let rec prestring bp cp chars =
+        | c when c <= ' ' -> nexttok (bpos+1) (cpos+1) acc
+        | '%' -> nextline ctx acc      (* A comment.  *)
+        | '"'                         (* A string.  *)
+          -> let rec prestring bp cp chars =
               if bp >= limit then
                 (prelexer_error {file=file; line=ln; column=cpos}
-                           "Unterminated string";
+                                "Unterminated string";
                  nextline ctx
                           (Prestring ({file=file; line=ln; column=cpos}, "")
                            :: acc))
               else
                 match line.[bp] with
-                  | '"' ->
-                    nexttok (bp+1) (cp+1)
-                            (Prestring ({file=file; line=ln; column=cpos},
-                                        string_implode (List.rev chars))
-                             :: acc)
-                  | '\\' ->
-                    (if bpos + 1 >= limit then
-                       (prelexer_error {file=file; line=ln; column=cpos}
-                                  "Unterminated string";
-                        nextline ctx
-                                 (Prestring ({file=file; line=ln; column=cpos},
-                                             "")
-                                  :: acc))
-                     else
-                       match line.[bp + 1] with
-                         | 't' -> prestring (bp+2) (cp+2) ('\t' :: chars)
-                         | 'n' -> prestring (bp+2) (cp+2) ('\n' :: chars)
-                         | 'r' -> prestring (bp+2) (cp+2) ('\r' :: chars)
-                         | ('u' | 'U') ->
-                           prelexer_error {file=file; line=ln; column=cp}
-                                     "Unimplemented unicode escape";
-                           prestring (bp+2) (cp+2) chars
-                         | char -> prestring (bp+2) (cp+2) (char :: chars))
-                  | char -> prestring (bp+1) (inc_cp cp char) (char :: chars)
+                | '"' ->
+                   nexttok (bp+1) (cp+1)
+                           (Prestring ({file=file; line=ln; column=cpos},
+                                       string_implode (List.rev chars))
+                            :: acc)
+                | '\\' ->
+                   (if bpos + 1 >= limit then
+                      (prelexer_error {file=file; line=ln; column=cpos}
+                                      "Unterminated string";
+                       nextline ctx
+                                (Prestring ({file=file; line=ln; column=cpos},
+                                            "")
+                                 :: acc))
+                    else
+                      match line.[bp + 1] with
+                      | 't' -> prestring (bp+2) (cp+2) ('\t' :: chars)
+                      | 'n' -> prestring (bp+2) (cp+2) ('\n' :: chars)
+                      | 'r' -> prestring (bp+2) (cp+2) ('\r' :: chars)
+                      | ('u' | 'U') ->
+                         prelexer_error {file=file; line=ln; column=cp}
+                                        "Unimplemented unicode escape";
+                         prestring (bp+2) (cp+2) chars
+                      | char -> prestring (bp+2) (cp+2) (char :: chars))
+                | char -> prestring (bp+1) (inc_cp cp char) (char :: chars)
             in prestring (bpos+1) (cpos+1) []
-          | '{' -> prelex' ((ln, cpos, bpos, acc) :: ctx) (bpos+1) (cpos+1) []
-          | '}' ->
-            (match ctx with
-               | ((sln, scpos, sbpos, sacc) :: ctx) ->
-                 prelex' ctx (bpos+1) (cpos+1)
-                         (Preblock ({file=file; line=sln; column=scpos},
-                                    List.rev acc,
-                                    {file=file; line=ln; column=(cpos + 1)})
-                          :: sacc)
-               | _ -> (prelexer_error {file=file; line=ln; column=cpos}
-                                 "Unmatched closing brace";
-                       prelex' ctx (bpos+1) (cpos+1) acc))
-          | char ->                     (* A pretoken.  *)
-            let rec pretok bp cp =
+        | '{' -> prelex' ((ln, cpos, bpos, acc) :: ctx) (bpos+1) (cpos+1) []
+        | '}'
+          -> (match ctx with
+             | ((sln, scpos, sbpos, sacc) :: ctx) ->
+                prelex' ctx (bpos+1) (cpos+1)
+                        (Preblock ({file=file; line=sln; column=scpos},
+                                   List.rev acc,
+                                   {file=file; line=ln; column=(cpos + 1)})
+                         :: sacc)
+             | _ -> (prelexer_error {file=file; line=ln; column=cpos}
+                                   "Unmatched closing brace";
+                    prelex' ctx (bpos+1) (cpos+1) acc))
+        | char                  (* A pretoken.  *)
+          -> let rec pretok bp cp =
               if bp >= limit then
                 nextline ctx (Pretoken ({file=file; line=ln; column=cpos},
                                         string_sub line bpos bp)
                               :: acc)
               else
                 match line.[bp] with
-                  | (' '|'\t'|'\n'|'\r'|'%'|'"'|'{'|'}' )
-                    -> nexttok bp cp
-                               (Pretoken ({file=file; line=ln; column=cpos},
-                                          string_sub line bpos bp)
-                                :: acc)
-                  | char -> pretok (bp+1) (inc_cp cp char)
+                | (' '|'\t'|'\n'|'\r'|'%'|'"'|'{'|'}' )
+                  -> nexttok bp cp
+                            (Pretoken ({file=file; line=ln; column=cpos},
+                                       string_sub line bpos bp)
+                             :: acc)
+                | '\\' when bp+1 < limit
+                  -> let char = line.[bp + 1] in
+                    pretok (bp + 2) (1 + inc_cp cp char)
+                | char -> pretok (bp+1) (inc_cp cp char)
             in pretok (bpos+1) (inc_cp cpos char)
     in prelex' ctx 0 1 acc (* Traditionally, column numbers start at 1 :-(  *)
   with End_of_file ->

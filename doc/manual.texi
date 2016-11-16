@@ -80,6 +80,10 @@ whitespace characters, plus a configurable list of extra special
 characters, which by default is comprised of @code{,}, @code{;},
 @code{(}, and @code{)}.
 
+The character @code{\} is also special: it makes the next character
+non-special, so it can be used to include characters like @code{"}
+in symbols.
+
 @itemize
 @item
 Comments start with a @code{%} (byte 37) and end with a @code{LF}

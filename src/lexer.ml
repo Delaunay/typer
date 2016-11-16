@@ -33,82 +33,85 @@ let digit_p char =
 
 type num_part = | NPint | NPfrac | NPexp
 
+let unescape str =
+  let rec split b =
+    if b >= String.length str then []
+    else let e = try String.index_from str b '\\'
+                 with Not_found -> String.length str in
+         String.sub str b (e - b) :: split (e + 1)
+  in String.concat "" (split 0)
+
 let nexttoken (stt : token_env) (pts : pretoken list) bpos cpos
     (* The returned Sexp may not be a Node.  *)
     : sexp * pretoken list * bytepos * charpos =
   match pts with
-    | [] -> (internal_error "No next token!")
-    | (Preblock (sl, bpts, el) :: pts) -> (Block (sl, bpts, el), pts, 0, 0)
-    | (Prestring (loc, str) :: pts) -> (String (loc, str), pts, 0, 0)
-    | (Pretoken ({file;line;column}, name) :: pts') ->
-      if digit_p name.[bpos] then
+  | [] -> (internal_error "No next token!")
+  | (Preblock (sl, bpts, el) :: pts) -> (Block (sl, bpts, el), pts, 0, 0)
+  | (Prestring (loc, str) :: pts) -> (String (loc, str), pts, 0, 0)
+  | (Pretoken ({file;line;column}, name) :: pts')
+    -> if digit_p name.[bpos] then
         let rec lexnum bp cp (np : num_part) =
           if bp >= String.length name then
             ((if np == NPint then
-                Integer ({file;line;column=column+bpos},
+                Integer ({file;line;column=column+cpos},
                          int_of_string (string_sub name bpos bp))
               else
-                Float ({file;line;column=column+bpos},
+                Float ({file;line;column=column+cpos},
                        float_of_string (string_sub name bpos bp))),
              pts', 0, 0)
           else
             match name.[bp] with
-              | ('0'|'1'|'2'|'3'|'4'|'5'|'6'|'7'|'8'|'9')
-                -> lexnum (bp+1) (cp+1) np
-              | '.' when np == NPint -> lexnum (bp+1) (cp+1) NPfrac
-              | ('e'|'E') when not (np == NPexp) -> lexnum (bp+1) (cp+1) NPexp
-              | ('+'|'-')
-                when np == NPexp && (name.[bp-1] == 'e' || name.[bp-1] == 'E') ->
-                lexnum (bp+1) (cp+1) NPexp
-              | _ ->
-                ((if np == NPint then
-                    Integer ({file;line;column=column+bpos},
+            | ('0'|'1'|'2'|'3'|'4'|'5'|'6'|'7'|'8'|'9')
+              -> lexnum (bp+1) (cp+1) np
+            | '.' when np == NPint -> lexnum (bp+1) (cp+1) NPfrac
+            | ('e'|'E') when not (np == NPexp) -> lexnum (bp+1) (cp+1) NPexp
+            | ('+'|'-')
+                 when np == NPexp && (name.[bp-1] == 'e' || name.[bp-1] == 'E')
+              -> lexnum (bp+1) (cp+1) NPexp
+            | _
+              -> ((if np == NPint then
+                    Integer ({file;line;column=column+cpos},
                              int_of_string (string_sub name bpos bp))
                   else
-                    Float ({file;line;column=column+bpos},
+                    Float ({file;line;column=column+cpos},
                            float_of_string (string_sub name bpos bp))),
                  pts, bp, cp)
         in lexnum (bpos+1) (cpos+1) NPint
       else if bpos + 1 >= String.length name then
-        (hSymbol ({file;line;column=column+bpos},
+        (hSymbol ({file;line;column=column+cpos},
                   string_sub name bpos (String.length name)),
          pts', 0, 0)
-      else if stt.(Char.code name.[bpos]) = CKseparate
-              && not (name.[bpos+1] == '_') then
-        (hSymbol ({file;line;column=column+bpos},
+      else if stt.(Char.code name.[bpos]) = CKseparate then
+        (hSymbol ({file;line;column=column+cpos},
                   string_sub name bpos (bpos + 1)),
          pts, bpos+1, cpos+1)
       else
-        let rec lexsym bp cp =
+        let mksym epos escaped
+          = let rawstr = string_sub name bpos epos in
+            let str = if escaped then unescape rawstr else rawstr in
+            hSymbol ({file;line;column=column+cpos}, str) in
+        let rec lexsym bp cp escaped =
           if bp >= String.length name then
-            (hSymbol ({file;line;column=column+bpos},
-                      string_sub name bpos (String.length name)),
-             pts', 0, 0)
+            (mksym (String.length name) escaped, pts', 0, 0)
           else
             let char = name.[bp] in
-            if char == '_'
-               && bp + 1 < String.length name
-               && name.[bp + 1] != '_' then
+            if char == '\\' && bp + 1 < String.length name then
               (* Skip next char, in case it's a special token.  *)
-              (* For utf-8, this cp+2 is risky but actually works: _ counts
+              (* For utf-8, this cp+2 is risky but actually works: \ counts
                * as 1 and if the input is valid utf-8 the next byte has to
-               * be a leading byte, so it has to count as 1 as well ;-) *)
-              lexsym (bp+2) (cp+2)
-            else if stt.(Char.code name.[bp]) = CKseparate
-                    && (bp + 1 >= String.length name
-                       || not (name.[bp+1] == '_')) then
-              (hSymbol ({file;line;column=column+bpos},
-                        string_sub name bpos bp),
-               pts, bp, cp)
-            else lexsym (bp+1) (inc_cp cp char)
-        in lexsym bpos cpos
+               * be a leading byte, so it has to count as 1 as well ;-)  *)
+              lexsym (bp+2) (cp+2) true
+            else if stt.(Char.code name.[bp]) = CKseparate then
+              (mksym bp escaped, pts, bp, cp)
+            else lexsym (bp+1) (inc_cp cp char) escaped
+        in lexsym bpos cpos false
 
 let lex tenv (pts : pretoken list) : sexp list =
   let rec gettokens pts bpos cpos acc =
     match pts with
-      | [] -> List.rev acc
-      | _ -> let (tok, pts, bpos, cpos) = nexttoken tenv pts bpos cpos
-            in gettokens pts bpos cpos (tok :: acc) in
+    | [] -> List.rev acc
+    | _ -> let (tok, pts, bpos, cpos) = nexttoken tenv pts bpos cpos
+          in gettokens pts bpos cpos (tok :: acc) in
   gettokens pts 0 0 []
 
 let _lex_str (str: string) tenv =
