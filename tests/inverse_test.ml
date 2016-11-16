@@ -71,9 +71,8 @@ let is_identity s =
   let rec is_identity s acc =
     match s with
     | S.Cons(Var(_, idx), s1) when idx = acc -> is_identity s1 (acc + 1)
-    | S.Shift(S.Identity, shift)             -> (acc = shift)
-    | S.Identity                             -> true
-    | _                                      -> false
+    | S.Shift(S.Identity, shift)             -> acc = shift
+    | _                                      -> S.identity_p s
   in is_identity s 0
 
 let generateRandInput shiftMax numberOfTest =
@@ -89,92 +88,27 @@ let generateRandInput shiftMax numberOfTest =
             else generateRandInput shiftMax (idx + 1) acc)
       else []
     in if numberOfTest >= 0
-    then (mkTestSubst (generateRandInput shiftMax 0 0))::(generateList shiftMax (numberOfTest - 1))
-    else []
+       then (mkTestSubst (generateRandInput shiftMax 0 0), true)
+            ::(generateList shiftMax (numberOfTest - 1))
+       else []
   in generateList shiftMax numberOfTest
 
-let lxp = mkVar 3
+let inv_add_test name inputs =
+  add_test "INVERSION" name
+           (fun ()
+            -> if List.fold_left (fun res (s,b)
+                                 -> match inverse s with
+                                   | Some s'
+                                     -> let comp = scompose s s' in
+                                       res && (if is_identity comp
+                                              then b else not b)
+                                   | None -> (not b))
+                                true inputs
+              then success () else failure ())
 
-let test
-    (input_gen: (unit -> 'a list))
-    (fmt: 'b list -> string list)
-    (tester: 'a -> ('b * bool)): (string * bool) list =
-  let input = List.map tester (input_gen ())
-  in let str = List.map (fun (s, _) -> s ) input
-  in let b = List.map (fun (_, b) -> b) input
-  in List.combine (fmt str) b
-
-let generate_tests (name: string)
-    (input_gen: (unit -> 'a list))
-    (fmt: 'b list -> string list)
-    (tester: 'a -> ('b * bool)) =
-  let idx = (ref 0)
-  in List.map (fun (sub, res) ->
-      idx := !idx + 1;
-      add_test name
-               ((U.padding_left (string_of_int (!idx)) 2 '0')
-               (* FIXME: It's nice to see the actual tests when they fail
-                * but it's too verbose otherwise.  *)
-               (* ^ " - " ^ sub *))
-               (fun () -> if res then success () else failure ()))
-    (test input_gen fmt tester)
-
-
-let get_dim lst =
-  let max i s = max i (String.length s)
-  in
-  List.fold_left
-    (fun (acs, acs', acc) (s, s', comp)
-     -> ((max acs s), (max acs' s'), (max acc comp)))
-    (0,0,0)
-    lst
-
-let fmt_res str =
-  let (ds, ds', dcomp) = get_dim str
-  in List.map (fun (s, s', com) -> (U.padding_right s ds ' ') ^ " -> "
-                                ^ (U.padding_right s' ds' ' ') ^ " = "
-                                ^ com)
-              str
-
-let get_dim lst =
-  let max i s = max i (String.length s)
-  in
-  List.fold_left
-    (fun (acs, acs', acc) (s, s', comp) -> ((max acs s), (max acs' s'), (max acc comp)))
-    (0,0,0)
-    lst
-
-
-let _ = generate_tests "INVERSION"
-    (fun () -> input)
-    fmt_res
-    (fun (s, b) -> ( match inverse s with
-         | Some (s') -> (let comp = scompose s s' in
-                        let ret = is_identity comp in
-                        let str = (subst_string s, subst_string s',
-                                   subst_string comp) in
-                        (str, ret))
-         | None      -> ((subst_string s, "None", "None"), not b)
-       )
-    )
-
-let fmt_res str =
-  List.map (fun (s, s', com) -> (s) ^ " -> " ^
-                                (s') ^ " = " ^
-                                (com) ) str
+let _ = inv_add_test "Manual" input
 
 (* TODO find a better way to check test*)
-let _ = generate_tests "INVERSION-RAND"
-    (fun () -> generateRandInput 5 10)
-    fmt_res
-    (fun (s) -> ( match inverse s with
-         | Some (s') -> (let comp = scompose s s' in
-                        let ret = is_identity comp in
-                        let str = (subst_string s,
-                                   subst_string s',
-                                   subst_string comp) in
-                        (str, ret))
-         | None      -> ((subst_string s , "None"             , "None") , false)
-    ))
+let _ = inv_add_test "Random" (generateRandInput 5 10)
 
 let _ = run_all ()
