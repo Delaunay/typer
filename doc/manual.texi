@@ -77,8 +77,8 @@ non-special characters and hence need to be separated by spaces.
 
 Special characters are: @code{%}, @code{"}, @code{@{}, @code{@}},
 whitespace characters, plus a configurable list of extra special
-characters, which by default is comprised of @code{,}, @code{;},
-@code{(}, and @code{)}.
+characters called @emph{token characters}, which by default is
+comprised of @code{,}, @code{;}, @code{(}, and @code{)}.
 
 The character @code{\} is also special: it makes the next character
 non-special, so it can be used to include characters like @code{"}
@@ -107,6 +107,13 @@ Floating point numbers: FIXME
 After lexing, the Sexp parsing code turns the sequence of tokens
 into a kind of syntax tree according to an @emph{operator precedence
 grammar}.
+
+Tokens are themselves parsed according to a limited precedence
+grammar.  By default this grammar only has the infix operator
+@code{.}.  So, @code{a.b.c} and @code{__\.__ (__\.__ a b) c} are
+parsed into identical Sexps.
+
+Tokens
 
 Macros receive their arguments in this Sexp form.
 

@@ -86,25 +86,51 @@ let nexttoken (stt : token_env) (pts : pretoken list) bpos cpos
                   string_sub name bpos (bpos + 1)),
          pts, bpos+1, cpos+1)
       else
-        let mksym epos escaped
-          = let rawstr = string_sub name bpos epos in
-            let str = if escaped then unescape rawstr else rawstr in
-            hSymbol ({file;line;column=column+cpos}, str) in
-        let rec lexsym bp cp escaped =
-          if bp >= String.length name then
-            (mksym (String.length name) escaped, pts', 0, 0)
-          else
-            let char = name.[bp] in
-            if char == '\\' && bp + 1 < String.length name then
-              (* Skip next char, in case it's a special token.  *)
-              (* For utf-8, this cp+2 is risky but actually works: \ counts
-               * as 1 and if the input is valid utf-8 the next byte has to
-               * be a leading byte, so it has to count as 1 as well ;-)  *)
-              lexsym (bp+2) (cp+2) true
-            else if stt.(Char.code name.[bp]) = CKseparate then
-              (mksym bp escaped, pts, bp, cp)
-            else lexsym (bp+1) (inc_cp cp char) escaped
-        in lexsym bpos cpos false
+        let rec lexsym bpos cpos =
+          let mksym epos escaped
+            = if epos = bpos then Epsilon else
+                let rawstr = string_sub name bpos epos in
+                let str = if escaped then unescape rawstr else rawstr in
+                hSymbol ({file;line;column=column+cpos}, str) in
+          let rec lexsym' prec lf bp cp escaped =
+            if bp >= String.length name then
+              (lf (mksym (String.length name) escaped), pts', 0, 0)
+            else
+              let char = name.[bp] in
+              let bp' = bp + 1 in
+              let is_last = bp' >= String.length name in
+              match stt.(Char.code char) with
+              | _ when char == '\\' && not is_last
+                (* Skip next char, in case it's a special token.  *)
+                (* For utf-8, this cp+2 is risky but actually works: \ counts
+                 * as 1 and if the input is valid utf-8 the next byte has to
+                 * be a leading byte, so it has to count as 1 as well ;-)  *)
+                -> lexsym' prec lf (bp+2) (cp+2) true
+              | CKseparate -> (lf (mksym bp escaped), pts, bp, cp)
+              (* Turn `inner` infix operators, such as the "." of
+               * "Module.elem" into the equivalent of (__.__ Module elem).  *)
+              | CKinner prec'
+                   (* To be considered `inner`, an operator char needs to have
+                    * something on its LHS or its RHS, otherwise, treat it as
+                    * a normal char, `.` can be a normal operator as well.  *)
+                   when bpos != bp
+                        || (not is_last
+                           && CKseparate != (stt.(Char.code name.[bp'])))
+                        || lf Epsilon != Epsilon
+                -> let left = mksym bp escaped in
+                  let op = hSymbol ({file;line;column=column+cp},
+                                    "__" ^ String.sub name bp 1 ^ "__") in
+                  let bpos = bp' in
+                  let cpos = inc_cp cp char in
+                  let lf' = if prec' > prec then
+                              (fun s -> lf (Node (op, [left; s])))
+                            else
+                              (fun s -> Node (op, [lf left; s])) in
+                  lexsym bpos cpos prec' lf'
+                         bpos cpos false
+              | _ -> lexsym' prec lf (bp+1) (inc_cp cp char) escaped
+          in lexsym'
+        in lexsym bpos cpos 0 (fun s -> s) bpos cpos false
 
 let lex tenv (pts : pretoken list) : sexp list =
   let rec gettokens pts bpos cpos acc =
