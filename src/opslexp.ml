@@ -276,14 +276,18 @@ let rec check meta_ctx ctx e =
   | Imm (Epsilon | Block (_, _, _) | Symbol _ | Node (_, _))
     -> (U.msg_error "TC" (lexp_location e) "Unsupported immediate value!";
        B.type_int)
-  | SortLevel (_) -> B.type_level
-  | Sort (l, Stype (SortLevel l1 as sl1))
-    -> Sort (l, Stype (SortLevel (SLsucc sl1)))
-  | Sort (_, (StypeOmega|StypeLevel))
+  | SortLevel SLz -> B.type_level
+  | SortLevel (SLsucc e)
+    -> let t = check ctx e in
+      assert_type ctx e t B.type_level;
+      B.type_level
+  | Sort (l, Stype e)
+    -> let t = check ctx e in
+      assert_type ctx e t B.type_level;
+      Sort (l, Stype (SortLevel (SLsucc t)))
+  | Sort (_, StypeLevel) -> B.type_omega
+  | Sort (_, StypeOmega)
     -> (U.msg_error "TC" (lexp_location e) "Reached Unreachable sorts!";
-       B.type_omega)
-  | Sort (_, (Stype _))
-    -> (U.msg_error "TC" (lexp_location e) "Non-level arg to Type!";
        B.type_omega)
   | Builtin (_, t) -> t
   (* FIXME: Check recursive references.  *)
