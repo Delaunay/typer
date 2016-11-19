@@ -272,7 +272,8 @@ let rec check meta_ctx ctx e =
   match e with
   | Imm (Float (_, _)) -> B.type_float
   | Imm (Integer (_, _)) -> B.type_int
-  | Imm (Epsilon | Block (_, _, _) | Symbol _ | String (_, _) | Node (_, _))
+  | Imm (String (_, _)) -> B.type_string
+  | Imm (Epsilon | Block (_, _, _) | Symbol _ | Node (_, _))
     -> (U.msg_error "TC" (lexp_location e) "Unsupported immediate value!";
        B.type_int)
   | SortLevel (_) -> B.type_level
