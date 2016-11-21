@@ -1,8 +1,0 @@
-x = 2.0;
-y = 2;
-% This produce the same error
-% While I think the first one should say "x" has the wrong type
-% and the second should say "Integer::mult expects Integers as arguments"
-% i.e `hastype` should force type checking
-main = (x : Int) * y;
-main = x * y;
