@@ -284,7 +284,7 @@ let rec check meta_ctx ctx e =
   | Sort (l, Stype e)
     -> let t = check ctx e in
       assert_type ctx e t B.type_level;
-      Sort (l, Stype (SortLevel (SLsucc t)))
+      Sort (l, Stype (SortLevel (SLsucc e)))
   | Sort (_, StypeLevel) -> B.type_omega
   | Sort (_, StypeOmega)
     -> (U.msg_error "TC" (lexp_location e) "Reached Unreachable sorts!";
