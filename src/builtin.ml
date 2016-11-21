@@ -54,6 +54,7 @@ let predef_name = [
     "Macro";
     "expand_macro_";
     "expand_dmacro_";
+    "Attribute";
 ]
 
 let default_predef_map : predef_table =
@@ -113,9 +114,9 @@ let type_eq = let lv = (dloc, "l") in
                         Arrow (Aexplicit, None, Var (tv, 1), dloc,
                                type0))))
 
-let type_int = Builtin((dloc, "Int"), type0)
-let type_float = Builtin((dloc, "Float"), type0)
-let type_string = Builtin((dloc, "String"), type0)
+let type_int = Builtin((dloc, "Int"), type0, None)
+let type_float = Builtin((dloc, "Float"), type0, None)
+let type_string = Builtin((dloc, "String"), type0, None)
 
 
 (* lexp Imm list *)

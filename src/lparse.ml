@@ -745,17 +745,17 @@ and infer_call (func: pexp) (sargs: sexp list) ctx =
       (* Here we use lexp_whnf on actual code, but it's OK
        * because we only use the result when it's a "predefined constant".  *)
       match OL.lexp_whnf body (ectx_to_lctx ctx) meta_ctx with
-      | Builtin((_, "Built-in"), _)
+      | Builtin((_, "Built-in"), _, _)
         -> (
         (* ------ SPECIAL ------ *)
         match !_parsing_internals, sargs with
         | true, [String (_, str)] ->
-          Builtin((loc, str), ltp), ltp
+          Builtin((loc, str), ltp, None), ltp
 
         | true, [String (_, str); stp] ->
            let ptp = pexp_parse stp in
            let ltp, _ = infer ptp ctx in
-           Builtin((loc, str), ltp), ltp
+           Builtin((loc, str), ltp, None), ltp
 
         | true, _ -> error loc "Wrong Usage of `Built-in`";
           dlxp, dltype
@@ -1024,7 +1024,7 @@ and new_attribute_impl loc largs ctx ftype =
     | _ -> fatal loc "new-attribute expects a single Type argument" in
 
   let attr_table_type = type0 in
-    AttributeTable (AttributeMap.empty, ltp), attr_table_type
+    Builtin ((loc, "new-attribute"), ltp, Some AttributeMap.empty), attr_table_type
 
 and add_attribute_impl loc largs ctx ftype =
   let meta_ctx, _ = !global_substitution in
@@ -1034,12 +1034,14 @@ and add_attribute_impl loc largs ctx ftype =
     | _ -> fatal loc "add-attribute expects 3 arguments (table; var; attr)" in
 
   let map, attr_type =  match OL.lexp_whnf table (ectx_to_lctx ctx) meta_ctx with
-      | AttributeTable (map, attr_type) -> map, attr_type
+      | Builtin (_, attr_type, Some map)-> map, attr_type
       | _ -> fatal loc "add-attribute expects a table as first argument" in
 
     (* FIXME: Type check (attr: type == attr_type) *)
+    (* FIXME: Attribute is a predef*)
   let attr_table_type = type0 in
-    AttributeTable (AttributeMap.add var attr map, attr_type), attr_table_type
+  let table =  AttributeMap.add var attr map in
+    Builtin ((loc, "add-attribute"), attr_type, Some table), attr_table_type
 
 and get_attribute_impl loc largs ctx ftype =
   let meta_ctx, _ = !global_substitution in
@@ -1049,7 +1051,7 @@ and get_attribute_impl loc largs ctx ftype =
     | _ -> fatal loc "get-attribute expects 2 arguments (table; var)" in
 
   let map, attr_type =  match OL.lexp_whnf table (ectx_to_lctx ctx) meta_ctx with
-    | AttributeTable (map, attr_type) -> map, attr_type
+    | Builtin (_, attr_type, Some map) -> map, attr_type
     | _ -> fatal loc "get-attribute expects a table as first argument" in
 
   let lxp = AttributeMap.find var map in
@@ -1067,7 +1069,7 @@ and has_attribute_impl loc largs ctx ftype =
     | _ -> fatal loc "get-attribute expects 2 arguments (table; var)" in
 
   let map, attr_type = match OL.lexp_whnf table (ectx_to_lctx ctx) meta_ctx with
-    | AttributeTable (map, attr_type) -> map, attr_type
+    | Builtin (_, attr_type, Some map) -> map, attr_type
     | lxp -> lexp_fatal loc lxp "get-attribute expects a table as first argument" in
 
     try let _ = AttributeMap.find var map in
@@ -1104,7 +1106,7 @@ let default_lctx, default_rctx =
       let lctx = ctx_define lctx (dloc, "Type1") type1 type2 in
       let lctx = ctx_define lctx (dloc, "Type") type0 type1 in
       (* FIXME: Add builtins directly here.  *)
-      let lxp = Builtin((dloc, "Built-in"), type0) in
+      let lxp = Builtin((dloc, "Built-in"), type0, None) in
       let lctx = ctx_define lctx (dloc, "Built-in") lxp type0 in
 
       (* Read BTL files *)

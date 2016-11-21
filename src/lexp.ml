@@ -63,7 +63,7 @@ type ltype = lexp
    | Imm of sexp                        (* Used for strings, ...  *)
    | SortLevel of sort_level
    | Sort of U.location * sort
-   | Builtin of vdef * ltype
+   | Builtin of vdef * ltype * lexp AttributeMap.t option
    | Var of vref
    | Susp of lexp * subst  (* Lazy explicit substitution: e[σ].  *)
    (* This "Let" allows recursion.  *)
@@ -79,8 +79,6 @@ type ltype = lexp
              * ltype (* The type of the return value of all branches *)
              * (U.location * (arg_kind * vdef option) list * lexp) SMap.t
              * (vdef option * lexp) option               (* Default.  *)
-   (* Special property table *)
-   | AttributeTable of lexp AttributeMap.t * ltype
    (* The `subst` only applies to the lexp associated
     * with the metavar's index (i.e. its "value"), not to the ltype.  *)
    | Metavar of int * subst * vdef * ltype
@@ -141,7 +139,7 @@ let hc (e : lexp) : lexp =
 let mkImm s                    = hc (Imm s)
 let mkSortLevel l              = hc (SortLevel l)
 let mkSort (l, s)              = hc (Sort (l, s))
-let mkBuiltin (v, t)           = hc (Builtin (v, t))
+let mkBuiltin (v, t, m)        = hc (Builtin (v, t, m))
 let mkVar v                    = hc (Var v)
 let mkLet (l, ds, e)           = hc (Let (l, ds, e))
 let mkArrow (k, v, t1, l, t2)  = hc (Arrow (k, v, t1, l, t2))
@@ -185,7 +183,7 @@ let rec lexp_location e =
   | SortLevel SLz -> U.dummy_location
   | Imm s -> sexp_location s
   | Var ((l,_),_) -> l
-  | Builtin ((l, _), _) -> l
+  | Builtin ((l, _), _, _) -> l
   | Let (l,_,_) -> l
   | Arrow (_,_,_,l,_) -> l
   | Lambda (_,(l,_),_,_) -> l
@@ -259,7 +257,6 @@ let rec push_susp e s =            (* Push a suspension one level down.  *)
    * in many other cases than just when we bump into a Susp.  *)
   | Susp (e,s') -> push_susp e (scompose s' s)
   | (Var _ | Metavar _) -> nosusp (mkSusp e s)
-  | AttributeTable _ -> e
 
 and nosusp e =                  (* Return `e` with no outermost `Susp`.  *)
   match e with
@@ -336,9 +333,9 @@ let lexp_name e =
     | Cons   _ -> "inductive-cons"
     | Case   _ -> "case"
     | Inductive _ -> "inductive_"
-    | Builtin   _ -> "Builtin"
     | Susp      _ -> "Susp"
-    | AttributeTable _ -> "AttributeTable"
+    | Builtin   (_, _, None) -> "Builtin"
+    | Builtin   _ -> "AttributeTable"
     | _ -> "lexp_to_string: not implemented"
 
 (* ugly printing (sexp_print (pexp_unparse (lexp_unparse e))) *)
@@ -346,7 +343,10 @@ let rec lexp_unparse lxp =
   match lxp with
     | Susp _ as e -> lexp_unparse (nosusp e)
     | Imm (sexp) -> Pimm (sexp)
-    | Builtin ((loc, name), _) -> Pvar((loc, name))
+    | Builtin ((loc, name), _, None) -> Pvar((loc, name))
+    | Builtin ((loc, name), ltp, _   )
+      -> Pcall(Pvar((loc, name)), [pexp_unparse (lexp_unparse ltp)])
+
     | Var ((loc, name), _) -> Pvar((loc, name))
     | Cons (t, ctor) -> Pcons (lexp_unparse t, ctor)
     | Lambda (kind, vdef, ltp, body) ->
@@ -524,7 +524,6 @@ and _lexp_to_str ctx exp =
             | Aexplicit -> ":" | Aimplicit -> "::" | Aerasable -> ":::" in
 
     match exp with
-        | AttributeTable _ -> "AttributeTable"
         | Imm(value) -> (match value with
             | String (_, s) -> tval ("\"" ^ s ^ "\"")
             | Integer(_, s) -> tval (string_of_int s)
@@ -576,8 +575,8 @@ and _lexp_to_str ctx exp =
         | Call(fname, args) -> (
             (*  get function name *)
             let str, idx, inner_parens, outer_parens = match fname with
+                | Builtin ((_, name), _, _) -> name,  0,  false, true
                 | Var((_, name), idx)    -> name, idx, false, true
-                | Builtin ((_, name), _) -> name,  0,  false, true
                 | Lambda _               -> "__",  0,  true,  false
                 | Cons _                 -> "__",  0,  false, false
                 | _                      -> "__", -1,  true,  true  in
@@ -650,7 +649,7 @@ and _lexp_to_str ctx exp =
                    ^ "| " ^ (match v with None -> "_" | Some (_,name) -> name)
                    ^ " => " ^ (lexp_to_stri 1 df))
 
-        | Builtin ((_, name), _) -> name
+        | Builtin ((_, name), _, _) -> name
 
         | Sort (_, Stype (SortLevel SLz)) -> "Type_0"
         | Sort (_, Stype _) -> "Type_?"

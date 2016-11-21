@@ -187,7 +187,7 @@ let rec conv_p' meta_ctx (ctx : DB.lexp_context) (vs : set_lexp) e1 e2 : bool =
         || (match (s1, s2) with
            | (Stype e1, Stype e2) -> conv_p e1 e2
            | _ -> false)
-    | (Builtin ((_, s1), _), Builtin ((_, s2), _)) -> s1 = s2
+    | (Builtin ((_, s1), _, _), Builtin ((_, s2), _, _)) -> s1 = s2
     | (Var (_, v1), Var (_, v2)) -> v1 = v2
     | (Arrow (ak1, vd1, t11, _, t12), Arrow (ak2, vd2, t21, _, t22))
       -> ak1 == ak2
@@ -289,7 +289,7 @@ let rec check meta_ctx ctx e =
   | Sort (_, StypeOmega)
     -> (U.msg_error "TC" (lexp_location e) "Reached Unreachable sorts!";
        B.type_omega)
-  | Builtin (_, t) -> t
+  | Builtin (_, t, _) -> t
   (* FIXME: Check recursive references.  *)
   | Var v -> lookup_type ctx v
   | Susp (e, s) -> check ctx (push_susp e s)
@@ -477,10 +477,9 @@ let rec erase_type (lxp: L.lexp): E.elexp =
 
     match lxp with
         | L.Imm(s)           -> E.Imm(s)
-        | L.Builtin(v, _)    -> E.Builtin(v)
+        | L.Builtin(v, _, _) -> E.Builtin(v)
         | L.Var(v)           -> E.Var(v)
         | L.Cons(_, s)       -> E.Cons(s)
-        | L.AttributeTable _ -> E.Type
         | L.Lambda (P.Aerasable, _, _, body) ->
           (* The var shouldn't appear in body, basically, but we need
            * to adjust the debruijn indices of other vars, hence the subst.  *)

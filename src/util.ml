@@ -80,7 +80,7 @@ let msg_message lvl kind section (loc: location) msg =
 let msg_fatal s l m  =
     msg_message 0 "[X] Fatal    " s l m;
     flush stdout;
-    internal_error m
+    internal_error "Compiler Fatal Error"
 
 let msg_error   = msg_message 1 "[!] Error    "
 let msg_warning = msg_message 2 "/!\\ Warning  "
