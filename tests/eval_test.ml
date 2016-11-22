@@ -265,35 +265,15 @@ let attr_decl = "
   greater-than = new-attribute (Int -> Int);
   greater-than = add-attribute greater-than w (lambda (x : Int) -> x);"
 
-let _ = test_eval_eqv attr_decl
+let _ = test_eval_eqv_named
+  "has-attribute"
+
+  attr_decl
+
   "has-attribute greater-than w;
    (get-attribute greater-than w) 3;"
+
   "True; 3"
-
-(* This makes sure contexts are reinitialized between calls
- *  i.e the context should not grow                             *)
-let _ = (add_test "EVAL" "Infinite Recursion failure" (fun () ->
-    _typer_verbose := (-1);
-
-    let code = "
-        infinity : Int -> Int;
-        infinity = lambda beyond -> infinity beyond;" in
-
-    let rctx, lctx = eval_decl_str code lctx rctx in
-
-    (* Expect throwing *)
-    try         (*  use the silent version as an error will be thrown *)
-        let _ = _eval_expr_str "(infinity 0);" lctx rctx true in
-            _typer_verbose := 20;
-            failure ()
-    with
-        Internal_error m -> (
-            _typer_verbose := 20;
-            if m = "Recursion Depth exceeded" then
-                success ()
-            else
-                failure ())
-))
 
 let _ = (add_test "EVAL" "Monads" (fun () ->
 

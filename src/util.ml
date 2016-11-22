@@ -74,9 +74,6 @@ let msg_message lvl kind section (loc: location) msg =
       "   " ^ kind ^ " " ^ (Fmt.lalign_string section 8) ^ " " ^ msg ^ "\n" in
         print_string info) else ()
 
-(* let info = "    " ^ kind ^ " [" ^ loc_string loc ^ "] " ^ (Fmt.lalign_string section 8) in
-      print_string (info ^ " " ^ msg ^ "\n")) else () *)
-
 let msg_fatal s l m  =
     msg_message 0 "[X] Fatal    " s l m;
     flush stdout;

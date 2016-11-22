@@ -47,7 +47,6 @@ Context = Built-in "Context";   % Lexp Context
 _+_ = Built-in "_+_" (Int -> Int -> Int);
 _*_ = Built-in "_*_" (Int -> Int -> Int);
 
-
 Bool = inductive_ (Boolean) (True) (False);
 True = inductive-cons Bool True;
 False = inductive-cons Bool False;

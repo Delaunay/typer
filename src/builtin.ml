@@ -156,15 +156,6 @@ let is_lbuiltin idx ctx =
     else
         false
 
-
-let has_attribute_impl loc largs ctx ftype = (*)
-  let table, attr_name = get_table "has-attribute" largs ctx in
-  let b = SMap.exists attr_name table in
-  let rvar = if b then get_predef "True" ctx else get_predef "False" ctx in *)
-    (get_predef "False" ctx), (get_predef "Bool" ctx)
-
-
-
 let declexpr_impl loc largs ctx ftype =
 
   let (vi, vn) = match largs with

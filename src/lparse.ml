@@ -443,7 +443,7 @@ and check (p : pexp) (t : ltype) (ctx : elab_context): lexp =
                -> if not (OL.conv_p meta_ctx (ectx_to_lctx ctx) def_arg_type ltp) then
                    lexp_error (lexp_location def_arg_type) def_arg_type
                               ("Type mismatch!  Context expected `"
-                               ^ lexp_string ltp ^ "`\n"));
+                               ^ lexp_string ltp ^ "`"));
             ltp, lbtp
         | lxp -> unify_with_arrow lxp kind var def_arg_type subst in
 
@@ -482,12 +482,12 @@ and infer_and_check pexp ctx t =
      -> lexp_error (pexp_location pexp) e
                   ("Type mismatch!  Context expected `"
                    ^ lexp_string t ^ "` but expression has type `"
-                   ^ lexp_string inferred_t ^ "`\n")
+                   ^ lexp_string inferred_t ^ "`")
    | Some (_, (t1,t2)::_)
      -> lexp_error (pexp_location pexp) e
                   ("Type mismatch!  Context expected `"
                    ^ lexp_string t2 ^ "` but expression has type `"
-                   ^ lexp_string t1 ^ "`\n")
+                   ^ lexp_string t1 ^ "`")
    | Some subst -> global_substitution := subst);
   e
 
@@ -1023,7 +1023,7 @@ and new_attribute_impl loc largs ctx ftype =
     | [ltp] -> ltp
     | _ -> fatal loc "new-attribute expects a single Type argument" in
 
-  let attr_table_type = type0 in
+  let attr_table_type = get_predef "Attribute" ctx in
     Builtin ((loc, "new-attribute"), ltp, Some AttributeMap.empty), attr_table_type
 
 and add_attribute_impl loc largs ctx ftype =
@@ -1038,8 +1038,7 @@ and add_attribute_impl loc largs ctx ftype =
       | _ -> fatal loc "add-attribute expects a table as first argument" in
 
     (* FIXME: Type check (attr: type == attr_type) *)
-    (* FIXME: Attribute is a predef*)
-  let attr_table_type = type0 in
+  let attr_table_type = get_predef "Attribute" ctx in
   let table =  AttributeMap.add var attr map in
     Builtin ((loc, "add-attribute"), attr_type, Some table), attr_table_type
 
