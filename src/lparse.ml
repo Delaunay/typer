@@ -1054,11 +1054,7 @@ and get_attribute_impl loc largs ctx ftype =
     | _ -> fatal loc "get-attribute expects a table as first argument" in
 
   let lxp = AttributeMap.find var map in
-  let (reverse_idx, _) = var in
-  (* we need to subst this expression as it was added in an older context *)
-  (* FIXME: What should be the correct shift *)
-  let s = 2 in
-    mkSusp lxp (S.shift s), mkSusp attr_type (S.shift s)
+    lxp, attr_type
 
 and has_attribute_impl loc largs ctx ftype =
   let meta_ctx, _ = !global_substitution in

@@ -208,6 +208,10 @@ let rec push_susp e s =            (* Push a suspension one level down.  *)
   | SortLevel (SLsucc e') -> mkSortLevel (SLsucc (mkSusp e' s))
   | Sort (l, Stype e) -> mkSort (l, Stype (mkSusp e s))
   | Sort (l, _) -> e
+  | Builtin (l, ltp, Some table)
+    -> let table' = AttributeMap.map (fun lxp -> mkSusp lxp s) table in
+      mkBuiltin (l, (mkSusp ltp s), Some table')
+
   | Builtin _ -> e
   | Let (l, defs, e)
     -> let s' = L.fold_left (fun s (v, _, _) -> ssink v s) s defs in
