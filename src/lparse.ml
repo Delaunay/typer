@@ -1160,9 +1160,7 @@ let default_lctx, default_rctx =
       with e ->
         warning dloc "Predef not found";
         lctx in
-      let rctx = make_runtime_ctx in
-      let rctx = eval_decls_toplevel (List.map OL.clean_decls d) rctx in
-        lctx, rctx
+      lctx, from_lctx lctx
 
 (*      String Parsing
  * --------------------------------------------------------- *)
@@ -1170,8 +1168,13 @@ let default_lctx, default_rctx =
 (* Lexp helper *)
 let _lexp_expr_str (str: string) (tenv: token_env)
             (grm: grammar) (limit: string option) (ctx: elab_context) =
-    let pxps = _pexp_expr_str str tenv grm limit in
-        lexp_parse_all pxps ctx
+  let pxps = _pexp_expr_str str tenv grm limit in
+  let lexps = lexp_parse_all pxps ctx in
+  let meta_ctx, _ = !global_substitution in
+  List.iter (fun lxp -> ignore (OL.check meta_ctx (ectx_to_lctx ctx) lxp))
+            lexps;
+  lexps
+
 
 (* specialized version *)
 let lexp_expr_str str lctx =

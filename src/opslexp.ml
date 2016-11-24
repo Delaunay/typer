@@ -54,7 +54,7 @@ let lookup_value = DB.lctx_lookup_value
  *
  *     (x₁ = e1; x₂ = e₂)
  *
- * Where x₁ will be DeBuijn #1 and x₂ will be DeBruijn #0,
+ * Where x₁ will be DeBruijn #1 and x₂ will be DeBruijn #0,
  * we want a substitution of the form
  *
  *     (let x₂ = e₂ in e₂) · (let x₁ = e₁; x₂ = e₂ in e₁) · Id

@@ -219,7 +219,7 @@ let rec push_susp e s =            (* Push a suspension one level down.  *)
     -> let s' = L.fold_left (fun s (v, _, _) -> ssink v s) s defs in
       let (_,ndefs) = L.fold_left (fun (s,ndefs) (v, def, ty)
                                    -> (ssink v s,
-                                      (v, mkSusp e s', mkSusp ty s) :: ndefs))
+                                      (v, mkSusp def s', mkSusp ty s) :: ndefs))
                                   (s, []) defs in
       mkLet (l, ndefs, mkSusp e s')
   | Arrow (ak, v, t1, l, t2)
