@@ -94,7 +94,12 @@ let global_substitution = ref (empty_meta_subst, [])
 
 let elab_check_sort (ctx : elab_context) lsort var ltp =
   let meta_ctx, _ = !global_substitution in
-  match OL.lexp_whnf lsort (ectx_to_lctx ctx) meta_ctx with
+  match (try OL.lexp_whnf lsort (ectx_to_lctx ctx) meta_ctx
+         with e ->
+           print_string "Exception during whnf of ";
+           lexp_print lsort;
+           print_string "\n";
+           raise e) with
   | Sort (_, _) -> () (* All clear!  *)
   | _ -> let lexp_string e = lexp_string (L.clean meta_ctx e) in
         let typestr = lexp_string ltp ^ " : " ^ lexp_string lsort in
@@ -133,13 +138,24 @@ let elab_check_def (ctx : elab_context) var lxp ltype =
       lexp_error loc lxp "Error while type-checking";
       print_lexp_ctx (ectx_to_lctx ctx);
       raise e in
-  if OL.conv_p meta_ctx (ectx_to_lctx ctx) ltype ltype' then
+  if (try OL.conv_p meta_ctx (ectx_to_lctx ctx) ltype ltype'
+      with e
+           -> print_string ("Exception while conversion-checking types:\n");
+             lexp_print ltype;
+             print_string (" and ");
+             lexp_print ltype';
+             print_string ("\n");
+             lexp_error loc lxp
+                        ("Exception while conversion-checking types "
+                         ^ lexp_string ltype ^ " and " ^ lexp_string ltype');
+             raise e)
+  then
     elab_check_proper_type ctx ltype (Some var)
   else
     (debug_messages fatal loc "Type check error: ¡¡ctx_define error!!" [
       lexp_string lxp ^ " !: " ^ lexp_string ltype;
       "                    because";
-      lexp_string (OL.check meta_ctx lctx lxp) ^ " != " ^ lexp_string ltype])
+      lexp_string ltype' ^ " != " ^ lexp_string ltype])
 
 let ctx_extend (ctx: elab_context) (var : vdef option) def ltype =
   elab_check_proper_type ctx ltype var;
@@ -709,11 +725,21 @@ and infer_call (func: pexp) (sargs: sexp list) ctx =
       (* Aimplicit, FIXME: use a meta var if a default macro is not provided *)
       | sarg :: sargs, Arrow (Aimplicit, v, arg_type, _, ret_type)
         -> ((* get default attribute *)
+        (* FIXME: We shouldn't hard code as popular a name as `default`.  *)
         let pidx, pname = (senv_lookup "default" ctx), "default" in
         let default = Var((dloc, pname), pidx) in
 
         (* lookup default attribute of ltp *)
-        let attr, attr_type = get_attribute_impl loc [default; arg_type] ctx arg_type in
+        let attr = get_attribute_impl loc [default; arg_type] ctx arg_type in
+        (* FIXME: The `default` attribute table shouldn't contain elements of
+         * type `Macro` but elements of type `something -> Sexp`.
+         * The point of the `Macro` type is to be able to distinguish
+         * a macro call from a function call, but here, we have no need
+         * to distinguish two cases.
+         * Better yet: let's not do any table lookup here.  Instead,
+         * call a `default-arg-filler` function, implemented in Typer,
+         * just like `expand_macro_` function.  That one can then look
+         * things up in a table and/or do anything else it wants.  *)
         let v = lexp_expand_macro attr [] ctx in
 
         (* get the sexp returned by the macro *)
@@ -796,7 +822,11 @@ and infer_call (func: pexp) (sargs: sexp list) ctx =
           | Pvar(l, name) when is_builtin_macro name ->
             let pargs = List.map pexp_parse sargs in
             let largs = lexp_parse_all pargs ctx in
-              (get_macro_impl loc name) loc largs ctx ltp
+            let e = (get_macro_impl loc name) loc largs ctx ltp in
+            let meta_ctx, _ = !global_substitution in
+            (* FIXME: We don't actually need to typecheck `e`, we just need
+             * to find its type.  *)
+            (e, OL.check meta_ctx (ectx_to_lctx ctx) e)
 
           (* true macro *)
           | _ -> handle_macro_call ())
@@ -936,8 +966,8 @@ and lexp_decls_1
       let (lexp, ltp) = infer pexp nctx in
       (* Lexp decls are always recursive, so we have to shift by 1 to account
        * for the extra var (ourselves).  *)
-      [(v, push_susp lexp (S.shift 1), ltp)], pdecls,
-      env_extend nctx v (LetDef lexp) ltp
+      [(v, mkSusp lexp (S.shift 1), ltp)], pdecls,
+      ctx_define nctx v lexp ltp
 
   | Pexpr ((l, vname) as v, pexp) :: pdecls
     -> (try let (_, ltp) = SMap.find vname pending_decls in
@@ -1012,8 +1042,7 @@ and get_macro_impl loc name =
     with Not_found -> fatal loc ("Builtin macro" ^ name ^ " not found")
 
 and is_builtin_macro name =
-  try let _ = SMap.find name (make_macro_map ()) in true
-    with Not_found -> false
+  SMap.mem name (make_macro_map ())
 
 (* --------------------------------------------------------------------------
  *  Special form implementation
@@ -1023,8 +1052,7 @@ and new_attribute_impl loc largs ctx ftype =
     | [ltp] -> ltp
     | _ -> fatal loc "new-attribute expects a single Type argument" in
 
-  let attr_table_type = get_predef "Attribute" ctx in
-    Builtin ((loc, "new-attribute"), ltp, Some AttributeMap.empty), attr_table_type
+  Builtin ((loc, "new-attribute"), ltp, Some AttributeMap.empty)
 
 and add_attribute_impl loc largs ctx ftype =
   let meta_ctx, _ = !global_substitution in
@@ -1038,9 +1066,8 @@ and add_attribute_impl loc largs ctx ftype =
       | _ -> fatal loc "add-attribute expects a table as first argument" in
 
     (* FIXME: Type check (attr: type == attr_type) *)
-  let attr_table_type = get_predef "Attribute" ctx in
   let table =  AttributeMap.add var attr map in
-    Builtin ((loc, "add-attribute"), attr_type, Some table), attr_table_type
+    Builtin ((loc, "add-attribute"), attr_type, Some table)
 
 and get_attribute_impl loc largs ctx ftype =
   let meta_ctx, _ = !global_substitution in
@@ -1049,12 +1076,12 @@ and get_attribute_impl loc largs ctx ftype =
     | [table; Var((_, name), idx)] -> table, (ctx_n - idx, name)
     | _ -> fatal loc "get-attribute expects 2 arguments (table; var)" in
 
-  let map, attr_type =  match OL.lexp_whnf table (ectx_to_lctx ctx) meta_ctx with
-    | Builtin (_, attr_type, Some map) -> map, attr_type
+  let map = match OL.lexp_whnf table (ectx_to_lctx ctx) meta_ctx with
+    | Builtin (_, attr_type, Some map) -> map
     | _ -> fatal loc "get-attribute expects a table as first argument" in
 
   let lxp = AttributeMap.find var map in
-    lxp, attr_type
+    (lxp : lexp)
 
 and has_attribute_impl loc largs ctx ftype =
   let meta_ctx, _ = !global_substitution in
@@ -1068,9 +1095,9 @@ and has_attribute_impl loc largs ctx ftype =
     | lxp -> lexp_fatal loc lxp "get-attribute expects a table as first argument" in
 
     try let _ = AttributeMap.find var map in
-      (get_predef "True" ctx), (get_predef "Bool" ctx)
+      (get_predef "True" ctx)
     with Not_found ->
-      (get_predef "False" ctx), (get_predef "Bool" ctx)
+      (get_predef "False" ctx)
 
 (*  Only print var info *)
 and lexp_print_var_info ctx =

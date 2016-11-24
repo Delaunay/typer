@@ -84,7 +84,6 @@ let counter = ref 0
 let mkVar (idx: int) : lexp =
   counter := !counter + 1;
   Var((U.dummy_location, "<anon" ^ string_of_int idx ^ ">"), idx)
-let impossible = Imm Sexp.Epsilon
 
 (** Fill the gap between e_i in the list of couple (e_i, i) by adding
     dummy variables.

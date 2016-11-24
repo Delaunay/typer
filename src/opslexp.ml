@@ -293,7 +293,7 @@ let rec check meta_ctx ctx e =
   (* FIXME: Check recursive references.  *)
   | Var v -> lookup_type ctx v
   | Susp (e, s) -> check ctx (push_susp e s)
-  | Let (_, defs, e)
+  | Let (l, defs, e)
     -> let tmp_ctx =
         List.fold_left (fun ctx (v, e, t)
                         -> (match lexp_whnf (check ctx t) ctx meta_ctx with
@@ -309,12 +309,16 @@ let rec check meta_ctx ctx e =
                                 n - 1)
                              (List.length defs) defs in
       let new_ctx = DB.lctx_extend_rec ctx defs in
-      check new_ctx e
+      mkSusp (check new_ctx e)
+             (lexp_defs_subst l S.identity defs)
   | Arrow (ak, v, t1, l, t2)
     -> (let k1 = check ctx t1 in
        let nctx = DB.lexp_ctx_cons ctx 0 v Variable t1 in
-       let k2 = check nctx t2 in
-       match lexp_whnf k1 ctx meta_ctx, lexp_whnf k2 nctx meta_ctx with
+       (* BEWARE!  `k2` can refer to `v`, but this should only happen
+        * if `v` is a TypeLevel, and in that case sort_compose
+        * should ignore `k2` and return TypeOmega anyway.  *)
+       let k2 = mkSusp (check nctx t2) (S.substitute impossible) in
+       match lexp_whnf k1 ctx meta_ctx, lexp_whnf k2 ctx meta_ctx with
        | (Sort (_, s1), Sort (_, s2))
          -> if ak == P.Aerasable && impredicative_erase then k2
            else Sort (l, sort_compose l s1 s2)
@@ -450,13 +454,13 @@ let rec check meta_ctx ctx e =
              | [] -> []
              | (ak, vd, _)::fargs -> (ak, Var (vd, start_index))
                                     :: indtype fargs (start_index - 1) in
-           let rec fieldargs fieldtypes =
-             match fieldtypes with
-             | [] -> Call (it, indtype fargs (List.length fieldtypes
-                                             + List.length fargs - 1))
-             | (ak, vd, ftype) :: fieldtypes
+           let rec fieldargs ftypes =
+             match ftypes with
+             | [] -> let nargs = List.length fieldtypes + List.length fargs in
+                    Call (mkSusp t (S.shift nargs), indtype fargs (nargs - 1))
+             | (ak, vd, ftype) :: ftypes
                -> Arrow (ak, vd, ftype, lexp_location ftype,
-                                       fieldargs fieldtypes) in
+                                       fieldargs ftypes) in
            let rec buildtype fargs =
              match fargs with
              | [] -> fieldargs fieldtypes

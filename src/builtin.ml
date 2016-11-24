@@ -167,7 +167,7 @@ let declexpr_impl loc largs ctx ftype =
     | None -> error loc "no expr available" in
   (* ltp and ftype should be the same
   let ltp = env_lookup_type ctx ((loc, vn), vi) in *)
-    lxp, ftype
+    lxp
 
 
 let decltype_impl loc largs ctx ftype =
@@ -178,7 +178,7 @@ let decltype_impl loc largs ctx ftype =
 
   let ltype = DB.env_lookup_type ctx ((loc, vn), vi) in
     (* mkSusp prop (S.shift (var_i + 1)) *)
-    ltype, type0
+    ltype
 
 
 

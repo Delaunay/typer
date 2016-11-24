@@ -124,6 +124,7 @@ module VMap = Map.Make (struct type t = int let compare = compare end)
 type meta_subst = lexp VMap.t
 type constraints  = (lexp * lexp) list
 let empty_meta_subst = VMap.empty
+let impossible = Imm Sexp.Epsilon
 
 let builtin_size = ref 0
 
@@ -208,11 +209,12 @@ let rec push_susp e s =            (* Push a suspension one level down.  *)
   | SortLevel (SLsucc e') -> mkSortLevel (SLsucc (mkSusp e' s))
   | Sort (l, Stype e) -> mkSort (l, Stype (mkSusp e s))
   | Sort (l, _) -> e
-  | Builtin (l, ltp, Some table)
-    -> let table' = AttributeMap.map (fun lxp -> mkSusp lxp s) table in
-      mkBuiltin (l, (mkSusp ltp s), Some table')
+  | Builtin (l, ltp, otable)
+    -> let otable' = match otable with
+        | Some table -> Some (AttributeMap.map (fun lxp -> mkSusp lxp s) table)
+        | _ -> None in
+      mkBuiltin (l, (mkSusp ltp s), otable')
 
-  | Builtin _ -> e
   | Let (l, defs, e)
     -> let s' = L.fold_left (fun s (v, _, _) -> ssink v s) s defs in
       let (_,ndefs) = L.fold_left (fun (s,ndefs) (v, def, ty)
