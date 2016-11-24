@@ -241,9 +241,9 @@ let rec infer (p : pexp) (ctx : elab_context): lexp * ltype =
     | Pimm v
       -> (mkImm (v),
          match v with
-         | Integer _ -> type_int
-         | Float _   -> type_float
-         | String _  -> type_string;
+         | Integer _ -> DB.type_int
+         | Float _   -> DB.type_float
+         | String _  -> DB.type_string;
          | _ -> pexp_error tloc p "Could not find type";
                dltype)
 
@@ -1125,11 +1125,11 @@ let default_lctx, default_rctx =
 
       (* Empty context *)
       let lctx = make_elab_context in
-      let lctx = ctx_define lctx (dloc, "Type1") type1 type2 in
-      let lctx = ctx_define lctx (dloc, "Type") type0 type1 in
+      let lctx = ctx_define lctx (dloc, "Type1") DB.type1 DB.type2 in
+      let lctx = ctx_define lctx (dloc, "Type") DB.type0 DB.type1 in
       (* FIXME: Add builtins directly here.  *)
-      let lxp = Builtin((dloc, "Built-in"), type0, None) in
-      let lctx = ctx_define lctx (dloc, "Built-in") lxp type0 in
+      let lxp = Builtin((dloc, "Built-in"), DB.type0, None) in
+      let lctx = ctx_define lctx (dloc, "Built-in") lxp DB.type0 in
 
       (* Read BTL files *)
       let pres = prelex_file (!btl_folder ^ "types.typer") in

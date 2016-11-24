@@ -211,7 +211,7 @@ let readfiles files (i, lctx, rctx) prt =
         (i, lctx, rctx)  files
 
 
-(*  Specials commands %[command-name] [args] *)
+(*  Specials commands %[command-name] [args] *)
 let rec repl i clxp rctx =
     let repl = repl (i + 1) in
     let ipt = read_input i in

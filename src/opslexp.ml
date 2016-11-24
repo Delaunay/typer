@@ -34,7 +34,6 @@ module L = Lexp
 (* open Unify *)
 module S = Subst
 (* module L = List *)
-module B = Builtin
 module DB = Debruijn
 
 (* `conv_erase` is supposed to be safe according to the ICC papers. *)
@@ -262,65 +261,90 @@ let sort_compose l s1 s2 =
                        "Mismatch sorts for arg and result";
            StypeOmega)
 
+let dbset_push ak erased =
+  let nerased = DB.set_sink 1 erased in
+  if ak = P.Aerasable then DB.set_set 0 nerased else nerased
+
 (* "check ctx e" should return τ when "Δ ⊢ e : τ"  *)
-let rec check meta_ctx ctx e =
-  let check = check meta_ctx in
+let rec check' meta_ctx erased ctx e =
+  let check = check' meta_ctx in
   let assert_type ctx e t t' =
     if conv_p meta_ctx ctx t t' then ()
-    else U.msg_error "TC" (lexp_location e) "Type mismatch"; () in
+    else (U.msg_error "TC" (lexp_location e)
+                     ("Type mismatch for "
+                      ^ lexp_string e ^ " : "
+                      ^ lexp_string t ^ " != " ^ lexp_string t');
+          (* U.internal_error "Type mismatch" *)) in
+  let check_type erased ctx t =
+    let s = check erased ctx t in
+    (match lexp_whnf s ctx meta_ctx with
+    | Sort _ -> ()
+    | _ -> U.msg_error "TC" (lexp_location t)
+                      ("Not a proper type: " ^ lexp_string t));
+    (* FIXME: return the `sort` rather than the surrounding `lexp`!  *)
+    s in
 
   match e with
-  | Imm (Float (_, _)) -> B.type_float
-  | Imm (Integer (_, _)) -> B.type_int
-  | Imm (String (_, _)) -> B.type_string
+  | Imm (Float (_, _)) -> DB.type_float
+  | Imm (Integer (_, _)) -> DB.type_int
+  | Imm (String (_, _)) -> DB.type_string
   | Imm (Epsilon | Block (_, _, _) | Symbol _ | Node (_, _))
     -> (U.msg_error "TC" (lexp_location e) "Unsupported immediate value!";
-       B.type_int)
-  | SortLevel SLz -> B.type_level
+       DB.type_int)
+  | SortLevel SLz -> DB.type_level
   | SortLevel (SLsucc e)
-    -> let t = check ctx e in
-      assert_type ctx e t B.type_level;
-      B.type_level
+    -> let t = check erased ctx e in
+      assert_type ctx e t DB.type_level;
+      (* FIXME: typelevel vs typelevelsort !? *)
+      DB.type_level
   | Sort (l, Stype e)
-    -> let t = check ctx e in
-      assert_type ctx e t B.type_level;
+    -> let t = check erased ctx e in
+      assert_type ctx e t DB.type_level;
       Sort (l, Stype (SortLevel (SLsucc e)))
-  | Sort (_, StypeLevel) -> B.type_omega
+  | Sort (_, StypeLevel) -> DB.type_omega
   | Sort (_, StypeOmega)
-    -> (U.msg_error "TC" (lexp_location e) "Reached Unreachable sorts!";
-       B.type_omega)
+    -> (U.msg_error "TC" (lexp_location e) "Reached Unreachable sort!";
+       U.internal_error "Reached Unreachable sort!";
+       DB.type_omega)
   | Builtin (_, t, _) -> t
   (* FIXME: Check recursive references.  *)
-  | Var v -> lookup_type ctx v
-  | Susp (e, s) -> check ctx (push_susp e s)
+  | Var (((_, name), idx) as v)
+    -> if DB.set_mem idx erased then
+        U.msg_error "TC" (lexp_location e)
+                    ("Var `" ^ name ^ "`"
+                     ^ " can't be used here, because it's `erasable`")
+      else if name = "erased" then U.internal_error "WOWO!";
+      lookup_type ctx v
+  | Susp (e, s) -> check erased ctx (push_susp e s)
   | Let (l, defs, e)
     -> let tmp_ctx =
         List.fold_left (fun ctx (v, e, t)
-                        -> (match lexp_whnf (check ctx t) ctx meta_ctx with
-                           | Sort (_, Stype _) -> ()
-                           | _ -> (U.msg_error "TC" (lexp_location t)
-                                              "Def type is not a type!"; ()));
-                          DB.lctx_extend ctx (Some v) ForwardRef t)
+                        -> (let _ = check_type DB.set_empty ctx t in
+                           DB.lctx_extend ctx (Some v) ForwardRef t))
                        ctx defs in
+      let nerased = DB.set_sink (List.length defs) erased in
       let _ = List.fold_left (fun n (v, e, t)
                               -> assert_type tmp_ctx e
                                             (push_susp t (S.shift n))
-                                            (check tmp_ctx e);
+                                            (check nerased tmp_ctx e);
                                 n - 1)
                              (List.length defs) defs in
       let new_ctx = DB.lctx_extend_rec ctx defs in
-      mkSusp (check new_ctx e)
+      mkSusp (check nerased new_ctx e)
              (lexp_defs_subst l S.identity defs)
   | Arrow (ak, v, t1, l, t2)
-    -> (let k1 = check ctx t1 in
+    -> (let k1 = check_type erased ctx t1 in
        let nctx = DB.lexp_ctx_cons ctx 0 v Variable t1 in
        (* BEWARE!  `k2` can refer to `v`, but this should only happen
         * if `v` is a TypeLevel, and in that case sort_compose
         * should ignore `k2` and return TypeOmega anyway.  *)
-       let k2 = mkSusp (check nctx t2) (S.substitute impossible) in
+       let k2 = check_type (DB.set_sink 1 erased) nctx t2 in
+       let k2 = mkSusp k2 (S.substitute impossible) in
        match lexp_whnf k1 ctx meta_ctx, lexp_whnf k2 ctx meta_ctx with
        | (Sort (_, s1), Sort (_, s2))
-         -> if ak == P.Aerasable && impredicative_erase then k2
+         (* FIXME: fix scoping of `k2` and `s2`.  *)
+         -> if ak == P.Aerasable && impredicative_erase && s1 != StypeLevel
+           then k2
            else Sort (l, sort_compose l s1 s2)
        | (Sort (_, _), _) -> (U.msg_error "TC" (lexp_location t2)
                             "Not a proper type";
@@ -329,31 +353,33 @@ let rec check meta_ctx ctx e =
                                "Not a proper type";
                    Sort (l, StypeOmega)))
   | Lambda (ak, ((l,_) as v), t, e)
-    -> ((match lexp_whnf (check ctx t) ctx meta_ctx with
+    -> ((match lexp_whnf (check_type DB.set_empty ctx t) ctx meta_ctx with
         | Sort _ -> ()
         | _ -> (U.msg_error "TC" (lexp_location t)
                            "Formal arg type is not a type!"; ()));
        Arrow (ak, Some v, t, l,
-              (* FIXME: If ak is Aerasable, make sure the var only appears
-               * in type annotations.  *)
-              check (DB.lctx_extend ctx (Some v) Variable t) e))
+              check (dbset_push ak erased)
+                    (DB.lctx_extend ctx (Some v) Variable t)
+                    e))
   | Call (f, args)
-    -> let ft = check ctx f in
-      List.fold_left (fun ft (ak,arg)
-                   -> let at = check ctx arg in
-                     match lexp_whnf ft ctx meta_ctx with
-                     | Arrow (ak', v, t1, l, t2)
-                       -> if not (ak == ak') then
-                            (U.msg_error "TC" (lexp_location arg)
-                                         "arg kind mismatch"; ())
-                          else ();
-                         assert_type ctx arg t1 at;
-                         mkSusp t2 (S.substitute arg)
-                     | _ -> (U.msg_error "TC" (lexp_location arg)
-                                        ("Calling a non function (type = "
-                                         ^ lexp_string ft ^ ")!");
-                            ft))
-                  ft args
+    -> let ft = check erased ctx f in
+      List.fold_left
+        (fun ft (ak,arg)
+         -> let at = check (if ak = P.Aerasable then DB.set_empty else erased)
+                          ctx arg in
+           match lexp_whnf ft ctx meta_ctx with
+           | Arrow (ak', v, t1, l, t2)
+             -> if not (ak == ak') then
+                 (U.msg_error "TC" (lexp_location arg)
+                              "arg kind mismatch"; ())
+               else ();
+               assert_type ctx arg t1 at;
+               mkSusp t2 (S.substitute arg)
+           | _ -> (U.msg_error "TC" (lexp_location arg)
+                              ("Calling a non function (type = "
+                               ^ lexp_string ft ^ ")!");
+                  ft))
+        ft args
   | Inductive (l, label, args, cases)
     -> let rec arg_loop args ctx =
         match args with
@@ -364,8 +390,11 @@ let rec check meta_ctx ctx e =
                     let level, _ =
                       List.fold_left
                         (fun (level, ctx) (ak, v, t) ->
-                          (match lexp_whnf (check ctx t) ctx meta_ctx with
-                           | Sort _ when ak == P.Aerasable && impredicative_erase
+                          (* FIXME: DB.set_empty seems wrong!  *)
+                          (match lexp_whnf (check_type DB.set_empty ctx t)
+                                           ctx meta_ctx with
+                           | Sort (_, Stype _)
+                                when ak == P.Aerasable && impredicative_erase
                              -> level
                            | Sort (_, Stype level')
                              (* FIXME: scoping of level vars!  *)
@@ -393,7 +422,7 @@ let rec check meta_ctx ctx e =
     -> let call_split e = match e with
         | Call (f, args) -> (f, args)
         | _ -> (e,[]) in
-      let etype = lexp_whnf (check ctx e) ctx meta_ctx in
+      let etype = lexp_whnf (check erased ctx e) ctx meta_ctx in
       let it, aargs = call_split etype in
       (match lexp_whnf it ctx meta_ctx, aargs with
        | Inductive (_, _, fargs, constructors), aargs ->
@@ -410,13 +439,14 @@ let rec check meta_ctx ctx e =
           SMap.iter
             (fun name (l, vdefs, branch)
              -> let fieldtypes = SMap.find name constructors in
-               let rec mkctx ctx s vdefs fieldtypes =
+               let rec mkctx erased ctx s vdefs fieldtypes =
                  match vdefs, fieldtypes with
-                 | [], [] -> ctx
+                 | [], [] -> (erased, ctx)
                  (* FIXME: If ak is Aerasable, make sure the var only
                   * appears in type annotations.  *)
                  | (ak, vdef)::vdefs, (ak', vdef', ftype)::fieldtypes
-                   -> mkctx (DB.lexp_ctx_cons ctx 0
+                   -> mkctx (dbset_push ak erased)
+                           (DB.lexp_ctx_cons ctx 0
                                              vdef Variable (mkSusp ftype s))
                            (S.cons (Var ((match vdef with Some vd -> vd
                                                         | None -> (l, "_")),
@@ -425,11 +455,11 @@ let rec check meta_ctx ctx e =
                            vdefs fieldtypes
                  | _,_ -> (U.msg_error "TC" l
                                       "Wrong number of args to constructor!";
-                          ctx) in
-               let nctx = mkctx ctx s vdefs fieldtypes in
+                          (erased, ctx)) in
+               let (nerased, nctx) = mkctx erased ctx s vdefs fieldtypes in
                assert_type nctx branch
                            (mkSusp ret (S.shift (List.length fieldtypes)))
-                           (check nctx branch))
+                           (check nerased nctx branch))
             branches;
           let diff = SMap.cardinal constructors - SMap.cardinal branches in
           (match default with
@@ -438,7 +468,7 @@ let rec check meta_ctx ctx e =
                  U.msg_warning "TC" l "Redundant default clause";
                let nctx = (DB.lctx_extend ctx v (LetDef e) etype) in
                assert_type nctx d (mkSusp ret (S.shift 1))
-                           (check nctx d)
+                           (check (DB.set_sink 1 erased) nctx d)
            | None
              -> if diff > 0 then
                  U.msg_error "TC" l ("Non-exhaustive match: "
@@ -470,10 +500,12 @@ let rec check meta_ctx ctx e =
            buildtype fargs
        | _ -> (U.msg_error "TC" (lexp_location e)
                           "Cons of a non-inductive type!";
-              B.type_int))
+              DB.type_int))
   | Metavar (idx, s, _, t)
-    -> try check ctx (push_susp (L.VMap.find idx meta_ctx) s)
+    -> try check erased ctx (push_susp (L.VMap.find idx meta_ctx) s)
       with Not_found -> t
+
+let check meta_ctx = check' meta_ctx DB.set_empty
 
 (*********** Type erasure, before evaluation.  *****************)
 
@@ -487,7 +519,7 @@ let rec erase_type (lxp: L.lexp): E.elexp =
         | L.Lambda (P.Aerasable, _, _, body) ->
           (* The var shouldn't appear in body, basically, but we need
            * to adjust the debruijn indices of other vars, hence the subst.  *)
-          erase_type (L.push_susp body (S.substitute Builtin.type0))
+          erase_type (L.push_susp body (S.substitute DB.type0))
         | L.Lambda (_, vdef, _, body) ->
           E.Lambda (vdef, erase_type body)
 

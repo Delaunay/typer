@@ -185,7 +185,7 @@ let generate_testable (_: lexp list) : ((lexp * lexp * result) list) =
 
   ::(input_type    , input_type_t  , Equivalent)  (* 44 *)
 
-  ::(Metavar (0, S.Identity, (Util.dummy_location, "M"), type0),
+  ::(Metavar (0, S.Identity, (Util.dummy_location, "M"), DB.type0),
      Var ((Util.dummy_location, "x"), 3), Unification) (* 45 *)
 
   ::[]

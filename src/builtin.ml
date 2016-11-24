@@ -93,30 +93,18 @@ let dump_predef () =
 
 (*                Builtin types               *)
 let dloc    = DB.dloc
-let level0  = DB.level0
-let level1  = mkSortLevel (SLsucc level0)
-let level2  = mkSortLevel (SLsucc level1)
-let type0   = DB.type0
-let type1   = mkSort (dloc, Stype level1)
-let type2   = mkSort (dloc, Stype level2)
-let type_omega = mkSort (dloc, StypeOmega)
-let type_level = mkSort (dloc, StypeLevel)
 
 let op_binary t =  Arrow (Aexplicit, None, t, dloc,
                         Arrow (Aexplicit, None, t, dloc, t))
 
 let type_eq = let lv = (dloc, "l") in
    let tv = (dloc, "t") in
-   Arrow (Aerasable, Some lv, type_level, dloc,
+   Arrow (Aerasable, Some lv, DB.type_level, dloc,
           Arrow (Aerasable, Some tv,
                  Sort (dloc, Stype (Var (lv, 0))), dloc,
                  Arrow (Aexplicit, None, Var (tv, 0), dloc,
                         Arrow (Aexplicit, None, Var (tv, 1), dloc,
-                               type0))))
-
-let type_int = Builtin((dloc, "Int"), type0, None)
-let type_float = Builtin((dloc, "Float"), type0, None)
-let type_string = Builtin((dloc, "String"), type0, None)
+                               DB.type0))))
 
 
 (* lexp Imm list *)
