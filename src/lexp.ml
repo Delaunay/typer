@@ -166,6 +166,8 @@ let rec mkSusp e s =
      * There's no deep technical rason for that:
      * it just seemed like a good idea to do it eagerly when it's easy.  *)
     match e with
+    (* FIXME: `Builtin` shouuld be treated like `Imm`.  *)
+    | Imm _ -> e
     | Susp (e, s') -> mkSusp e (scompose s' s)
     | Var (l,v) -> slookup s l v
     | Metavar (vn, s', vd, t) -> mkMetavar (vn, scompose s' s, vd, mkSusp t s)
@@ -349,10 +351,7 @@ let rec lexp_unparse lxp =
   match lxp with
     | Susp _ as e -> lexp_unparse (nosusp e)
     | Imm (sexp) -> Pimm (sexp)
-    | Builtin ((loc, name), _, None) -> Pvar((loc, name))
-    | Builtin ((loc, name), ltp, _   )
-      -> Pcall(Pvar((loc, name)), [pexp_unparse (lexp_unparse ltp)])
-
+    | Builtin (s, _, _) -> Pbuiltin s
     | Var ((loc, name), _) -> Pvar((loc, name))
     | Cons (t, ctor) -> Pcons (lexp_unparse t, ctor)
     | Lambda (kind, vdef, ltp, body) ->
@@ -655,15 +654,16 @@ and _lexp_to_str ctx exp =
                    ^ "| " ^ (match v with None -> "_" | Some (_,name) -> name)
                    ^ " => " ^ (lexp_to_stri 1 df))
 
-        | Builtin ((_, name), _, _) -> name
+        | Builtin ((_, name), _, _) -> "##" ^ name
 
-        | Sort (_, Stype (SortLevel SLz)) -> "Type_0"
-        | Sort (_, Stype _) -> "Type_?"
-        | Sort (_, StypeOmega) -> "Type_ω"
-        | Sort (_, StypeLevel) -> "Type_Level"
+        | Sort (_, Stype (SortLevel SLz)) -> "##Type"
+        | Sort (_, Stype (SortLevel (SLsucc (SortLevel SLz)))) -> "##Type1"
+        | Sort (_, StypeLevel) -> "##TypeLevel"
+        | Sort (_, Stype _) -> "##Type_?"    (* FIXME!  *)
+        | Sort (_, StypeOmega) -> "##Type_ω" (* FIXME: Should never happen!  *)
 
-        | SortLevel (SLz) -> "<Level0>"
-        | SortLevel (SLsucc e) -> "<LevelS?>"
+        | SortLevel (SLz) -> "##TypeLevel.z"
+        | SortLevel (SLsucc e) -> "##TypeLevel.succ"
 
 and lexp_str_ctor ctx ctors =
   SMap.fold (fun key value str

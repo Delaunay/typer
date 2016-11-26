@@ -190,7 +190,7 @@ let _ = test_eval_eqv_named
    three = succ two;
 
    plus : Nat -> Nat -> Nat;
-   plus = lambda (x : Nat) -> lambda (y : Nat) -> case x
+   plus x y = case x
        | zero => y
        | succ z => succ (plus z y);")
 

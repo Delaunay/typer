@@ -39,6 +39,7 @@ type pvar = symbol
 type pexp =
   (* | Psort of location * sort *)
   | Pimm of sexp                       (* Used for strings, ...  *)
+  | Pbuiltin of symbol
   | Pvar of pvar
   | Phastype of location * pexp * pexp
   | Pmetavar of pvar
@@ -70,6 +71,7 @@ let rec pexp_location e =
   match e with
   (* | Psort (l,_) -> l *)
   | Pimm s -> sexp_location s
+  | Pbuiltin (l,_) -> l
   | Pvar (l,_) -> l
   | Phastype (l,_,_) -> l
   | Pmetavar (l, _) -> l
@@ -97,6 +99,18 @@ let rec pexp_parse (s : sexp) : pexp =
   (* | Symbol (l, "Type") -> Psort (l, Type) *)
   | Symbol (l, name) when String.length name > 0 && String.get name 0 == '?'
     -> Pmetavar (l, String.sub name 1 (String.length name - 1))
+  | Symbol (l, name) when String.length name > 2
+                          && String.get name 0 == '#'
+                          && String.get name 1 == '#'
+    -> Pbuiltin (l, string_sub name 2 (String.length name))
+  (* | Node (Symbol (start, "##"), [Symbol s])
+   *   -> Pbuiltin s
+   * | Node (Symbol (start, "##"), [e])
+   *   -> pexp_error (sexp_location e) "Non-symbol argument to `##`";
+   *     Pmetavar (start, "")
+   * | Node (Symbol (start, "##"), _)
+   *   -> pexp_error start "`##` takes exactly one argument";
+   *     Pmetavar (start, "") *)
   | Symbol s -> Pvar s
   | Node (Symbol (start, "_:_"), [e; t])
     -> Phastype (start, pexp_parse e, pexp_parse t)
@@ -297,8 +311,10 @@ and pexp_unparse (e : pexp) : sexp =
   (* | Psort (l,Ext) -> Symbol (l, "%Ext%") *)
   (* | Psort (l,Type) -> Symbol (l, "%Type%") *)
   | Pimm s -> s
+  | Pbuiltin (l,name) -> Symbol (l, "##" ^ name)
+  (* | Pbuiltin ((l,_) as s) -> Node (Symbol (l, "##"), [Symbol s]) *)
   | Pvar v -> Symbol v
-  | Pmetavar (l,name) -> Symbol (l,"?"^name)
+  | Pmetavar (l,name) -> Symbol (l, "?" ^ name)
   | Phastype (l,e,t)
     -> Node (Symbol (l, "_:_"), [pexp_unparse e; pexp_unparse t])
   | Plet (start, decls, body) ->
@@ -406,6 +422,7 @@ let pexp_print e = print_string (pexp_string e)
 let pexp_name e =
   match e with
   | Pimm _           -> "Pimm"
+  | Pbuiltin _       -> "Pbuiltin"
   | Pvar (_,_)       -> "Pvar"
   | Phastype (_,_,_) -> "Phastype"
   | Pmetavar (_, _)  -> "Pmetavar"

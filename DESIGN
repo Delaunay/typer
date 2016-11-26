@@ -1219,22 +1219,30 @@ For IO the macro would return "bind e1 e2", whereas for "a * b" it would use
 
 Here's an example of a use of partial functions:
 
-   type Exp (e : Env) :=
-     Var i (t : lookup i e)
+    type Exp (e : Env)
+    | Var i (t : lookup i e)
 
 where "lookup" might fail.  Without partial functions, we have to use
 a relational style, as in:
 
-   type Exp (e : Env) :=
-     Var i (_: lookup i e t) t
+    type Exp (e : Env)
+    | Var i (_: lookup i e t) t
 
 In the present case, we could make "lookup" return False, but if we change
 it to:
 
-   type Exp (e : Env) (τ : EType) :=
-     SetVar i (v : Exp Env (lookup i e))
+    type Exp (e : Env) (τ : EType)
+    | SetVar i (v : Exp Env (lookup i e))
 
-Suddenly, this doesn't work any more.
+Suddenly, this doesn't work any more.  We would then have to do something
+like, have `lookup` return an `Option` and then do:
+
+    type Exp (e : Env) (τ : EType)
+    | SetVar i (v : (case lookup i e
+                     | Some t => Exp Env t
+                     | None -> False))
+
+It would be neat to have some way to "automate" this.
 
 * Erasable constructors
 

@@ -1,9 +1,6 @@
-(*
- *      Typer Compiler
+(* builtin.ml --- Infrastructure to define built-in primitives
  *
- * ---------------------------------------------------------------------------
- *
- *      Copyright (C) 2011-2016  Free Software Foundation, Inc.
+ *      Copyright (C) 2016  Free Software Foundation, Inc.
  *
  *   Author: Pierre Delaunay <pierre.delaunay@hec.ca>
  *   Keywords: languages, lisp, dependent types.
@@ -25,8 +22,34 @@
  *
  * ---------------------------------------------------------------------------
  *
- *      Description:
- *          Hold built-in types definition and built-in functions implementation
+ * There are several different issues with how to make the compiler's code
+ * interact with code defined in Typer:
+ *
+ * ** Exporting primitives
+ *
+ * I.e. how to give a name and a type to a primitive implemented in OCaml
+ *
+ * There are several conflicting desires, here: we'd generally want the name,
+ * the type (and the association) to be close to the primitive's definition, so
+ * that adding a new primitive doesn't require changes in many files.
+ *
+ * But it's also good to have the type written in some Typer file, both for
+ * the convenience of writing the code in Typer syntax with typer-mode support,
+ * and also because error messages can easily refer to that file, so it can be
+ * used for user-documentation.
+ *
+ * ** Importing definitions
+ *
+ * Sometimes we want some part of the core to be defined in Typer and used
+ * from OCaml.  Examples are the type `Macro` along with the `expand-macro`
+ * function or the type Bool/true/false used with various primitives.
+ *
+ * ** Intertwined dependencies
+ *
+ * The various importing/exporting might need to be interlaced.  Some exported
+ * functions's types will want to refer to imported types, while some imported
+ * definitions may want to refer to exported definitions.  So we'd like to be
+ * able to do them in "any" order.
  *
  * ---------------------------------------------------------------------------*)
 
@@ -34,6 +57,8 @@ open Util
 
 open Sexp   (* Integer/Float *)
 open Pexp   (* arg_kind *)
+module L = Lexp
+module OL = Opslexp
 open Lexp
 
 module DB = Debruijn
@@ -168,9 +193,11 @@ let decltype_impl loc largs ctx ftype =
     (* mkSusp prop (S.shift (var_i + 1)) *)
     ltype
 
+(* Map of lexp builtin elements accessible via (## <name>).  *)
+let lmap = ref (SMap.empty : (L.lexp * L.ltype) SMap.t)
 
-
-
-
-
-
+let add_builtin_cst (name : string) (e : lexp)
+  = let map = !lmap in
+    assert (not (SMap.mem name map));
+    let t = OL.check VMap.empty Myers.nil e in
+    lmap := SMap.add name (e, t) map

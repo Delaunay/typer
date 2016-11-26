@@ -43,10 +43,11 @@ open Lexp
 
 open Env
 open Debruijn
+module DB = Debruijn
 open Eval
 
 open Grammar
-open Builtin
+module BI = Builtin
 
 module Unif = Unification
 
@@ -113,7 +114,7 @@ let elab_check_sort (ctx : elab_context) lsort var ltp =
 
 (* Builtin Macro i.e, special forms *)
 type macromap =
-  (location -> lexp list -> elab_context -> lexp -> (lexp * lexp)) SMap.t
+  (location -> lexp list -> elab_context -> lexp -> lexp) SMap.t
 
 let elab_check_proper_type (ctx : elab_context) ltp var =
   let meta_ctx, _ = !global_substitution in
@@ -246,6 +247,12 @@ let rec infer (p : pexp) (ctx : elab_context): lexp * ltype =
          | String _  -> DB.type_string;
          | _ -> pexp_error tloc p "Could not find type";
                dltype)
+
+    | Pbuiltin (l,name)
+      -> (try SMap.find name (! BI.lmap)
+         with Not_found
+              -> pexp_error l p ("Unknown builtin `" ^ name ^ "`");
+                dlxp, dltype)
 
     (* Symbol i.e identifier.  *)
     | Pvar (loc, name)
@@ -808,7 +815,7 @@ and infer_call (func: pexp) (sargs: sexp list) ctx =
         infer pxp ctx  in
 
     (* This is the builtin Macro type *)
-    let macro_type, macro_disp = match get_predef_option "Macro" ctx with
+    let macro_type, macro_disp = match BI.get_predef_option "Macro" ctx with
       | Some lxp -> OL.lexp_whnf lxp (ectx_to_lctx ctx) meta_ctx, true
       (* When type.typer is being parsed and the predef is not yet available *)
       | None -> dltype, false     in
@@ -867,9 +874,9 @@ and lexp_expand_dmacro macro_funct sargs ctx
 and lexp_expand_macro_ macro_funct sargs ctx expand_fun : value_type =
 
   (* Build the function to be called *)
-  let macro_expand = get_predef expand_fun ctx in
+  let macro_expand = BI.get_predef expand_fun ctx in
   let args = [(Aexplicit, macro_funct);
-              (Aexplicit, (olist2tlist_lexp sargs ctx))] in
+              (Aexplicit, (BI.olist2tlist_lexp sargs ctx))] in
 
   let macro = mkCall (macro_expand, args) in
   let emacro = OL.erase_type macro in
@@ -901,7 +908,7 @@ and lexp_decls_macro (loc, mname) sargs ctx: (pdecl list * elab_context) =
             let ret = lexp_expand_dmacro body sargs ctx in
 
       (* convert typer list to ocaml *)
-      let decls = tlist2olist [] ret in
+      let decls = BI.tlist2olist [] ret in
 
       (* extract sexp from result *)
       let decls = List.map (fun g ->
@@ -1023,8 +1030,8 @@ and lexp_parse_all (p: pexp list) (ctx: elab_context) : lexp list =
  * -------------------------------------------------------------------------- *)
 and builtin_macro = [
   (* FIXME: These should be functions!  *)
-  ("decltype",      decltype_impl);
-  ("declexpr",      declexpr_impl);
+  ("decltype",      BI.decltype_impl);
+  ("declexpr",      BI.declexpr_impl);
   (* FIXME: These are not macros but `special-forms`.
    * We should add here `let_in_`, `case_`, etc...  *)
   ("get-attribute", get_attribute_impl);
@@ -1033,7 +1040,7 @@ and builtin_macro = [
   ("add-attribute", add_attribute_impl);
 ]
 
-and make_macro_map unit =
+and make_macro_map unit : macromap =
  List.fold_left (fun map (name, funct) ->
     SMap.add name funct map) SMap.empty builtin_macro
 
@@ -1095,9 +1102,9 @@ and has_attribute_impl loc largs ctx ftype =
     | lxp -> lexp_fatal loc lxp "get-attribute expects a table as first argument" in
 
     try let _ = AttributeMap.find var map in
-      (get_predef "True" ctx)
+      BI.get_predef "True" ctx
     with Not_found ->
-      (get_predef "False" ctx)
+      BI.get_predef "False" ctx
 
 (*  Only print var info *)
 and lexp_print_var_info ctx =
@@ -1154,7 +1161,7 @@ let default_lctx, default_rctx =
           List.iter (fun name ->
               let idx = senv_lookup name lctx in
               let v = Var((dloc, name), idx) in
-              set_predef name (Some v)) predef_name;
+              BI.set_predef name (Some v)) BI.predef_name;
       (* -- DONE -- *)
           lctx
       with e ->
