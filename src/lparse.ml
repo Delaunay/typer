@@ -90,10 +90,10 @@ let value_fatal  = debug_message fatal value_name value_string
 let global_substitution = ref (empty_meta_subst, [])
 
 (** Builtin Macros i.e, special forms.  *)
-type macromap =
-  (location -> lexp list -> elab_context -> lexp -> lexp) SMap.t
+type special_forms_map =
+  (location -> sexp list -> elab_context -> lexp -> lexp) SMap.t
 
-let special_forms : macromap ref = ref SMap.empty
+let special_forms : special_forms_map ref = ref SMap.empty
 let type_special_form = BI.new_builtin_type "Special-Form" type0
 
 let add_special_form (name, func) =
@@ -749,7 +749,7 @@ and infer_call (func: pexp) (sargs: sexp list) ctx =
         let default = Var((dloc, pname), pidx) in
 
         (* lookup default attribute of ltp *)
-        let attr = get_attribute_impl loc [default; arg_type] ctx arg_type in
+        let attr = get_attribute loc [default; arg_type] ctx arg_type in
         (* FIXME: The `default` attribute table shouldn't contain elements of
          * type `Macro` but elements of type `something -> Sexp`.
          * The point of the `Macro` type is to be able to distinguish
@@ -834,9 +834,7 @@ and infer_call (func: pexp) (sargs: sexp list) ctx =
       match OL.lexp_whnf body (ectx_to_lctx ctx) meta_ctx with
       | Builtin ((_, name), _, _) ->
          (* Special form.  *)
-         let pargs = List.map pexp_parse sargs in
-         let largs = lexp_parse_all pargs ctx in
-         let e = (get_special_form loc name) loc largs ctx ltp in
+         let e = (get_special_form loc name) loc sargs ctx ltp in
          let meta_ctx, _ = !global_substitution in
          (* FIXME: We don't actually need to typecheck `e`, we just need
           * to find its type.  *)
@@ -1014,32 +1012,31 @@ and lexp_p_decls pdecls ctx: ((vdef * lexp * ltype) list list * elab_context) =
     decls :: declss, nnctx
 
 and lexp_parse_all (p: pexp list) (ctx: elab_context) : lexp list =
+  List.map (fun pe -> let e, _ = infer pe ctx in e) p
 
-  let rec loop (plst: pexp list) ctx (acc: lexp list) =
-    match plst with
-    | [] -> (List.rev acc)
-    | pe :: plst  -> let lxp, _ = infer pe ctx in
-                    (loop plst ctx (lxp::acc)) in
-  
-  (loop p ctx [])
+and lexp_parse_sexp (ctx: elab_context) (e : sexp) : lexp =
+  let e, _ = infer (pexp_parse e) ctx in e
 
 (* --------------------------------------------------------------------------
  *  Special form implementation
  * -------------------------------------------------------------------------- *)
-and new_attribute_impl loc largs ctx ftype =
-  let ltp = match largs with
-    | [ltp] -> ltp
+and new_attribute_impl loc sargs ctx ftype =
+  let ltp = match sargs with
+    | [t] -> lexp_parse_sexp ctx t
     | _ -> fatal loc "new-attribute expects a single Type argument" in
 
+  (* FIXME: This creates new values for type `ltp` (very wrong if `ltp`
+   * is False, for example):  Should be a type like `AttributeMap t`
+   * instead.  *)
   Builtin ((loc, "new-attribute"), ltp, Some AttributeMap.empty)
 
-and add_attribute_impl loc largs ctx ftype =
-  let meta_ctx, _ = !global_substitution in
+and add_attribute_impl loc (sargs : sexp list) ctx ftype =
   let n = get_size ctx in
-  let table, var, attr = match largs with
+  let table, var, attr = match List.map (lexp_parse_sexp ctx) sargs with
     | [table; Var((_, name), idx); attr] -> table, (n - idx, name), attr
     | _ -> fatal loc "add-attribute expects 3 arguments (table; var; attr)" in
 
+  let meta_ctx, _ = !global_substitution in
   let map, attr_type =  match OL.lexp_whnf table (ectx_to_lctx ctx) meta_ctx with
       | Builtin (_, attr_type, Some map)-> map, attr_type
       | _ -> fatal loc "add-attribute expects a table as first argument" in
@@ -1048,13 +1045,13 @@ and add_attribute_impl loc largs ctx ftype =
   let table =  AttributeMap.add var attr map in
     Builtin ((loc, "add-attribute"), attr_type, Some table)
 
-and get_attribute_impl loc largs ctx ftype =
-  let meta_ctx, _ = !global_substitution in
+and get_attribute loc largs ctx ftype =
   let ctx_n = get_size ctx in
   let table, var = match largs with
     | [table; Var((_, name), idx)] -> table, (ctx_n - idx, name)
     | _ -> fatal loc "get-attribute expects 2 arguments (table; var)" in
 
+  let meta_ctx, _ = !global_substitution in
   let map = match OL.lexp_whnf table (ectx_to_lctx ctx) meta_ctx with
     | Builtin (_, attr_type, Some map) -> map
     | _ -> fatal loc "get-attribute expects a table as first argument" in
@@ -1062,13 +1059,16 @@ and get_attribute_impl loc largs ctx ftype =
   let lxp = AttributeMap.find var map in
     (lxp : lexp)
 
-and has_attribute_impl loc largs ctx ftype =
-  let meta_ctx, _ = !global_substitution in
+and get_attribute_impl loc (sargs : sexp list) ctx ftype =
+  get_attribute loc (List.map (lexp_parse_sexp ctx) sargs) ctx ftype
+
+and has_attribute_impl loc (sargs : sexp list) ctx ftype =
   let n = get_size ctx in
-  let table, var = match largs with
+  let table, var = match List.map (lexp_parse_sexp ctx) sargs with
     | [table; Var((_, name), idx)] -> table, (n - idx, name)
     | _ -> fatal loc "get-attribute expects 2 arguments (table; var)" in
 
+  let meta_ctx, _ = !global_substitution in
   let map, attr_type = match OL.lexp_whnf table (ectx_to_lctx ctx) meta_ctx with
     | Builtin (_, attr_type, Some map) -> map, attr_type
     | lxp -> lexp_fatal loc lxp "get-attribute expects a table as first argument" in
@@ -1077,6 +1077,24 @@ and has_attribute_impl loc largs ctx ftype =
       BI.get_predef "True" ctx
     with Not_found ->
       BI.get_predef "False" ctx
+
+and declexpr_impl loc sargs ctx ftype =
+  match List.map (lexp_parse_sexp ctx) sargs with
+  | [Var((_, vn), vi)]
+    -> (match DB.env_lookup_expr ctx ((loc, vn), vi) with
+       | Some lxp -> lxp
+       | None -> error loc "no expr available";
+                dlxp)
+  | _ -> error loc "declexpr expects one argument";
+        dlxp
+
+
+let decltype_impl loc sargs ctx ftype =
+  match List.map (lexp_parse_sexp ctx) sargs with
+  | [Var((_, vn), vi)]
+    -> DB.env_lookup_type ctx ((loc, vn), vi)
+  | _ -> error loc "decltype expects one argument";
+        dlxp
 
 (*  Only print var info *)
 and lexp_print_var_info ctx =
@@ -1105,8 +1123,8 @@ let _ = List.iter add_special_form
                     ("has-attribute", has_attribute_impl);
                     ("add-attribute", add_attribute_impl);
                     (* FIXME: These should be functions!  *)
-                    ("decltype",      BI.decltype_impl);
-                    ("declexpr",      BI.declexpr_impl);
+                    ("decltype",      decltype_impl);
+                    ("declexpr",      declexpr_impl);
                   ]
 
 (*      Default context with builtin types

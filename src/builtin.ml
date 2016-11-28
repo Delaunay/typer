@@ -168,30 +168,6 @@ let is_lbuiltin idx ctx =
     else
         false
 
-let declexpr_impl loc largs ctx ftype =
-
-  let (vi, vn) = match largs with
-    | [Var((_, vn), vi)] -> (vi, vn)
-    | _ -> error loc "declexpr expects one argument" in
-
-  let lxp = match DB.env_lookup_expr ctx ((loc, vn), vi) with
-    | Some lxp -> lxp
-    | None -> error loc "no expr available" in
-  (* ltp and ftype should be the same
-  let ltp = env_lookup_type ctx ((loc, vn), vi) in *)
-    lxp
-
-
-let decltype_impl loc largs ctx ftype =
-
-  let (vi, vn) = match largs with
-    | [Var((_, vn), vi)] -> (vi, vn)
-    | _ -> error loc "decltype expects one argument" in
-
-  let ltype = DB.env_lookup_type ctx ((loc, vn), vi) in
-    (* mkSusp prop (S.shift (var_i + 1)) *)
-    ltype
-
 (* Map of lexp builtin elements accessible via (## <name>).  *)
 let lmap = ref (SMap.empty : (L.lexp * L.ltype) SMap.t)
 
