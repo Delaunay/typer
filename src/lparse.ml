@@ -91,7 +91,7 @@ let global_substitution = ref (empty_meta_subst, [])
 
 (** Builtin Macros i.e, special forms.  *)
 type special_forms_map =
-  (location -> sexp list -> elab_context -> lexp -> lexp) SMap.t
+  (elab_context -> location -> sexp list -> lexp) SMap.t
 
 let special_forms : special_forms_map ref = ref SMap.empty
 let type_special_form = BI.new_builtin_type "Special-Form" type0
@@ -749,7 +749,7 @@ and infer_call (func: pexp) (sargs: sexp list) ctx =
         let default = Var((dloc, pname), pidx) in
 
         (* lookup default attribute of ltp *)
-        let attr = get_attribute loc [default; arg_type] ctx arg_type in
+        let attr = get_attribute ctx loc [default; arg_type] in
         (* FIXME: The `default` attribute table shouldn't contain elements of
          * type `Macro` but elements of type `something -> Sexp`.
          * The point of the `Macro` type is to be able to distinguish
@@ -834,7 +834,7 @@ and infer_call (func: pexp) (sargs: sexp list) ctx =
       match OL.lexp_whnf body (ectx_to_lctx ctx) meta_ctx with
       | Builtin ((_, name), _, _) ->
          (* Special form.  *)
-         let e = (get_special_form loc name) loc sargs ctx ltp in
+         let e = (get_special_form loc name) ctx loc sargs in
          let meta_ctx, _ = !global_substitution in
          (* FIXME: We don't actually need to typecheck `e`, we just need
           * to find its type.  *)
@@ -1018,9 +1018,10 @@ and lexp_parse_sexp (ctx: elab_context) (e : sexp) : lexp =
   let e, _ = infer (pexp_parse e) ctx in e
 
 (* --------------------------------------------------------------------------
- *  Special form implementation
+ *  Special forms implementation
  * -------------------------------------------------------------------------- *)
-and new_attribute_impl loc sargs ctx ftype =
+
+and sform_new_attribute ctx loc sargs =
   let ltp = match sargs with
     | [t] -> lexp_parse_sexp ctx t
     | _ -> fatal loc "new-attribute expects a single Type argument" in
@@ -1030,7 +1031,7 @@ and new_attribute_impl loc sargs ctx ftype =
    * instead.  *)
   Builtin ((loc, "new-attribute"), ltp, Some AttributeMap.empty)
 
-and add_attribute_impl loc (sargs : sexp list) ctx ftype =
+and sform_add_attribute ctx loc (sargs : sexp list) =
   let n = get_size ctx in
   let table, var, attr = match List.map (lexp_parse_sexp ctx) sargs with
     | [table; Var((_, name), idx); attr] -> table, (n - idx, name), attr
@@ -1045,7 +1046,7 @@ and add_attribute_impl loc (sargs : sexp list) ctx ftype =
   let table =  AttributeMap.add var attr map in
     Builtin ((loc, "add-attribute"), attr_type, Some table)
 
-and get_attribute loc largs ctx ftype =
+and get_attribute ctx loc largs =
   let ctx_n = get_size ctx in
   let table, var = match largs with
     | [table; Var((_, name), idx)] -> table, (ctx_n - idx, name)
@@ -1059,10 +1060,10 @@ and get_attribute loc largs ctx ftype =
   let lxp = AttributeMap.find var map in
     (lxp : lexp)
 
-and get_attribute_impl loc (sargs : sexp list) ctx ftype =
-  get_attribute loc (List.map (lexp_parse_sexp ctx) sargs) ctx ftype
+and sform_get_attribute ctx loc (sargs : sexp list) =
+  get_attribute ctx loc (List.map (lexp_parse_sexp ctx) sargs)
 
-and has_attribute_impl loc (sargs : sexp list) ctx ftype =
+and sform_has_attribute ctx loc (sargs : sexp list) =
   let n = get_size ctx in
   let table, var = match List.map (lexp_parse_sexp ctx) sargs with
     | [table; Var((_, name), idx)] -> table, (n - idx, name)
@@ -1078,7 +1079,7 @@ and has_attribute_impl loc (sargs : sexp list) ctx ftype =
     with Not_found ->
       BI.get_predef "False" ctx
 
-and declexpr_impl loc sargs ctx ftype =
+and sform_declexpr ctx loc sargs =
   match List.map (lexp_parse_sexp ctx) sargs with
   | [Var((_, vn), vi)]
     -> (match DB.env_lookup_expr ctx ((loc, vn), vi) with
@@ -1089,7 +1090,7 @@ and declexpr_impl loc sargs ctx ftype =
         dlxp
 
 
-let decltype_impl loc sargs ctx ftype =
+let sform_decltype ctx loc sargs =
   match List.map (lexp_parse_sexp ctx) sargs with
   | [Var((_, vn), vi)]
     -> DB.env_lookup_type ctx ((loc, vn), vi)
@@ -1118,13 +1119,13 @@ and lexp_print_var_info ctx =
 let _ = List.iter add_special_form
                   [
                     (* FIXME: We should add here `let_in_`, `case_`, etc...  *)
-                    ("get-attribute", get_attribute_impl);
-                    ("new-attribute", new_attribute_impl);
-                    ("has-attribute", has_attribute_impl);
-                    ("add-attribute", add_attribute_impl);
+                    ("get-attribute", sform_get_attribute);
+                    ("new-attribute", sform_new_attribute);
+                    ("has-attribute", sform_has_attribute);
+                    ("add-attribute", sform_add_attribute);
                     (* FIXME: These should be functions!  *)
-                    ("decltype",      decltype_impl);
-                    ("declexpr",      declexpr_impl);
+                    ("decltype",      sform_decltype);
+                    ("declexpr",      sform_declexpr);
                   ]
 
 (*      Default context with builtin types
