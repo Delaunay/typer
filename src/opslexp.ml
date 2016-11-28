@@ -63,6 +63,7 @@ let lookup_value = DB.lctx_lookup_value
  * `let x₂ = e₂ in e₂`) will be interpreted in the remaining context,
  * which already provides "x₁".
  *)
+(* FXIME: This creates an O(N^2) tree from an O(N) `let`!  *)
 let rec lexp_defs_subst l s defs = match defs with
   | [] -> s
   | (_, lexp, _) :: defs'
@@ -138,7 +139,7 @@ let lexp_whnf e (ctx : DB.lexp_context) meta_ctx : lexp =
   (* FIXME: I'd really prefer to use "native" recursive substitutions, using
    *   ideally a trick similar to the db_offsets in lexp_context!  *)
   | Let (l, defs, body)
-    -> push_susp body (lexp_defs_subst l S.identity defs)
+    -> lexp_whnf (push_susp body (lexp_defs_subst l S.identity defs)) ctx
 
   | e -> e
 

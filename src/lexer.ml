@@ -49,7 +49,11 @@ let nexttoken (stt : token_env) (pts : pretoken list) bpos cpos
   | (Preblock (sl, bpts, el) :: pts) -> (Block (sl, bpts, el), pts, 0, 0)
   | (Prestring (loc, str) :: pts) -> (String (loc, str), pts, 0, 0)
   | (Pretoken ({file;line;column}, name) :: pts')
-    -> if digit_p name.[bpos] then
+    -> let char = name.[bpos] in
+      if digit_p char
+         || (char = '-' (* FIXME: Handle '+' as well!  *)
+            && bpos + 1 < String.length name
+            && digit_p (name.[bpos + 1])) then
         let rec lexnum bp cp (np : num_part) =
           if bp >= String.length name then
             ((if np == NPint then
