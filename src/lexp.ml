@@ -658,9 +658,9 @@ and _lexp_to_str ctx exp =
 
         | Sort (_, Stype (SortLevel SLz)) -> "##Type"
         | Sort (_, Stype (SortLevel (SLsucc (SortLevel SLz)))) -> "##Type1"
-        | Sort (_, StypeLevel) -> "##TypeLevel"
+        | Sort (_, StypeLevel) -> "##Type_ℓ"
         | Sort (_, Stype _) -> "##Type_?"    (* FIXME!  *)
-        | Sort (_, StypeOmega) -> "##Type_ω" (* FIXME: Should never happen!  *)
+        | Sort (_, StypeOmega) -> "##Type_ω"
 
         | SortLevel (SLz) -> "##TypeLevel.z"
         | SortLevel (SLsucc e) -> "##TypeLevel.succ"

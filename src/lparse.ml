@@ -89,6 +89,22 @@ let value_fatal  = debug_message fatal value_name value_string
 (* :-( *)
 let global_substitution = ref (empty_meta_subst, [])
 
+(** Builtin Macros i.e, special forms.  *)
+type macromap =
+  (location -> lexp list -> elab_context -> lexp -> lexp) SMap.t
+
+let special_forms : macromap ref = ref SMap.empty
+let type_special_form = BI.new_builtin_type "Special-Form" type0
+
+let add_special_form (name, func) =
+  BI.add_builtin_cst name (mkBuiltin ((dloc, name), type_special_form, None));
+  special_forms := SMap.add name func (!special_forms)
+
+let get_special_form loc name =
+  try SMap.find name (!special_forms)
+  with Not_found -> fatal loc ("Special form `" ^ name ^ "` not found!")
+
+
 (* The prefix `elab_check_` is used for functions which do internal checking
  * (i.e. errors signalled here correspond to internal errors rather than
  * to errors in the user's code).  *)
@@ -111,10 +127,6 @@ let elab_check_sort (ctx : elab_context) lsort var ltp =
           -> lexp_error l ltp
                        ("Type of `" ^ name ^ "` is not a proper type: "
                         ^ typestr)
-
-(* Builtin Macro i.e, special forms *)
-type macromap =
-  (location -> lexp list -> elab_context -> lexp -> lexp) SMap.t
 
 let elab_check_proper_type (ctx : elab_context) ltp var =
   let meta_ctx, _ = !global_substitution in
@@ -778,17 +790,14 @@ and infer_call (func: pexp) (sargs: sexp list) ctx =
       (* Here we use lexp_whnf on actual code, but it's OK
        * because we only use the result when it's a "predefined constant".  *)
       match OL.lexp_whnf body (ectx_to_lctx ctx) meta_ctx with
-      | Builtin((_, "Built-in"), _, _)
+      | Builtin((_, "Built-in"), _, _) (* FIXME: Should be a Special-Form!  *)
         -> (
         (* ------ SPECIAL ------ *)
         match !_parsing_internals, sargs with
-        | true, [String (_, str)] ->
-          Builtin((loc, str), ltp, None), ltp
-
         | true, [String (_, str); stp] ->
            let ptp = pexp_parse stp in
            let ltp, _ = infer ptp ctx in
-           Builtin((loc, str), ltp, None), ltp
+           mkBuiltin((loc, str), ltp, None), ltp
 
         | true, _ -> error loc "Wrong Usage of `Built-in`";
           dlxp, dltype
@@ -815,31 +824,32 @@ and infer_call (func: pexp) (sargs: sexp list) ctx =
         infer pxp ctx  in
 
     (* This is the builtin Macro type *)
-    let macro_type, macro_disp = match BI.get_predef_option "Macro" ctx with
-      | Some lxp -> OL.lexp_whnf lxp (ectx_to_lctx ctx) meta_ctx, true
+    let macro_type = match BI.get_predef_option "Macro" ctx with
+      | Some lxp -> OL.lexp_whnf lxp (ectx_to_lctx ctx) meta_ctx
       (* When type.typer is being parsed and the predef is not yet available *)
-      | None -> dltype, false     in
+      | None -> impossible     in
 
     (* determine function type *)
-    match func, ltp with
-      | macro, _ when (macro_disp
-                       && OL.conv_p meta_ctx (ectx_to_lctx ctx)
-                                   ltp macro_type) -> (
-        match macro with
-          | Pvar(l, name) when is_builtin_macro name ->
-            let pargs = List.map pexp_parse sargs in
-            let largs = lexp_parse_all pargs ctx in
-            let e = (get_macro_impl loc name) loc largs ctx ltp in
-            let meta_ctx, _ = !global_substitution in
-            (* FIXME: We don't actually need to typecheck `e`, we just need
-             * to find its type.  *)
-            (e, OL.check meta_ctx (ectx_to_lctx ctx) e)
+    if (OL.conv_p meta_ctx (ectx_to_lctx ctx) ltp type_special_form) then
+      match OL.lexp_whnf body (ectx_to_lctx ctx) meta_ctx with
+      | Builtin ((_, name), _, _) ->
+         (* Special form.  *)
+         let pargs = List.map pexp_parse sargs in
+         let largs = lexp_parse_all pargs ctx in
+         let e = (get_special_form loc name) loc largs ctx ltp in
+         let meta_ctx, _ = !global_substitution in
+         (* FIXME: We don't actually need to typecheck `e`, we just need
+          * to find its type.  *)
+         (e, OL.check meta_ctx (ectx_to_lctx ctx) e)
 
-          (* true macro *)
-          | _ -> handle_macro_call ())
-
-      (* FIXME: Handle special-forms here as well!  *)
-      | _ -> handle_funcall ()
+      | _ -> lexp_error loc body ("Unknown special-form: "
+                                 ^ lexp_string body);
+            let t = newMetatype () in
+            (newMetavar loc "<dummy>" t, t)
+    else if (OL.conv_p meta_ctx (ectx_to_lctx ctx) ltp macro_type) then
+      handle_macro_call ()
+    else
+      handle_funcall ()
 
 (*  Parse inductive type definition.  *)
 and lexp_parse_inductive ctors ctx =
@@ -890,22 +900,10 @@ and lexp_expand_macro_ macro_funct sargs ctx expand_fun : value_type =
       vxp
 
 and lexp_decls_macro (loc, mname) sargs ctx: (pdecl list * elab_context) =
-   try (* Lookup macro declaration *)
-     let idx = senv_lookup mname ctx in
-     (* FIXME: We should only check that `ltp` is Macro, and not look
-      * at `lxp` here (just like we do for expression macros).  *)
-      let ltp = env_lookup_type ctx ((loc, mname), idx) in
-      let lxp = env_lookup_expr ctx ((loc, mname), idx) in
+   try let lxp, ltp = infer (Pvar (loc, mname)) ctx in
 
-      (* lxp has the form (Call (Var(_, "Macro_"), [(_, function)]))
-       * We need the function so we can call it later *)
-      let body, mfun = match lxp with
-        | Some (Call(_, [(_, lxp)]) as e) -> e, lxp
-        | Some lxp -> lxp, lxp
-        | None -> fatal loc "expression does not exist" in
-
-      (* Special Form *)
-            let ret = lexp_expand_dmacro body sargs ctx in
+      (* FIXME: Check that (conv_p ltp Macro)!  *)
+      let ret = lexp_expand_dmacro lxp sargs ctx in
 
       (* convert typer list to ocaml *)
       let decls = BI.tlist2olist [] ret in
@@ -1017,39 +1015,13 @@ and lexp_p_decls pdecls ctx: ((vdef * lexp * ltype) list list * elab_context) =
 
 and lexp_parse_all (p: pexp list) (ctx: elab_context) : lexp list =
 
-    let rec loop (plst: pexp list) ctx (acc: lexp list) =
-        match plst with
-            | [] -> (List.rev acc)
-            | pe :: plst  -> let lxp, _ = infer pe ctx in
+  let rec loop (plst: pexp list) ctx (acc: lexp list) =
+    match plst with
+    | [] -> (List.rev acc)
+    | pe :: plst  -> let lxp, _ = infer pe ctx in
                     (loop plst ctx (lxp::acc)) in
-
-    (loop p ctx [])
-
-(* --------------------------------------------------------------------------
- *  Built-in Macro: i.e special forms
- * -------------------------------------------------------------------------- *)
-and builtin_macro = [
-  (* FIXME: These should be functions!  *)
-  ("decltype",      BI.decltype_impl);
-  ("declexpr",      BI.declexpr_impl);
-  (* FIXME: These are not macros but `special-forms`.
-   * We should add here `let_in_`, `case_`, etc...  *)
-  ("get-attribute", get_attribute_impl);
-  ("new-attribute", new_attribute_impl);
-  ("has-attribute", has_attribute_impl);
-  ("add-attribute", add_attribute_impl);
-]
-
-and make_macro_map unit : macromap =
- List.fold_left (fun map (name, funct) ->
-    SMap.add name funct map) SMap.empty builtin_macro
-
-and get_macro_impl loc name =
-  try SMap.find name (make_macro_map ())
-    with Not_found -> fatal loc ("Builtin macro" ^ name ^ " not found")
-
-and is_builtin_macro name =
-  SMap.mem name (make_macro_map ())
+  
+  (loop p ctx [])
 
 (* --------------------------------------------------------------------------
  *  Special form implementation
@@ -1124,22 +1096,37 @@ and lexp_print_var_info ctx =
         print_string "\n")
     done
 
+(* Register special forms.  *)
+let _ = List.iter add_special_form
+                  [
+                    (* FIXME: We should add here `let_in_`, `case_`, etc...  *)
+                    ("get-attribute", get_attribute_impl);
+                    ("new-attribute", new_attribute_impl);
+                    ("has-attribute", has_attribute_impl);
+                    ("add-attribute", add_attribute_impl);
+                    (* FIXME: These should be functions!  *)
+                    ("decltype",      BI.decltype_impl);
+                    ("declexpr",      BI.declexpr_impl);
+                  ]
+
 (*      Default context with builtin types
  * --------------------------------------------------------- *)
 
 (* Make lxp context with built-in types *)
-let default_lctx, default_rctx =
+let default_lctx =
 
       (* Empty context *)
       let lctx = make_elab_context in
-      let lctx = ctx_define lctx (dloc, "Type1") DB.type1 DB.type2 in
-      let lctx = ctx_define lctx (dloc, "Type") DB.type0 DB.type1 in
+      let lctx = SMap.fold (fun key (e, t) ctx
+                            -> if String.get key 0 = '-' then ctx
+                              else ctx_define ctx (dloc, key) e t)
+                           (!BI.lmap) lctx in
       (* FIXME: Add builtins directly here.  *)
-      let lxp = Builtin((dloc, "Built-in"), DB.type0, None) in
+      let lxp = mkBuiltin((dloc, "Built-in"), DB.type0, None) in
       let lctx = ctx_define lctx (dloc, "Built-in") lxp DB.type0 in
 
       (* Read BTL files *)
-      let pres = prelex_file (!btl_folder ^ "types.typer") in
+      let pres = prelex_file (!btl_folder ^ "builtins.typer") in
       let sxps = lex default_stt pres in
       let nods = sexp_parse_all_to_list default_grammar sxps (Some ";") in
       let pxps = pexp_decls_all nods in
@@ -1167,7 +1154,9 @@ let default_lctx, default_rctx =
       with e ->
         warning dloc "Predef not found";
         lctx in
-      lctx, from_lctx lctx
+      lctx
+
+let default_rctx = from_lctx default_lctx
 
 (*      String Parsing
  * --------------------------------------------------------- *)

@@ -35,13 +35,8 @@
 %       Base Types
 % -----------------------------------------------------
 
-Int     = Built-in "Int";
-Float   = Built-in "Float";
-String  = Built-in "String";
-Sexp    = Built-in "Sexp";
-
-Unit    = Built-in "Unit";      % Nothing
-Context = Built-in "Context";   % Lexp Context
+Unit    = inductive_ Unit unit;
+unit    = inductive-cons Unit unit;
 
 % Basic operators
 _+_ = Built-in "_+_" (Int -> Int -> Int);
@@ -145,8 +140,6 @@ sexp_dispatch_ = Built-in "sexp_dispatch_" (
 %       Monads
 % -----------------------------------------------------
 
-IO = Built-in "IO" (Type -> Type);
-
 % Builtin bind
 bind = Built-in "bind" (
   (a : Type) ≡>
@@ -156,9 +149,6 @@ bind = Built-in "bind" (
 % return = Built-in "return" ((a : Type) ≡> a -> IO a);
 
 % File monad
-
-% define a dummy type that supposed to represent a file
-FileHandle = Built-in "FileHandle";
 
 %% `runIO` should have type IO Unit -> b -> b
 %% or IO a -> b -> b, which means "run the IO, throw away the result,
@@ -172,29 +162,3 @@ run-io = Built-in "run-io" ((a : Type) ≡> IO Unit -> a -> a);
 open  = Built-in "open"  (String -> String -> IO FileHandle);
 write = Built-in "write" (FileHandle -> String -> IO Unit);
 read  = Built-in "read"  (FileHandle -> Int -> IO String);
-
-% -----------------------------------------------------
-%       Attributes
-% -----------------------------------------------------
-
-% Despite being typed as macro those actually returns lexp.
-% not that it matters for the end user
-Attribute = Built-in "Attribute";
-new-attribute = Built-in "new-attribute" Macro;
-get-attribute = Built-in "get-attribute" Macro;
-has-attribute = Built-in "has-attribute" Macro;
-add-attribute = Built-in "add-attribute" Macro;
-
-%  attribute = Macro_ add-attribute;
-
-% -----------------------------------------------------
-%       Context Accessors
-% -----------------------------------------------------
-
-%% FIXME: These should be functions!
-decltype = Built-in "decltype" Macro;
-declexpr = Built-in "declexpr" Macro;
-
-
-
-

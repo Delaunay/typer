@@ -79,7 +79,6 @@ let predef_name = [
     "Macro";
     "expand_macro_";
     "expand_dmacro_";
-    "Attribute";
 ]
 
 let default_predef_map : predef_table =
@@ -201,3 +200,22 @@ let add_builtin_cst (name : string) (e : lexp)
     assert (not (SMap.mem name map));
     let t = OL.check VMap.empty Myers.nil e in
     lmap := SMap.add name (e, t) map
+
+let new_builtin_type name kind =
+  let t = mkBuiltin ((dloc, name), kind, None) in
+  add_builtin_cst name t;
+  t
+
+let builtins =
+  add_builtin_cst "TypeLevel" DB.type_level;
+  add_builtin_cst "TypeLevel.z" DB.level0;
+  add_builtin_cst "Type" DB.type0;
+  add_builtin_cst "Type1" DB.type1;
+  add_builtin_cst "Int" DB.type_int;
+  add_builtin_cst "Float" DB.type_float;
+  add_builtin_cst "String" DB.type_string
+
+let _ = new_builtin_type "Sexp" DB.type0
+let _ = new_builtin_type
+          "IO" (Arrow (Aexplicit, None, DB.type0, dloc, DB.type0))
+let _ = new_builtin_type "FileHandle" DB.type0

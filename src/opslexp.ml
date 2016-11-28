@@ -207,16 +207,7 @@ let rec conv_p' meta_ctx (ctx : DB.lexp_context) (vs : set_lexp) e1 e2 : bool =
             true args1 args2 in
         conv_p f1 f2 && conv_arglist_p args1 args2
     | (Inductive (_, l1, args1, cases1), Inductive (_, l2, args2, cases2))
-      -> let rec conv_args ctx vs args1 args2 =
-          match args1, args2 with
-          | ([], []) -> true
-          | ((ak1,l1,t1)::args1, (ak2,l2,t2)::args2)
-            -> ak1 == ak2 && conv_p' ctx vs t1 t2
-              && conv_args (DB.lexp_ctx_cons ctx 0 (Some l1) Variable t1)
-                          (set_shift vs)
-                          args1 args2
-          | _,_ -> false in
-        let rec conv_fields ctx vs fields1 fields2 =
+      -> let rec conv_fields ctx vs fields1 fields2 =
           match fields1, fields2 with
           | ([], []) -> true
           | ((ak1,vd1,t1)::fields1, (ak2,vd2,t2)::fields2)
@@ -225,8 +216,19 @@ let rec conv_p' meta_ctx (ctx : DB.lexp_context) (vs : set_lexp) e1 e2 : bool =
                             (set_shift vs)
                             fields1 fields2
           | _,_ -> false in
+        let rec conv_args ctx vs args1 args2 =
+          match args1, args2 with
+          | ([], []) ->
+             (* Args checked alright, now go on with the fields,
+              * using the new context.  *)
+             SMap.equal (conv_fields ctx vs) cases1 cases2
+          | ((ak1,l1,t1)::args1, (ak2,l2,t2)::args2)
+            -> ak1 == ak2 && conv_p' ctx vs t1 t2
+              && conv_args (DB.lexp_ctx_cons ctx 0 (Some l1) Variable t1)
+                          (set_shift vs)
+                          args1 args2
+          | _,_ -> false in
         l1 == l2 && conv_args ctx vs' args1 args2
-        && SMap.equal (conv_fields ctx vs') cases1 cases2
     | (Cons (t1, (_, l1)), Cons (t2, (_, l2))) -> l1 = l2 && conv_p t1 t2
     (* FIXME: Various missing cases, such as Case.  *)
     | (_, _) -> false
@@ -237,18 +239,17 @@ let conv_p meta_ctx (ctx : DB.lexp_context) e1 e2
 
 (********* Testing if a lexp is properly typed  *********)
 
-
 let rec sort_level_max l1 l2 = match nosusp l1, nosusp l2 with
   | SortLevel SLz, l2 -> l2
   | l1, SortLevel SLz -> l1
   | SortLevel (SLsucc l1), SortLevel (SLsucc l2)
-    -> SortLevel (SLsucc (sort_level_max l1 l2))
+    -> mkSortLevel (SLsucc (sort_level_max l1 l2))
   | _, _ (* FIXME: This requires s.th. like `SLmax of lexp * lexp`!  *)
     -> U.msg_error "TC" (lexp_location l1)
                   ("Can't compute the max of levels `"
                    ^ lexp_string l1 ^ "` and `"
                    ^ lexp_string l2 ^ "`");
-      SortLevel SLz
+      mkSortLevel SLz
 
 let sort_compose l s1 s2 =
   match s1, s2 with
@@ -295,25 +296,25 @@ let rec check' meta_ctx erased ctx e =
   | SortLevel (SLsucc e)
     -> let t = check erased ctx e in
       assert_type ctx e t DB.type_level;
-      (* FIXME: typelevel vs typelevelsort !? *)
       DB.type_level
   | Sort (l, Stype e)
     -> let t = check erased ctx e in
       assert_type ctx e t DB.type_level;
       Sort (l, Stype (SortLevel (SLsucc e)))
-  | Sort (_, StypeLevel) -> DB.type_omega
+  | Sort (_, StypeLevel) -> DB.sort_omega
   | Sort (_, StypeOmega)
-    -> (U.msg_error "TC" (lexp_location e) "Reached Unreachable sort!";
-       U.internal_error "Reached Unreachable sort!";
-       DB.type_omega)
-  | Builtin (_, t, _) -> t
+    -> (U.msg_error "TC" (lexp_location e) "Reached unreachable sort!";
+       (* U.internal_error "Reached unreachable sort!"; *)
+       DB.sort_omega)
+  | Builtin (_, t, _)
+    -> check_type DB.set_empty ctx t; (* FIXME: Use an empty ctx?  *)
+      t
   (* FIXME: Check recursive references.  *)
   | Var (((_, name), idx) as v)
     -> if DB.set_mem idx erased then
         U.msg_error "TC" (lexp_location e)
                     ("Var `" ^ name ^ "`"
-                     ^ " can't be used here, because it's `erasable`")
-      else if name = "erased" then U.internal_error "WOWO!";
+                     ^ " can't be used here, because it's `erasable`");
       lookup_type ctx v
   | Susp (e, s) -> check erased ctx (push_susp e s)
   | Let (l, defs, e)
@@ -411,7 +412,7 @@ let rec check' meta_ctx erased ctx e =
                         (level, ctx)
                         case in
                     level)
-                  cases (SortLevel SLz) in
+                  cases (mkSortLevel SLz) in
             Sort (l, Stype level)
         | (ak, v, t)::args
           -> Arrow (ak, Some v, t, lexp_location t,
@@ -477,7 +478,7 @@ let rec check' meta_ctx erased ctx e =
       ret
   | Cons (t, (_, name))
     -> (match lexp_whnf t ctx meta_ctx with
-       | Inductive (l, _, fargs, constructors) as it
+       | Inductive (l, _, fargs, constructors)
          -> let fieldtypes = SMap.find name constructors in
            let rec indtype fargs start_index =
              match fargs with
@@ -541,6 +542,7 @@ let rec erase_type (lxp: L.lexp): E.elexp =
         | L.Sort _                    -> E.Type
         (* Still useful to some extent.  *)
         | L.Inductive(l, label, _, _) -> E.Inductive(l, label)
+        | L.Metavar _                 -> U.internal_error "Metavar in erase_type"
 
 and filter_arg_list lst =
     let rec filter_arg_list lst acc =
