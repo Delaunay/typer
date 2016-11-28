@@ -787,28 +787,8 @@ and infer_call (func: pexp) (sargs: sexp list) ctx =
                      ^ "` to non-function (type = " ^ lexp_string ltp ^ ")") in
 
     let handle_funcall () =
-      (* Here we use lexp_whnf on actual code, but it's OK
-       * because we only use the result when it's a "predefined constant".  *)
-      match OL.lexp_whnf body (ectx_to_lctx ctx) meta_ctx with
-      | Builtin((_, "Built-in"), _, _) (* FIXME: Should be a Special-Form!  *)
-        -> (
-        (* ------ SPECIAL ------ *)
-        match !_parsing_internals, sargs with
-        | true, [String (_, str); stp] ->
-           let ptp = pexp_parse stp in
-           let ltp, _ = infer ptp ctx in
-           mkBuiltin((loc, str), ltp, None), ltp
-
-        | true, _ -> error loc "Wrong Usage of `Built-in`";
-          dlxp, dltype
-
-        | false, _ -> error loc "Use of `Built-in` in user code";
-          dlxp, dltype)
-
-      | e ->
-        (*  Process Arguments.  *)
-        let largs, ret_type = handle_fun_args [] sargs SMap.empty ltp in
-          mkCall (body, List.rev largs), ret_type in
+      let largs, ret_type = handle_fun_args [] sargs SMap.empty ltp in
+      mkCall (body, List.rev largs), ret_type in
 
     let handle_macro_call () =
       let sxp = match lexp_expand_macro body sargs ctx with
@@ -1097,6 +1077,20 @@ let sform_decltype ctx loc sargs =
   | _ -> error loc "decltype expects one argument";
         dlxp
 
+let sform_built_in ctx loc sargs =
+  match !_parsing_internals, sargs with
+  | true, [String (_, str); stp] ->
+     let ptp = pexp_parse stp in
+     let ltp, _ = infer ptp ctx in
+     mkBuiltin((loc, str), ltp, None)
+
+  | true, _ -> error loc "Wrong Usage of `Built-in`";
+              dlxp
+
+  | false, _ -> error loc "Use of `Built-in` in user code";
+               dlxp
+
+
 (*  Only print var info *)
 and lexp_print_var_info ctx =
     let ((m, _), env, _) = ctx in
@@ -1118,6 +1112,7 @@ and lexp_print_var_info ctx =
 (* Register special forms.  *)
 let _ = List.iter add_special_form
                   [
+                    ("Built-in",      sform_built_in);
                     (* FIXME: We should add here `let_in_`, `case_`, etc...  *)
                     ("get-attribute", sform_get_attribute);
                     ("new-attribute", sform_new_attribute);
@@ -1140,9 +1135,6 @@ let default_lctx =
                             -> if String.get key 0 = '-' then ctx
                               else ctx_define ctx (dloc, key) e t)
                            (!BI.lmap) lctx in
-      (* FIXME: Add builtins directly here.  *)
-      let lxp = mkBuiltin((dloc, "Built-in"), DB.type0, None) in
-      let lctx = ctx_define lctx (dloc, "Built-in") lxp DB.type0 in
 
       (* Read BTL files *)
       let pres = prelex_file (!btl_folder ^ "builtins.typer") in
