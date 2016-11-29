@@ -345,9 +345,9 @@ let _ = test_eval_eqv_named
         lambda (z : Int) -> x * y + z;"
 
   "fun 2 1;
-   %fun (z := 1) (y := 2)"
+   fun 2 1"
 
-  "3%; 3"
+  "3; 3"
 
 
 (* run all tests *)

@@ -18,7 +18,7 @@ get-type x = case x
 
 % Here
 to-int : (a : Type) ≡> (r : (Reify a)) => (x : a) -> Int;
-to-int = lambda a ≡> lambda r = lambda x -> case a
+to-int = lambda a ≡> lambda r => lambda x -> case a
   | RInt => x
   | RFloat => float-to-int x
   | RString => string-to-int x;
