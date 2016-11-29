@@ -237,7 +237,7 @@ let newMetavar l name t =
   mkMetavar (meta, S.Identity, (l, name), t)
 
 let newMetalevel () =
-  newMetavar Util.dummy_location "l" (Sort (dummy_location, StypeLevel))
+  newMetavar Util.dummy_location "l" (mkSort (dummy_location, StypeLevel))
 
 let newMetatype () = newMetavar Util.dummy_location "t" (newMetalevel ())
 
@@ -770,21 +770,21 @@ and infer_call (func: pexp) (sargs: sexp list) ctx =
         let parg = pexp_parse lsarg in
         let larg = check parg arg_type ctx in
 
-            handle_fun_args ((Aimplicit, larg) :: largs) (sarg::sargs) pending
-                          (L.mkSusp ret_type (S.substitute larg)))
+        handle_fun_args ((Aimplicit, larg) :: largs) (sarg::sargs) pending
+                        (L.mkSusp ret_type (S.substitute larg)))
       (* Aerasable *)
       | sarg :: sargs, Arrow (Aerasable, v, arg_type, _, ret_type)
         -> let larg = newMetavar (sexp_location sarg)
-                              (match v with Some (_, name) -> name | _ -> "v")
-                              arg_type in
-           handle_fun_args ((Aerasable, larg) :: largs) (sarg::sargs) pending
-                           (L.mkSusp ret_type (S.substitute larg))
+                                (match v with Some (_, name) -> name | _ -> "v")
+                                arg_type in
+          handle_fun_args ((Aerasable, larg) :: largs) (sarg::sargs) pending
+                          (L.mkSusp ret_type (S.substitute larg))
 
-      | sarg :: sargs, t ->
-         print_lexp_ctx (ectx_to_lctx ctx);
-         lexp_fatal (sexp_location sarg) t
-                    ("Explicit arg `" ^ sexp_string sarg
-                     ^ "` to non-function (type = " ^ lexp_string ltp ^ ")") in
+      | sarg :: sargs, t
+        -> print_lexp_ctx (ectx_to_lctx ctx);
+          lexp_fatal (sexp_location sarg) t
+                     ("Explicit arg `" ^ sexp_string sarg
+                      ^ "` to non-function (type = " ^ lexp_string ltp ^ ")") in
 
     let handle_funcall () =
       let largs, ret_type = handle_fun_args [] sargs SMap.empty ltp in
@@ -1002,14 +1002,17 @@ and lexp_parse_sexp (ctx: elab_context) (e : sexp) : lexp =
  * -------------------------------------------------------------------------- *)
 
 and sform_new_attribute ctx loc sargs =
-  let ltp = match sargs with
-    | [t] -> lexp_parse_sexp ctx t
-    | _ -> fatal loc "new-attribute expects a single Type argument" in
-
-  (* FIXME: This creates new values for type `ltp` (very wrong if `ltp`
-   * is False, for example):  Should be a type like `AttributeMap t`
-   * instead.  *)
-  Builtin ((loc, "new-attribute"), ltp, Some AttributeMap.empty)
+  match sargs with
+  | [t] -> let ptp = pexp_parse t in
+          let ltp = infer_type ptp ctx None in
+          let meta_ctx, _ = !global_substitution in
+          (* FIXME: This creates new values for type `ltp` (very wrong if `ltp`
+           * is False, for example):  Should be a type like `AttributeMap t`
+           * instead.  *)
+          mkBuiltin ((loc, "new-attribute"),
+                     OL.lexp_close meta_ctx (ectx_to_lctx ctx) ltp,
+                     Some AttributeMap.empty)
+  | _ -> fatal loc "new-attribute expects a single Type argument"
 
 and sform_add_attribute ctx loc (sargs : sexp list) =
   let n = get_size ctx in
@@ -1018,13 +1021,14 @@ and sform_add_attribute ctx loc (sargs : sexp list) =
     | _ -> fatal loc "add-attribute expects 3 arguments (table; var; attr)" in
 
   let meta_ctx, _ = !global_substitution in
-  let map, attr_type =  match OL.lexp_whnf table (ectx_to_lctx ctx) meta_ctx with
-      | Builtin (_, attr_type, Some map)-> map, attr_type
+  let map, attr_type = match OL.lexp_whnf table (ectx_to_lctx ctx) meta_ctx with
+      | Builtin (_, attr_type, Some map) -> map, attr_type
       | _ -> fatal loc "add-attribute expects a table as first argument" in
 
-    (* FIXME: Type check (attr: type == attr_type) *)
-  let table =  AttributeMap.add var attr map in
-    Builtin ((loc, "add-attribute"), attr_type, Some table)
+  (* FIXME: Type check (attr: type == attr_type) *)
+  let attr' = OL.lexp_close meta_ctx (ectx_to_lctx ctx) attr in
+  let table =  AttributeMap.add var attr' map in
+  mkBuiltin ((loc, "add-attribute"), attr_type, Some table)
 
 and get_attribute ctx loc largs =
   let ctx_n = get_size ctx in
@@ -1079,10 +1083,14 @@ let sform_decltype ctx loc sargs =
 
 let sform_built_in ctx loc sargs =
   match !_parsing_internals, sargs with
-  | true, [String (_, str); stp] ->
-     let ptp = pexp_parse stp in
-     let ltp, _ = infer ptp ctx in
-     mkBuiltin((loc, str), ltp, None)
+  | true, [String (_, name); stp]
+    -> let ptp = pexp_parse stp in
+      let ltp = infer_type ptp ctx None in
+      let meta_ctx, _ = !global_substitution in
+      let ltp' = OL.lexp_close meta_ctx (ectx_to_lctx ctx) ltp in
+      let bi = mkBuiltin ((loc, name), ltp', None) in
+      BI.add_builtin_cst name bi;
+      bi
 
   | true, _ -> error loc "Wrong Usage of `Built-in`";
               dlxp

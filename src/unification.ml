@@ -87,16 +87,14 @@ let rec unify (e1: lexp) (e2: lexp)
   unify' e1 e2 ctx OL.set_empty subst
 
 and unify' (e1: lexp) (e2: lexp)
-           (ctx : DB.lexp_context) (vs : OL.set_lexp) (subst: meta_subst)
+           (ctx : DB.lexp_context) (vs : OL.set_plexp) (subst: meta_subst)
     : return_type =
   let e1' = OL.lexp_whnf e1 ctx subst in
   let e2' = OL.lexp_whnf e2 ctx subst in
-  let stop1 = not (e1 == e1') && OL.set_member_p vs e1' in
-  let stop2 = not (e2 == e2') && OL.set_member_p vs e2' in
-  let vs' = if not (e1 == e1') && not stop1 then OL.set_add vs e1'
-            else if not (e2 == e2') && not stop2 then OL.set_add vs e2'
-            else vs in
-  match if stop1 || stop2 then (e1, e2) else (e1', e2') with
+  let changed = not (e1 == e1' && e2 == e2') in
+  if changed && OL.set_member_p subst vs e1' e2' then Some (subst, []) else
+  let vs' = if changed then OL.set_add vs e1' e2' else vs in
+  match (e1', e2') with
     | ((Imm _, Imm _) | (Cons _, Cons _) | (Builtin _, Builtin _)
        | (Var _, Var _) |  (Inductive _, Inductive _))
       -> if OL.conv_p subst ctx e1' e2' then Some (subst, []) else None

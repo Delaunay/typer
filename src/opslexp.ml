@@ -69,7 +69,49 @@ let rec lexp_defs_subst l s defs = match defs with
   | (_, lexp, _) :: defs'
     -> lexp_defs_subst l (S.cons (mkLet (l, defs, lexp)) s) defs'
 
-(* Reduce to weak head normal form.
+(** Convert a lexp_context into a substitution.  *)
+
+let rec lctx_to_subst lctx =
+  match lctx with
+  | Myers.Mnil -> Subst.identity
+  | Myers.Mcons ((0, _, LetDef e, _), lctx, _, _)
+    -> let s = lctx_to_subst lctx in
+      L.scompose (S.substitute e) s
+  | Myers.Mcons ((0, ov, _, _), lctx, _, _)
+    -> let s = lctx_to_subst lctx in
+      (* Here we decide to keep those vars in the target domain.
+       * Another option would be to map them to `L.impossible`,
+       * hence making the target domain be empty (i.e. making the substitution
+       * generate closed results).  *)
+      L.ssink (maybev ov) s
+  | Myers.Mcons ((1, ov, LetDef e, t), lctx, _, _)
+    -> let rec getdefs i lctx rdefs =
+        match lctx with
+        | Myers.Mcons ((o, ov, LetDef e, t), lctx, _, _)
+             when o = i
+          -> getdefs (i + 1) lctx ((maybev ov, e, t) :: rdefs)
+        | _ -> (lctx, List.rev rdefs) in
+      let (lctx, defs) = getdefs 2 lctx [(maybev ov, e, t)] in
+      let s1 = lctx_to_subst lctx in
+      let s2 = lexp_defs_subst DB.dloc S.identity defs in
+      L.scompose s2 s1
+  | _ -> U.internal_error "Unexpected lexp_context shape!"
+
+(* Take an expression `e` that is "closed" relatively to context lctx
+ * and return an equivalent expression valid in the empty context.
+ * By "closed" I mean that it only refers to elements of the context which
+ * are LetDef.  *)
+let lexp_close meta_ctx lctx e =
+  (* There are many different ways to skin this cat.
+   * This is definitely not the best one:
+   * - it inlines all the definitions everywhere they're used
+   * - It turns the lctx (of O(log N) access time) into a subst
+   *   (of O(N) access time)
+   * Oh well!  *)
+  L.clean meta_ctx (mkSusp e (lctx_to_subst lctx))
+  
+
+(** Reduce to weak head normal form.
  * WHNF implies:
  * - Not a Let.
  * - Not a let-bound variable.
@@ -146,38 +188,39 @@ let lexp_whnf e (ctx : DB.lexp_context) meta_ctx : lexp =
   in lexp_whnf e ctx
 
 
-(** A very naive implementation of sets of lexps.  *)
-type set_lexp = lexp list
-let set_empty : set_lexp = []
-let set_member_p (s : set_lexp) (e : lexp) : bool
-  = if not (e == Lexp.hc e) then
-      (print_string "Not hashcons'd: ";
-       lexp_print e;
-       print_string "\n");
-    assert (e == Lexp.hc e);
-    List.mem e s
-let set_add (s : set_lexp) (e : lexp) : set_lexp
-  = assert (not (set_member_p s e));
-    e :: s
-let set_shift_n (s : set_lexp) (n : U.db_offset)
-  = List.map (fun e -> Lexp.push_susp e (S.shift n)) s
-let set_shift s : set_lexp = set_shift_n s 1
+(** A very naive implementation of sets of pairs of lexps.  *)
+type set_plexp = (lexp * lexp) list
+let set_empty : set_plexp = []
+let set_member_p meta_ctx (s : set_plexp) (e1 : lexp) (e2 : lexp) : bool
+  = assert (e1 == Lexp.hc e1);
+    assert (e2 == Lexp.hc e2);
+    try let _ = List.find (fun (e1', e2')
+                           -> L.eq meta_ctx e1 e1' && L.eq meta_ctx e2 e2')
+                          s
+        in true
+     with Not_found -> false
+let set_add (s : set_plexp) (e1 : lexp) (e2 : lexp) : set_plexp
+  = (* assert (not (set_member_p meta_ctx s e1 e2)); *)
+    ((e1, e2) :: s)
+let set_shift_n (s : set_plexp) (n : U.db_offset)
+  = List.map (let s = S.shift n in
+              fun (e1, e2) -> (Lexp.push_susp e1 s, Lexp.push_susp e2 s))
+             s
+let set_shift s : set_plexp = set_shift_n s 1
 
 (********* Testing if two types are "convertible" aka "equivalent"  *********)
 
 (* Returns true if e₁ and e₂ are equal (upto alpha/beta/...).  *)
-let rec conv_p' meta_ctx (ctx : DB.lexp_context) (vs : set_lexp) e1 e2 : bool =
+let rec conv_p' meta_ctx (ctx : DB.lexp_context) (vs : set_plexp) e1 e2 : bool =
   let conv_p' = conv_p' meta_ctx in
   let e1' = lexp_whnf e1 ctx meta_ctx in
   let e2' = lexp_whnf e2 ctx meta_ctx in
   e1' == e2' ||
-    let stop1 = not (e1 == e1') && set_member_p vs e1' in
-    let stop2 = not (e2 == e2') && set_member_p vs e2' in
-    let vs' = if not (e1 == e1') && not stop1 then set_add vs e1'
-              else if not (e2 == e2') && not stop2 then set_add vs e2'
-              else vs in
+    let changed = not (e1 == e1' && e2 == e2') in
+    if changed && set_member_p meta_ctx vs e1' e2' then true else
+    let vs' = if changed then set_add vs e1' e2' else vs in
     let conv_p = conv_p' ctx vs' in
-    match if stop1 || stop2 then (e1, e2) else (e1', e2') with
+    match (e1', e2') with
     | (Imm (Integer (_, i1)), Imm (Integer (_, i2))) -> i1 = i2
     | (Imm (Float (_, i1)), Imm (Float (_, i2))) -> i1 = i2
     | (Imm (String (_, i1)), Imm (String (_, i2))) -> i1 = i2
@@ -301,14 +344,15 @@ let rec check' meta_ctx erased ctx e =
   | Sort (l, Stype e)
     -> let t = check erased ctx e in
       assert_type ctx e t DB.type_level;
-      Sort (l, Stype (SortLevel (SLsucc e)))
+      mkSort (l, Stype (mkSortLevel (SLsucc e)))
   | Sort (_, StypeLevel) -> DB.sort_omega
   | Sort (_, StypeOmega)
     -> (U.msg_error "TC" (lexp_location e) "Reached unreachable sort!";
        (* U.internal_error "Reached unreachable sort!"; *)
        DB.sort_omega)
   | Builtin (_, t, _)
-    -> check_type DB.set_empty ctx t; (* FIXME: Use an empty ctx?  *)
+    -> let _ = check_type DB.set_empty Myers.nil t in
+      (* FIXME: Check the attributemap as well!  *)
       t
   (* FIXME: Check recursive references.  *)
   | Var (((_, name), idx) as v)
@@ -347,22 +391,22 @@ let rec check' meta_ctx erased ctx e =
          (* FIXME: fix scoping of `k2` and `s2`.  *)
          -> if ak == P.Aerasable && impredicative_erase && s1 != StypeLevel
            then k2
-           else Sort (l, sort_compose l s1 s2)
+           else mkSort (l, sort_compose l s1 s2)
        | (Sort (_, _), _) -> (U.msg_error "TC" (lexp_location t2)
                             "Not a proper type";
-                             Sort (l, StypeOmega))
+                             mkSort (l, StypeOmega))
        | (_, _) -> (U.msg_error "TC" (lexp_location t1)
                                "Not a proper type";
-                   Sort (l, StypeOmega)))
+                   mkSort (l, StypeOmega)))
   | Lambda (ak, ((l,_) as v), t, e)
     -> ((match lexp_whnf (check_type DB.set_empty ctx t) ctx meta_ctx with
         | Sort _ -> ()
         | _ -> (U.msg_error "TC" (lexp_location t)
                            "Formal arg type is not a type!"; ()));
-       Arrow (ak, Some v, t, l,
-              check (dbset_push ak erased)
-                    (DB.lctx_extend ctx (Some v) Variable t)
-                    e))
+       mkArrow (ak, Some v, t, l,
+                check (dbset_push ak erased)
+                      (DB.lctx_extend ctx (Some v) Variable t)
+                      e))
   | Call (f, args)
     -> let ft = check erased ctx f in
       List.fold_left
@@ -414,10 +458,10 @@ let rec check' meta_ctx erased ctx e =
                         case in
                     level)
                   cases (mkSortLevel SLz) in
-            Sort (l, Stype level)
+            mkSort (l, Stype level)
         | (ak, v, t)::args
-          -> Arrow (ak, Some v, t, lexp_location t,
-                   arg_loop args (DB.lctx_extend ctx (Some v) Variable t)) in
+          -> mkArrow (ak, Some v, t, lexp_location t,
+                     arg_loop args (DB.lctx_extend ctx (Some v) Variable t)) in
       let tct = arg_loop args ctx in
       tct
   | Case (l, e, ret, branches, default)
@@ -489,15 +533,15 @@ let rec check' meta_ctx erased ctx e =
            let rec fieldargs ftypes =
              match ftypes with
              | [] -> let nargs = List.length fieldtypes + List.length fargs in
-                    Call (mkSusp t (S.shift nargs), indtype fargs (nargs - 1))
+                    mkCall (mkSusp t (S.shift nargs), indtype fargs (nargs - 1))
              | (ak, vd, ftype) :: ftypes
-               -> Arrow (ak, vd, ftype, lexp_location ftype,
-                                       fieldargs ftypes) in
+               -> mkArrow (ak, vd, ftype, lexp_location ftype,
+                          fieldargs ftypes) in
            let rec buildtype fargs =
              match fargs with
              | [] -> fieldargs fieldtypes
              | (ak, ((l,_) as vd), atype) :: fargs
-               -> Arrow (P.Aerasable, Some vd, atype, l,
+               -> mkArrow (P.Aerasable, Some vd, atype, l,
                         buildtype fargs) in
            buildtype fargs
        | _ -> (U.msg_error "TC" (lexp_location e)

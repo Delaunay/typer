@@ -118,17 +118,19 @@ let dump_predef () =
 (*                Builtin types               *)
 let dloc    = DB.dloc
 
-let op_binary t =  Arrow (Aexplicit, None, t, dloc,
-                        Arrow (Aexplicit, None, t, dloc, t))
+let op_binary t = mkArrow (Aexplicit, None, t, dloc,
+                           mkArrow (Aexplicit, None, t, dloc, t))
 
 let type_eq = let lv = (dloc, "l") in
    let tv = (dloc, "t") in
-   Arrow (Aerasable, Some lv, DB.type_level, dloc,
-          Arrow (Aerasable, Some tv,
-                 Sort (dloc, Stype (Var (lv, 0))), dloc,
-                 Arrow (Aexplicit, None, Var (tv, 0), dloc,
-                        Arrow (Aexplicit, None, Var (tv, 1), dloc,
-                               DB.type0))))
+   mkArrow (Aerasable, Some lv,
+            DB.type_level, dloc,
+            mkArrow (Aerasable, Some tv,
+                     mkSort (dloc, Stype (Var (lv, 0))), dloc,
+                     mkArrow (Aexplicit, None, Var (tv, 0), dloc,
+                              mkArrow (Aexplicit, None,
+                                       mkVar (tv, 1), dloc,
+                                       DB.type0))))
 
 
 (* lexp Imm list *)
@@ -138,8 +140,8 @@ let olist2tlist_lexp lst ctx =
 
     let rlst = List.rev lst in
         List.fold_left (fun tail elem ->
-            Call(tcons, [(Aexplicit, (Imm(elem)));
-                         (Aexplicit, tail)])) tnil rlst
+            mkCall(tcons, [(Aexplicit, (Imm(elem)));
+                           (Aexplicit, tail)])) tnil rlst
 
 (* typer list as seen during runtime *)
 let olist2tlist_rte lst =
@@ -193,5 +195,5 @@ let builtins =
 
 let _ = new_builtin_type "Sexp" DB.type0
 let _ = new_builtin_type
-          "IO" (Arrow (Aexplicit, None, DB.type0, dloc, DB.type0))
+          "IO" (mkArrow (Aexplicit, None, DB.type0, dloc, DB.type0))
 let _ = new_builtin_type "FileHandle" DB.type0
