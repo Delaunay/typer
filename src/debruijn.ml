@@ -79,8 +79,20 @@ let warning = msg_warning "DEBRUIJN"
  * ---------------------------------- *)
 
 let dloc   = dummy_location
+let sort_level = mkSort (dloc, StypeLevel)
+let sort_omega = mkSort (dloc, StypeOmega)
+let type_level = mkBuiltin ((dloc, "TypeLevel"), sort_level, None)
 let level0 = mkSortLevel SLz
+let level1  = mkSortLevel (SLsucc level0)
+let level2  = mkSortLevel (SLsucc level1)
 let type0  = mkSort (dloc, Stype level0)
+let type1   = mkSort (dloc, Stype level1)
+let type2   = mkSort (dloc, Stype level2)
+let type_int = mkBuiltin ((dloc, "Int"), type0, None)
+let type_float = mkBuiltin ((dloc, "Float"), type0, None)
+let type_string = mkBuiltin ((dloc, "String"), type0, None)
+
+(* FIXME: Make it a metavar.  *)
 let dltype = type0
 
 (* easier to debug with type annotations *)
@@ -280,7 +292,8 @@ let lctx_lookup (ctx : lexp_context) (v: vref): env_elem  =
         ret)
     with
       Not_found -> error loc ("DeBruijn index "
-                                      ^ string_of_int dbi ^ " out of bounds!")
+                             ^ string_of_int dbi ^ " of `" ^ ename
+                             ^ "` out of bounds!")
 
 
 
@@ -302,4 +315,24 @@ let env_lookup_type ctx (v : vref): lexp =
 
 let env_lookup_expr ctx (v : vref): lexp option =
   lctx_lookup_value (ectx_to_lctx ctx) v
+
+(**          Sets of DeBruijn indices          **)
+
+type set = db_offset * unit VMap.t
+
+let set_empty = (0, VMap.empty)
+
+let set_mem i (o, m) = VMap.mem (i - o) m
+
+let set_set i (o, m) = (o, VMap.add (i - o) () m)
+let set_reset i (o, m) = (o, VMap.remove (i - o) m)
+
+(* Adjust a set for use in a deeper scope with `o` additional bindings.  *)
+let set_sink o (o', m) = (o + o', m)
+
+(* Adjust a set for use in a higher scope with `o` fewer bindings.  *)
+let set_hoist o (o', m) =
+  let newo = o' - o in
+  let (_, _, newm) = VMap.split (-1 - newo) m
+  in (newo, newm)
 

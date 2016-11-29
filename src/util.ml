@@ -90,6 +90,7 @@ let debug_msg expr =
 let not_implemented_error () = internal_error "not implemented"
 
 let string_implode chars = String.concat "" (List.map (String.make 1) chars)
+let string_sub str b e = String.sub str b (e - b)
 
 let opt_map f x = match x with None -> None | Some x -> Some (f x)
 

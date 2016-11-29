@@ -1,9 +1,6 @@
-(*
- *      Typer Compiler
+(* builtin.ml --- Infrastructure to define built-in primitives
  *
- * ---------------------------------------------------------------------------
- *
- *      Copyright (C) 2011-2016  Free Software Foundation, Inc.
+ *      Copyright (C) 2016  Free Software Foundation, Inc.
  *
  *   Author: Pierre Delaunay <pierre.delaunay@hec.ca>
  *   Keywords: languages, lisp, dependent types.
@@ -25,8 +22,34 @@
  *
  * ---------------------------------------------------------------------------
  *
- *      Description:
- *          Hold built-in types definition and built-in functions implementation
+ * There are several different issues with how to make the compiler's code
+ * interact with code defined in Typer:
+ *
+ * ** Exporting primitives
+ *
+ * I.e. how to give a name and a type to a primitive implemented in OCaml
+ *
+ * There are several conflicting desires, here: we'd generally want the name,
+ * the type (and the association) to be close to the primitive's definition, so
+ * that adding a new primitive doesn't require changes in many files.
+ *
+ * But it's also good to have the type written in some Typer file, both for
+ * the convenience of writing the code in Typer syntax with typer-mode support,
+ * and also because error messages can easily refer to that file, so it can be
+ * used for user-documentation.
+ *
+ * ** Importing definitions
+ *
+ * Sometimes we want some part of the core to be defined in Typer and used
+ * from OCaml.  Examples are the type `Macro` along with the `expand-macro`
+ * function or the type Bool/true/false used with various primitives.
+ *
+ * ** Intertwined dependencies
+ *
+ * The various importing/exporting might need to be interlaced.  Some exported
+ * functions's types will want to refer to imported types, while some imported
+ * definitions may want to refer to exported definitions.  So we'd like to be
+ * able to do them in "any" order.
  *
  * ---------------------------------------------------------------------------*)
 
@@ -34,6 +57,8 @@ open Util
 
 open Sexp   (* Integer/Float *)
 open Pexp   (* arg_kind *)
+module L = Lexp
+module OL = Opslexp
 open Lexp
 
 module DB = Debruijn
@@ -54,7 +79,6 @@ let predef_name = [
     "Macro";
     "expand_macro_";
     "expand_dmacro_";
-    "Attribute";
 ]
 
 let default_predef_map : predef_table =
@@ -93,30 +117,20 @@ let dump_predef () =
 
 (*                Builtin types               *)
 let dloc    = DB.dloc
-let level0  = DB.level0
-let level1  = mkSortLevel (SLsucc level0)
-let level2  = mkSortLevel (SLsucc level1)
-let type0   = DB.type0
-let type1   = mkSort (dloc, Stype level1)
-let type2   = mkSort (dloc, Stype level2)
-let type_omega = mkSort (dloc, StypeOmega)
-let type_level = mkSort (dloc, StypeLevel)
 
-let op_binary t =  Arrow (Aexplicit, None, t, dloc,
-                        Arrow (Aexplicit, None, t, dloc, t))
+let op_binary t = mkArrow (Aexplicit, None, t, dloc,
+                           mkArrow (Aexplicit, None, t, dloc, t))
 
 let type_eq = let lv = (dloc, "l") in
    let tv = (dloc, "t") in
-   Arrow (Aerasable, Some lv, type_level, dloc,
-          Arrow (Aerasable, Some tv,
-                 Sort (dloc, Stype (Var (lv, 0))), dloc,
-                 Arrow (Aexplicit, None, Var (tv, 0), dloc,
-                        Arrow (Aexplicit, None, Var (tv, 1), dloc,
-                               type0))))
-
-let type_int = Builtin((dloc, "Int"), type0, None)
-let type_float = Builtin((dloc, "Float"), type0, None)
-let type_string = Builtin((dloc, "String"), type0, None)
+   mkArrow (Aerasable, Some lv,
+            DB.type_level, dloc,
+            mkArrow (Aerasable, Some tv,
+                     mkSort (dloc, Stype (Var (lv, 0))), dloc,
+                     mkArrow (Aexplicit, None, Var (tv, 0), dloc,
+                              mkArrow (Aexplicit, None,
+                                       mkVar (tv, 1), dloc,
+                                       DB.type0))))
 
 
 (* lexp Imm list *)
@@ -126,8 +140,8 @@ let olist2tlist_lexp lst ctx =
 
     let rlst = List.rev lst in
         List.fold_left (fun tail elem ->
-            Call(tcons, [(Aexplicit, (Imm(elem)));
-                         (Aexplicit, tail)])) tnil rlst
+            mkCall(tcons, [(Aexplicit, (Imm(elem)));
+                           (Aexplicit, tail)])) tnil rlst
 
 (* typer list as seen during runtime *)
 let olist2tlist_rte lst =
@@ -156,33 +170,30 @@ let is_lbuiltin idx ctx =
     else
         false
 
-let declexpr_impl loc largs ctx ftype =
+(* Map of lexp builtin elements accessible via (## <name>).  *)
+let lmap = ref (SMap.empty : (L.lexp * L.ltype) SMap.t)
 
-  let (vi, vn) = match largs with
-    | [Var((_, vn), vi)] -> (vi, vn)
-    | _ -> error loc "declexpr expects one argument" in
+let add_builtin_cst (name : string) (e : lexp)
+  = let map = !lmap in
+    assert (not (SMap.mem name map));
+    let t = OL.check VMap.empty Myers.nil e in
+    lmap := SMap.add name (e, t) map
 
-  let lxp = match DB.env_lookup_expr ctx ((loc, vn), vi) with
-    | Some lxp -> lxp
-    | None -> error loc "no expr available" in
-  (* ltp and ftype should be the same
-  let ltp = env_lookup_type ctx ((loc, vn), vi) in *)
-    lxp, ftype
+let new_builtin_type name kind =
+  let t = mkBuiltin ((dloc, name), kind, None) in
+  add_builtin_cst name t;
+  t
 
+let builtins =
+  add_builtin_cst "TypeLevel" DB.type_level;
+  add_builtin_cst "TypeLevel.z" DB.level0;
+  add_builtin_cst "Type" DB.type0;
+  add_builtin_cst "Type1" DB.type1;
+  add_builtin_cst "Int" DB.type_int;
+  add_builtin_cst "Float" DB.type_float;
+  add_builtin_cst "String" DB.type_string
 
-let decltype_impl loc largs ctx ftype =
-
-  let (vi, vn) = match largs with
-    | [Var((_, vn), vi)] -> (vi, vn)
-    | _ -> error loc "decltype expects one argument" in
-
-  let ltype = DB.env_lookup_type ctx ((loc, vn), vi) in
-    (* mkSusp prop (S.shift (var_i + 1)) *)
-    ltype, type0
-
-
-
-
-
-
-
+let _ = new_builtin_type "Sexp" DB.type0
+let _ = new_builtin_type
+          "IO" (mkArrow (Aexplicit, None, DB.type0, dloc, DB.type0))
+let _ = new_builtin_type "FileHandle" DB.type0

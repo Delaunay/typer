@@ -124,6 +124,7 @@ module VMap = Map.Make (struct type t = int let compare = compare end)
 type meta_subst = lexp VMap.t
 type constraints  = (lexp * lexp) list
 let empty_meta_subst = VMap.empty
+let impossible = Imm Sexp.Epsilon
 
 let builtin_size = ref 0
 
@@ -165,6 +166,9 @@ let rec mkSusp e s =
      * There's no deep technical rason for that:
      * it just seemed like a good idea to do it eagerly when it's easy.  *)
     match e with
+    (* FIXME: `Builtin` shouuld be treated like `Imm`.  *)
+    | Imm _ -> e
+    | Builtin _ -> e
     | Susp (e, s') -> mkSusp e (scompose s' s)
     | Var (l,v) -> slookup s l v
     | Metavar (vn, s', vd, t) -> mkMetavar (vn, scompose s' s, vd, mkSusp t s)
@@ -208,16 +212,13 @@ let rec push_susp e s =            (* Push a suspension one level down.  *)
   | SortLevel (SLsucc e') -> mkSortLevel (SLsucc (mkSusp e' s))
   | Sort (l, Stype e) -> mkSort (l, Stype (mkSusp e s))
   | Sort (l, _) -> e
-  | Builtin (l, ltp, Some table)
-    -> let table' = AttributeMap.map (fun lxp -> mkSusp lxp s) table in
-      mkBuiltin (l, (mkSusp ltp s), Some table')
-
   | Builtin _ -> e
+
   | Let (l, defs, e)
     -> let s' = L.fold_left (fun s (v, _, _) -> ssink v s) s defs in
       let (_,ndefs) = L.fold_left (fun (s,ndefs) (v, def, ty)
                                    -> (ssink v s,
-                                      (v, mkSusp e s', mkSusp ty s) :: ndefs))
+                                      (v, mkSusp def s', mkSusp ty s) :: ndefs))
                                   (s, []) defs in
       mkLet (l, ndefs, mkSusp e s')
   | Arrow (ak, v, t1, l, t2)
@@ -347,10 +348,7 @@ let rec lexp_unparse lxp =
   match lxp with
     | Susp _ as e -> lexp_unparse (nosusp e)
     | Imm (sexp) -> Pimm (sexp)
-    | Builtin ((loc, name), _, None) -> Pvar((loc, name))
-    | Builtin ((loc, name), ltp, _   )
-      -> Pcall(Pvar((loc, name)), [pexp_unparse (lexp_unparse ltp)])
-
+    | Builtin (s, _, _) -> Pbuiltin s
     | Var ((loc, name), _) -> Pvar((loc, name))
     | Cons (t, ctor) -> Pcons (lexp_unparse t, ctor)
     | Lambda (kind, vdef, ltp, body) ->
@@ -653,15 +651,16 @@ and _lexp_to_str ctx exp =
                    ^ "| " ^ (match v with None -> "_" | Some (_,name) -> name)
                    ^ " => " ^ (lexp_to_stri 1 df))
 
-        | Builtin ((_, name), _, _) -> name
+        | Builtin ((_, name), _, _) -> "##" ^ name
 
-        | Sort (_, Stype (SortLevel SLz)) -> "Type_0"
-        | Sort (_, Stype _) -> "Type_?"
-        | Sort (_, StypeOmega) -> "Type_ω"
-        | Sort (_, StypeLevel) -> "Type_Level"
+        | Sort (_, Stype (SortLevel SLz)) -> "##Type"
+        | Sort (_, Stype (SortLevel (SLsucc (SortLevel SLz)))) -> "##Type1"
+        | Sort (_, StypeLevel) -> "##Type_ℓ"
+        | Sort (_, Stype _) -> "##Type_?"    (* FIXME!  *)
+        | Sort (_, StypeOmega) -> "##Type_ω"
 
-        | SortLevel (SLz) -> "<Level0>"
-        | SortLevel (SLsucc e) -> "<LevelS?>"
+        | SortLevel (SLz) -> "##TypeLevel.z"
+        | SortLevel (SLsucc e) -> "##TypeLevel.succ"
 
 and lexp_str_ctor ctx ctors =
   SMap.fold (fun key value str
@@ -691,3 +690,73 @@ and _lexp_str_decls ctx decls =
                    (name ^ " = " ^ (lexp_to_str lxp) ^ ";" ^ sepdecl)::str)
                 [] decls in
     List.rev ret
+
+(** Syntactic equality (i.e. without β).  *******)
+
+let rec eq meta_ctx e1 e2 =
+  e1 == e2 ||
+    let eq = eq meta_ctx in
+    match (e1, e2) with
+    | (Imm (Integer (_, i1)), Imm (Integer (_, i2))) -> i1 = i2
+    | (Imm (Float (_, x1)), Imm (Float (_, x2))) -> x1 = x2
+    | (Imm (String (_, s1)), Imm (String (_, s2))) -> s1 = s2
+    | (Imm s1, Imm s2) -> s1 = s2
+    | (SortLevel SLz, SortLevel SLz) -> true
+    | (SortLevel (SLsucc e1), SortLevel (SLsucc e2)) -> eq e1 e2
+    | (Sort (_, StypeOmega), Sort (_, StypeOmega)) -> true
+    | (Sort (_, StypeLevel), Sort (_, StypeLevel)) -> true
+    | (Sort (_, Stype e1), Sort (_, Stype e2)) -> eq e1 e2
+    | (Builtin ((_, name1), _, _), Builtin ((_, name2), _, _)) -> name1 = name2
+    | (Var (_, i1), Var (_, i2)) -> i1 = i2
+    | (Susp (e1, s1), e2) -> eq (push_susp e1 s1) e2
+    | (e1, Susp (e2, s2)) -> eq e1 (push_susp e2 s2)
+    | (Let (_, defs1, e1), Let (_, defs2, e2))
+      -> eq e1 e2 && List.for_all2 (fun (_, e1, t1) (_, e2, t2)
+                                  -> eq t1 t2 && eq e1 e2)
+                                 defs1 defs2
+    | (Arrow (ak1, _, t11, _, t21), Arrow (ak2, _, t12, _, t22))
+      -> ak1 = ak2 && eq t11 t12 && eq t21 t22
+    | (Lambda (ak1, _, t1, e1), Lambda (ak2, _, t2, e2))
+      -> ak1 = ak2 && eq t1 t2 && eq e1 e2
+    | (Call (e1, as1), Call (e2, as2))
+      -> eq e1 e2 && List.for_all2 (fun (ak1, e1) (ak2, e2) -> ak1 = ak2 && eq e1 e2)
+                                 as1 as2
+    | (Inductive (_, l1, as1, cases1), Inductive (_, l2, as2, cases2))
+      -> l1 = l2
+        && List.for_all2 (fun (ak1, _, e1) (ak2, _, e2) -> ak1 = ak2 && eq e1 e2)
+                        as1 as2
+        && SMap.equal (List.for_all2 (fun (ak1, _, e1) (ak2, _, e2)
+                                     -> ak1 = ak2 && eq e1 e2))
+                     cases1 cases2
+    | (Cons (t1, (_, l1)), Cons (t2, (_, l2))) -> eq t1 t2 && l1 = l2
+    | (Case (_, e1, r1, cases1, def1), Case (_, e2, r2, cases2, def2))
+      -> eq e1 e2 && eq r1 r2
+        && SMap.equal (fun (_, fields1, e1) (_, fields2, e2)
+                      -> eq e1 e2 && List.for_all2 (fun (ak1, _) (ak2, _)
+                                                  -> ak1 = ak2)
+                                                 fields1 fields2)
+                     cases1 cases2
+        && (match (def1, def2) with
+          | (Some (_, e1), Some (_, e2)) -> eq e1 e2
+          | _ -> def1 = def2)
+    | (Metavar (i1, s1, _, t1), Metavar (i2, s2, _, t2))
+      -> i1 = i2 && eq t1 t2 && subst_eq meta_ctx s1 s2
+    | _ -> false
+
+and subst_eq meta_ctx s1 s2 =
+  s1 == s2 ||
+    match (s1, s2) with
+    | (S.Identity, S.Identity) -> true
+    | (S.Cons (e1, s1), S.Cons (e2, s2))
+      -> eq meta_ctx e1 e2 && subst_eq meta_ctx s1 s2
+    | (S.Shift (s1, o1), S.Shift (s2, o2))
+      -> let o = min o1 o2 in
+        subst_eq meta_ctx (S.mkShift s1 (o1 - o)) (S.mkShift s2 (o2 - o))
+    | (S.Shift (S.Cons (e1, s1), o1), S.Cons (e2, s2))
+      -> eq meta_ctx (mkSusp e1 (S.shift o1)) e2
+        && subst_eq meta_ctx (S.mkShift s1 o1) s2
+    | (S.Cons (e1, s1), S.Shift (S.Cons (e2, s2), o2))
+      -> eq meta_ctx e1 (mkSusp e2 (S.shift o2))
+        && subst_eq meta_ctx s1 (S.mkShift s2 o2)
+    | _ -> false
+

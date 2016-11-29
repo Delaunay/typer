@@ -120,19 +120,7 @@ let debug_pexp_print ptop =
         loc_print loc;
         print_string "]\t";
         pexp_print pex in
-    match ptop with
-        | Pimm _                 -> print_info "Pimm       " l ptop
-        | Pvar (_,_)             -> print_info "Pvar       " l ptop
-        | Phastype (_,_,_)       -> print_info "Phastype   " l ptop
-        | Pmetavar (_, _)        -> print_info "Pmetavar   " l ptop
-        | Plet (_, _, _)         -> print_info "Plet       " l ptop
-        | Parrow (_, _, _, _, _) -> print_info "Parrow     " l ptop
-        | Plambda (_,_, _, _)    -> print_info "Plambda    " l ptop
-        | Pcall (_, _)           -> print_info "Pcall      " l ptop
-        | Pinductive (_, _, _)   -> print_info "Pinductive " l ptop
-        | Pcons (_,_)            -> print_info "Pcons      " l ptop
-        | Pcase (_, _, _)        -> print_info "Pcase      " l ptop
-      (*| _                      -> print_info "Not Impl   " l ptop *)
+    print_info (pexp_name ptop) l ptop
 
 let debug_pexp_decls decls =
   let loc_print l = print_string "["; loc_print l; print_string "]  " in

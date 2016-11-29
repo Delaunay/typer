@@ -998,26 +998,6 @@ the recursive calls.
 (e.g. that need to know the set of freevars in one of its arguments) are
 "impossible" unless Typer provides extra support for them.
 * Syntax
-** Lexical rules
-Tokens will be made of any sequence of letters other than blanks/comments.
-
-  blanks = LF, CR, TAB, SPC
-  comments = %...\n
-  strings = "...\?..."
-  numbers = as standard as possible
-  maybe handle \ specially not only in strings but anywhere else as well
-  special token = sequence of chars which is always treated as a single
-    token even if it's not surrounded by blanks.  The set of special tokens
-    can be extended by the programmer.
-  magic token = the _ char is magical in that it forcefully connects even
-    special tokens: a(b are 3 tokens if ( is special, but a_(_b is a single
-    (magic) token.
-
-** Structured identifiers
-We want to support identifiers with inner structure, such as "foo.bar.baz".
-
-This could be lexed into a Node identical to that of ( __.__ foo bar baz)
-
 ** Provide syntax for backquote&unquote
 Since "," is to be used as separator, maybe (,e) and (`e) could be used?
 ** Macros
@@ -1219,22 +1199,30 @@ For IO the macro would return "bind e1 e2", whereas for "a * b" it would use
 
 Here's an example of a use of partial functions:
 
-   type Exp (e : Env) :=
-     Var i (t : lookup i e)
+    type Exp (e : Env)
+    | Var i (t : lookup i e)
 
 where "lookup" might fail.  Without partial functions, we have to use
 a relational style, as in:
 
-   type Exp (e : Env) :=
-     Var i (_: lookup i e t) t
+    type Exp (e : Env)
+    | Var i (_: lookup i e t) t
 
 In the present case, we could make "lookup" return False, but if we change
 it to:
 
-   type Exp (e : Env) (τ : EType) :=
-     SetVar i (v : Exp Env (lookup i e))
+    type Exp (e : Env) (τ : EType)
+    | SetVar i (v : Exp Env (lookup i e))
 
-Suddenly, this doesn't work any more.
+Suddenly, this doesn't work any more.  We would then have to do something
+like, have `lookup` return an `Option` and then do:
+
+    type Exp (e : Env) (τ : EType)
+    | SetVar i (v : (case lookup i e
+                     | Some t => Exp Env t
+                     | None -> False))
+
+It would be neat to have some way to "automate" this.
 
 * Erasable constructors
 

@@ -46,8 +46,6 @@ type pretoken =
 (* FIXME: Add syntax for char constants (maybe 'c').  *)
 (* FIXME: Handle multiline strings.  *)
 
-let string_sub str b e = String.sub str b (e - b)
-
 let inc_cp (cp:charpos) (c:char) =
   (* Count char positions in utf-8: don't count the non-leading bytes.  *)
   if utf8_head_p c then cp+1 else cp

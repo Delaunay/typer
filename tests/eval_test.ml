@@ -79,8 +79,8 @@ let _ = test_eval_eqv_named
 
   "c = 3; e = 1; f = 2; d = 4;"
 
-  "let a = 10; x = 50; y = 60; b = 20;
-    in a + b;" (* == *) "30"
+  "let a = -5; x = 50; y = 60; b = 20;
+    in a + b;" (* == *) "15"
 
 let _ = test_eval_eqv_named
   "Let2"
@@ -190,7 +190,7 @@ let _ = test_eval_eqv_named
    three = succ two;
 
    plus : Nat -> Nat -> Nat;
-   plus = lambda (x : Nat) -> lambda (y : Nat) -> case x
+   plus x y = case x
        | zero => y
        | succ z => succ (plus z y);")
 
@@ -246,7 +246,13 @@ let _ = test_eval_eqv_named
   "my_list = cons 1
             (cons 2
             (cons 3
-            (cons 4 nil)))"
+            (cons 4 nil)));
+   List' = let L : Type -> Type;
+               L = inductive_ (L (a : Type)) (nil) (cons a (L a))
+           in L;
+   cons' = inductive-cons List' cons;
+   nil' = inductive-cons List' nil;
+   my_list' = (cons' 1 nil');"
 
   "length my_list;
    head my_list;

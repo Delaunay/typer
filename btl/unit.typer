@@ -1,5 +1,0 @@
-
-% Declare a dummy Type
-Unit : Type;
-Unit = inductive_ (Unit) (unit);
-unit = inductive-cons Unit unit;

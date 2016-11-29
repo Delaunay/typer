@@ -131,7 +131,10 @@ let ilexp_parse pexps lctx: ((ldecl list list * lexpr list) * elab_context) =
     let pdecls, pexprs = pexps in
     let ldecls, lctx = lexp_p_decls pdecls lctx in
     let lexprs = lexp_parse_all pexprs lctx in
-        (ldecls, lexprs), lctx
+    let meta_ctx, _ = !global_substitution in
+    List.iter (fun lxp -> ignore (OL.check meta_ctx (ectx_to_lctx lctx) lxp))
+              lexprs;
+    (ldecls, lexprs), lctx
 
 let ieval lexps rctx =
     let (ldecls, lexprs) = lexps in
@@ -208,7 +211,7 @@ let readfiles files (i, lctx, rctx) prt =
         (i, lctx, rctx)  files
 
 
-(*  Specials commands %[command-name] [args] *)
+(*  Specials commands %[command-name] [args] *)
 let rec repl i clxp rctx =
     let repl = repl (i + 1) in
     let ipt = read_input i in
