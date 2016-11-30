@@ -52,8 +52,15 @@ let dloc = dummy_location
 let _global_eval_trace = ref ([], [])
 let _global_eval_ctx = ref make_runtime_ctx
 let _eval_max_recursion_depth = ref 255
-let _builtin_lookup = ref (SMap.empty : (location -> eval_debug_info
-                                         -> value_type list -> value_type) SMap.t)
+
+let builtin_functions
+  = ref (SMap.empty : ((location -> eval_debug_info
+                        -> value_type list -> value_type)
+                       (* The primitive's arity.  *)
+                       * int) SMap.t)
+
+let add_builtin_function name f arity =
+  builtin_functions := SMap.add name (f, arity) (!builtin_functions)
 
 let append_eval_trace trace (expr : elexp) =
   let (a, b) = trace in
@@ -278,8 +285,12 @@ let rec _eval lxp (ctx : Env.runtime_env) (trace : eval_debug_info): (value_type
             eval inst nctx
 
         (* Function call *)
-        | Call (lname, args) ->
-            eval_call ctx (append_typer_trace trace lxp) lname args
+        | Call (f, args)
+          (* FIXME: Add the trace only once we enter the function?  *)
+          -> let ntrace = append_typer_trace trace lxp in
+            eval_call (elexp_location f) ntrace
+                      (_eval f ctx ntrace)
+                      (List.map (fun e -> _eval e ctx ntrace) args)
 
         (* Case *)
         | Case (loc, target, pat, dflt)
@@ -288,11 +299,6 @@ let rec _eval lxp (ctx : Env.runtime_env) (trace : eval_debug_info): (value_type
         | Type -> Vcons((tloc, "Unit"), [])
 
 
-and get_predef_eval name ctx =
-  let r = (get_rte_size ctx) - !builtin_size in
-  let v = mkSusp (get_predef_raw name) (S.shift r) in
-    _eval (OL.erase_type v) ctx ([], [])
-
 and eval_var ctx lxp v =
     let ((loc, name), idx) = v in
     try get_rte_variable (Some name) (idx) ctx
@@ -300,36 +306,62 @@ and eval_var ctx lxp v =
       elexp_fatal loc lxp
         ("Variable: " ^ name ^ (str_idx idx) ^ " was not found ")
 
-and eval_call ctx i lname eargs =
-    let loc = elexp_location lname in
-    let f = _eval lname ctx i in
+and eval_call loc i f args =
+  match f, args with
+  (* return result of eval *)
+  | _, [] -> f
 
-    (* standard function *)
-    let rec eval_call f args ctx =
-      match f, args with
-        | Vcons (n, []), _ ->
-          let e = Vcons(n, args) in
-            (* value_print e; print_string "\n"; *) e
+  | Vcons (n, fields), _ ->
+     let e = Vcons(n, List.append fields args) in
+     (* value_print e; print_string "\n"; *) e
 
-        (* we add an argument to the closure *)
-        | Closure (n, lxp, ctx), hd::tl ->
-            let nctx = add_rte_variable (Some n) hd ctx in
-            let ret = _eval lxp nctx i in
-                eval_call ret tl nctx
+  | Closure (x, e, ctx), v::vs ->
+     let rec bindargs e vs ctx = match (vs, e) with
+       | (v::vs, Lambda ((_, x), e))
+         (* "Uncurry" on the fly.  *)
+         -> bindargs e vs (add_rte_variable (Some x) v ctx)
+       | ([], _) -> _eval e ctx i
+       | _ -> eval_call loc i (_eval e ctx i) vs in
+     bindargs e vs (add_rte_variable (Some x) v ctx)
 
-        | Vbuiltin (str), args ->
-            (* lookup the built-in implementation and call it *)
-            (get_builtin_impl str loc) loc i args
+  | Vbuiltin (name), args ->
+     (* FIXME: If there are fewer args, build a closure.
+      * FIXME: If there are too many args, pass it to the
+      * return value!  *)
+     (* lookup the built-in implementation and call it *)
+     (try let (builtin, arity) = SMap.find name !builtin_functions in
+          let nargs = List.length args in
+          if nargs = arity then
+            builtin loc i args        (* Fast common case.  *)
+          else if nargs > arity then
+            let rec split n vs acc = match (n, vs) with
+              | 0, _ -> let v = eval_call loc i f (List.rev acc) in
+                       eval_call loc i v vs
+              | _, (v::vs) -> split (n - 1) vs (v::acc)
+              | _ -> error loc "Impossible!"
+            in split nargs args []
+          else
+            let rec buildctx args ctx = match args with
+              | [] -> ctx
+              | arg::args -> buildctx args (add_rte_variable None arg ctx) in
+            let rec buildargs n =
+              if n >= 0
+              then (Var ((loc, "<dummy>"), n))::buildargs (n - 1)
+              else [] in
+            let rec buildbody n =
+              if n > 0 then
+                Lambda ((loc, "<dummy>"), buildbody (n - 1))
+              else Call (Builtin (dloc, name), buildargs (arity - 1)) in
+            Closure ("<dummy>",
+                     buildbody (arity - nargs - 1),
+                     buildctx args Myers.nil)
 
-        (* return result of eval *)
-        | _, [] -> f
+      with Not_found ->
+           error loc ("Requested Built-in `" ^ name ^ "` does not exist")
+          | e -> error loc ("Exception thrown from primitive `" ^ name ^"`"))
 
-        | _ ->
-          value_fatal loc f "Cannot eval function" in
-
-    (* eval function here *)
-    let args = List.map (fun e -> _eval e ctx i) eargs in
-      eval_call f args ctx
+  | _ ->
+     value_fatal loc f "Trying to call a non-function!"
 
 and eval_case ctx i loc target pat dflt =
     (* Eval target *)
@@ -415,31 +447,11 @@ and typer_builtins_impl = [
 ]
 
 and bind_impl loc depth args_val =
-
-  let io, cb = match args_val with
-    | [io; callback] -> io, callback
-    | _ -> error loc "bind expects two arguments" in
-
-  (* build Vcommand from io function *)
-  let cmd = match io with
-    | Vcommand (cmd) -> cmd
-    | _ -> error loc "bind first arguments must be a monad" in
-
-  (* bind returns another Vcommand *)
-  Vcommand (fun () ->
-    (* get callback *)
-    let body, ctx = match cb with
-      | Closure(_, body, ctx) -> body, ctx
-      | _ -> error loc "A Closure was expected" in
-
-    (* run given command *)
-    let underlying = cmd () in
-
-    (* add evaluated IO to arg list *)
-    let nctx = add_rte_variable None underlying ctx in
-
-    (* eval callback *)
-    _eval body nctx depth)
+  match args_val with
+  | [Vcommand (cmd); callback]
+    -> (* bind returns another Vcommand *)
+     Vcommand (fun () -> eval_call loc depth callback [cmd ()])
+  | _ -> error loc "Wrong number of args or wrong first arg value in `bind`"
 
 and run_io loc depth args_val =
 
@@ -456,18 +468,6 @@ and run_io loc depth args_val =
 
   (* return given type *)
     ltp
-
-and get_builtin_impl str loc =
-    (* Make built-in lookup table *)
-    (match (SMap.is_empty !_builtin_lookup) with
-        | true ->
-            _builtin_lookup := (List.fold_left (fun lkup (name, f) ->
-                SMap.add name f lkup) SMap.empty typer_builtins_impl)
-        | _ -> ());
-
-    try SMap.find str !_builtin_lookup
-    with Not_found ->
-        error loc ("Requested Built-in \"" ^ str ^ "\" does not exist")
 
 (* Sexp -> (Sexp -> List Sexp -> Sexp) -> (String -> Sexp) ->
     (String -> Sexp) -> (Int -> Sexp) -> (Float -> Sexp) -> (List Sexp -> Sexp)
@@ -564,6 +564,27 @@ and print_trace title trace default =
 and print_eval_trace trace =
     let (a, b) = !_global_eval_trace in
       print_trace " EVAL TRACE " trace a
+
+let _ = List.iter (fun (name, f, arity) -> add_builtin_function name f arity)
+                  [
+                    ("_+_"           , iadd_impl, 2);
+                    ("_*_"           , imult_impl, 2);
+                    ("block_"        , make_block, 1);
+                    ("symbol_"       , make_symbol, 1);
+                    ("string_"       , make_string, 1);
+                    ("integer_"      , make_integer, 1);
+                    ("float_"        , make_float, 1);
+                    ("node_"         , make_node, 2);
+                    ("sexp_dispatch_", sexp_dispatch, 7);
+                    ("string_eq"     , string_eq, 2);
+                    ("int_eq"        , int_eq, 2);
+                    ("sexp_eq"       , sexp_eq, 2);
+                    ("open"          , open_impl, 2);
+                    ("bind"          , bind_impl, 2);
+                    ("run-io"        , run_io, 2);
+                    ("read"          , read_impl, 2);
+                    ("write"         , write_impl, 2);
+                  ]
 
 let eval lxp ctx = _eval lxp ctx ([], [])
 

@@ -230,12 +230,12 @@ let _ = test_eval_eqv_named
   "add : Int -> Int -> Int;
    add = lambda x y -> (x + y);
 
-   inc : Int -> Int;
-   inc = add 1;"
+   inc1 = add 1;
+   inc2 = _+_ 2;"
 
-  "inc 1; inc 2; inc 3;"
+  "inc1 1; inc2 2; inc1 3;"
 
-  "2; 3; 4"
+  "2; 4; 4"
 
 (*
  *  Lists
