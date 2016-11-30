@@ -52,7 +52,8 @@ let dloc = dummy_location
 let _global_eval_trace = ref ([], [])
 let _global_eval_ctx = ref make_runtime_ctx
 let _eval_max_recursion_depth = ref 255
-let _builtin_lookup = ref SMap.empty
+let _builtin_lookup = ref (SMap.empty : (location -> eval_debug_info
+                                         -> value_type list -> value_type) SMap.t)
 
 let append_eval_trace trace (expr : elexp) =
   let (a, b) = trace in
@@ -113,12 +114,9 @@ let elexp_fatal = debug_message fatal elexp_name elexp_string
 (*
  *                  Builtins
  *)
-let none_fun : (location -> eval_debug_info -> value_type list -> runtime_env -> value_type)
-    = (fun loc args_val ctx -> error loc "Requested Built-in was not implemented")
-
 (* Builtin of builtin * string * ltype *)
 let _generic_binary_iop name f loc (depth : eval_debug_info)
-          (args_val: value_type list) (ctx: runtime_env) =
+          (args_val: value_type list) =
 
    let l, r = match args_val with
         | [l; r] -> l, r
@@ -135,7 +133,7 @@ let isub_impl  = _generic_binary_iop "Integer::sub"  (fun a b -> a - b)
 let imult_impl = _generic_binary_iop "Integer::mult" (fun a b -> a * b)
 let idiv_impl  = _generic_binary_iop "Integer::div"  (fun a b -> a / b)
 
-let make_symbol loc depth args_val ctx  =
+let make_symbol loc depth args_val  =
     (* symbol is a simple string *)
     let lxp = match args_val with
         | [r] -> r
@@ -145,7 +143,7 @@ let make_symbol loc depth args_val ctx  =
             | Vstring(str) -> Vsexp(Symbol(loc, str))
             | _ -> value_error loc lxp "symbol_ expects one string as argument"
 
-let make_node loc depth args_val ctx    =
+let make_node loc depth args_val    =
 
     let op, tlist = match args_val with
         | [Vsexp(op); lst] -> op, lst
@@ -162,12 +160,12 @@ let make_node loc depth args_val ctx    =
         | Vint (i)    -> Integer(dloc, i)
         | Vstring (s) -> String(dloc, s)
         | _ ->
-          print_rte_ctx ctx;
+          (* print_rte_ctx ctx; *)
           value_error loc g "node_ expects 'List Sexp' second as arguments") args in
 
         Vsexp(Node(op, s))
 
-let make_string loc depth args_val ctx  =
+let make_string loc depth args_val  =
     let lxp = match args_val with
         | [r] -> r
         | _ -> error loc "string_ expects 1 argument" in
@@ -176,7 +174,7 @@ let make_string loc depth args_val ctx  =
             | Vstring(str) -> Vsexp(String(loc, str))
             | _ -> value_error loc lxp "string_ expects one string as argument"
 
-let make_integer loc depth args_val ctx =
+let make_integer loc depth args_val =
     let lxp = match args_val with
         | [r] -> r
         | _ -> error loc "integer_ expects 1 argument" in
@@ -185,29 +183,29 @@ let make_integer loc depth args_val ctx =
             | Vint(str) -> Vsexp(Integer(loc, str))
             | _ -> value_error loc lxp "integer_ expects one string as argument"
 
-let make_float loc depth args_val ctx   = Vdummy
-let make_block loc depth args_val ctx   = Vdummy
+let make_float loc depth args_val   = Vdummy
+let make_block loc depth args_val   = Vdummy
 
 let ttrue = Vcons((dloc, "True"), [])
 let tfalse = Vcons((dloc, "False"), [])
 let btyper b = if b then ttrue else tfalse
 
-let string_eq loc depth args_val ctx =
+let string_eq loc depth args_val =
     match args_val with
         | [Vstring(s1); Vstring(s2)] -> btyper (s1 = s2)
         | _ -> error loc "string_eq expects 2 strings"
 
-let int_eq loc depth args_val ctx =
+let int_eq loc depth args_val =
     match args_val with
         | [Vint(s1); Vint(s2)] -> btyper (s1 = s2)
         | _ -> error loc "int_eq expects 2 integer"
 
-let sexp_eq loc depth args_val ctx =
+let sexp_eq loc depth args_val =
     match args_val with
     | [Vsexp (s1); Vsexp (s2)] -> btyper (sexp_equal s1 s2)
     | _ -> error loc "sexp_eq expects 2 sexp"
 
-let open_impl loc depth args_val ctx =
+let open_impl loc depth args_val =
 
   let file, mode = match args_val with
     | [Vstring(file_name); Vstring(mode)] -> file_name, mode
@@ -220,7 +218,7 @@ let open_impl loc depth args_val ctx =
         | "w" -> Vout(open_out file)
         | _ -> error loc "wrong open mode")
 
-let read_impl loc depth args_val ctx =
+let read_impl loc depth args_val =
 
   let channel = match args_val with
     | [Vin(c); _] -> c
@@ -231,7 +229,7 @@ let read_impl loc depth args_val ctx =
   let line = input_line channel in
     Vstring(line)
 
-let write_impl loc depth args_val ctx =
+let write_impl loc depth args_val =
 
   let channel, msg = match args_val with
     | [Vout(c); Vstring(msg)] -> c, msg
@@ -321,7 +319,7 @@ and eval_call ctx i lname eargs =
 
         | Vbuiltin (str), args ->
             (* lookup the built-in implementation and call it *)
-            (get_builtin_impl str loc) loc i args ctx
+            (get_builtin_impl str loc) loc i args
 
         (* return result of eval *)
         | _, [] -> f
@@ -409,7 +407,6 @@ and typer_builtins_impl = [
     ("string_eq"     , string_eq);
     ("int_eq"        , int_eq);
     ("sexp_eq"       , sexp_eq);
-    ("eval_"         , typer_eval);
     ("open"          , open_impl);
     ("bind"          , bind_impl);
     ("run-io"        , run_io);
@@ -417,7 +414,7 @@ and typer_builtins_impl = [
     ("write"         , write_impl);
 ]
 
-and bind_impl loc depth args_val ctx =
+and bind_impl loc depth args_val =
 
   let io, cb = match args_val with
     | [io; callback] -> io, callback
@@ -444,7 +441,7 @@ and bind_impl loc depth args_val ctx =
     (* eval callback *)
     _eval body nctx depth)
 
-and run_io loc depth args_val ctx =
+and run_io loc depth args_val =
 
   let io, ltp = match args_val with
     | [io; ltp] -> io, ltp
@@ -459,17 +456,6 @@ and run_io loc depth args_val ctx =
 
   (* return given type *)
     ltp
-
-and typer_eval loc depth args ctx =
-    let arg = match args with
-        | [a] -> a
-        | _ -> error loc "eval_ expects a single argument" in
-    (* I need to be able to lexp sexp but I don't have lexp ctx *)
-    match arg with
-        (* Nodes that can be evaluated *)
-        | Closure (_, body, ctx) -> _eval body ctx depth
-        (* Leaf *)
-        | _ -> arg
 
 and get_builtin_impl str loc =
     (* Make built-in lookup table *)
@@ -486,7 +472,7 @@ and get_builtin_impl str loc =
 (* Sexp -> (Sexp -> List Sexp -> Sexp) -> (String -> Sexp) ->
     (String -> Sexp) -> (Int -> Sexp) -> (Float -> Sexp) -> (List Sexp -> Sexp)
         ->  Sexp *)
-and sexp_dispatch loc depth args ctx =
+and sexp_dispatch loc depth args =
     let eval a b = _eval a b depth in
     let sxp, nd, sym, str, it, flt, blk, rctx = match args with
         | [sxp; Closure(_, nd, rctx); Closure(_, sym, _);
