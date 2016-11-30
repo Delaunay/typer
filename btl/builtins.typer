@@ -39,8 +39,10 @@ Unit    = inductive_ Unit unit;
 unit    = inductive-cons Unit unit;
 
 % Basic operators
-_+_ = Built-in "_+_" (Int -> Int -> Int);
-_*_ = Built-in "_*_" (Int -> Int -> Int);
+_+_ = Built-in "Int.+" (Int -> Int -> Int);
+_-_ = Built-in "Int.-" (Int -> Int -> Int);
+_*_ = Built-in "Int.*" (Int -> Int -> Int);
+_/_ = Built-in "Int./" (Int -> Int -> Int);
 
 Bool = inductive_ (Boolean) (True) (False);
 True = inductive-cons Bool True;

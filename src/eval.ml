@@ -122,23 +122,19 @@ let elexp_fatal = debug_message fatal elexp_name elexp_string
  *                  Builtins
  *)
 (* Builtin of builtin * string * ltype *)
-let _generic_binary_iop name f loc (depth : eval_debug_info)
-          (args_val: value_type list) =
+let add_binary_iop name f =
+  let name = "Int." ^ name in
+  let f loc (depth : eval_debug_info) (args_val: value_type list) =
+    match args_val with
+    | [Vint(v); Vint(w)] -> Vint (f v w)
+    | _ -> error loc ("`" ^ name ^ "` expects 2 Integers arguments") in
+  add_builtin_function name f 2
 
-   let l, r = match args_val with
-        | [l; r] -> l, r
-        | _ -> error loc (name ^ " expects 2 Integers arguments") in
 
-        match l, r with
-            | Vint(v), Vint(w) -> Vint(f v w)
-            | _ ->
-              debug_messages fatal loc (name ^ " expects Integers as arguments") [
-                "(" ^ name ^ " " ^ (value_string l) ^ " " ^ (value_string r) ^ ")";]
-
-let iadd_impl  = _generic_binary_iop "Integer::add"  (fun a b -> a + b)
-let isub_impl  = _generic_binary_iop "Integer::sub"  (fun a b -> a - b)
-let imult_impl = _generic_binary_iop "Integer::mult" (fun a b -> a * b)
-let idiv_impl  = _generic_binary_iop "Integer::div"  (fun a b -> a / b)
+let _ = add_binary_iop "+"  (+);
+        add_binary_iop "-"  (-);
+        add_binary_iop "*" ( * );
+        add_binary_iop "/"  (/)
 
 let make_symbol loc depth args_val  =
     (* symbol is a simple string *)
@@ -311,12 +307,11 @@ and eval_call loc i f args =
   (* return result of eval *)
   | _, [] -> f
 
-  | Vcons (n, fields), _ ->
-     let e = Vcons(n, List.append fields args) in
-     (* value_print e; print_string "\n"; *) e
+  | Vcons (n, fields), _
+    -> Vcons (n, List.append fields args)
 
-  | Closure (x, e, ctx), v::vs ->
-     let rec bindargs e vs ctx = match (vs, e) with
+  | Closure (x, e, ctx), v::vs
+    -> let rec bindargs e vs ctx = match (vs, e) with
        | (v::vs, Lambda ((_, x), e))
          (* "Uncurry" on the fly.  *)
          -> bindargs e vs (add_rte_variable (Some x) v ctx)
@@ -324,44 +319,39 @@ and eval_call loc i f args =
        | _ -> eval_call loc i (_eval e ctx i) vs in
      bindargs e vs (add_rte_variable (Some x) v ctx)
 
-  | Vbuiltin (name), args ->
-     (* FIXME: If there are fewer args, build a closure.
-      * FIXME: If there are too many args, pass it to the
-      * return value!  *)
-     (* lookup the built-in implementation and call it *)
-     (try let (builtin, arity) = SMap.find name !builtin_functions in
-          let nargs = List.length args in
-          if nargs = arity then
-            builtin loc i args        (* Fast common case.  *)
-          else if nargs > arity then
-            let rec split n vs acc = match (n, vs) with
-              | 0, _ -> let v = eval_call loc i f (List.rev acc) in
-                       eval_call loc i v vs
-              | _, (v::vs) -> split (n - 1) vs (v::acc)
-              | _ -> error loc "Impossible!"
-            in split nargs args []
-          else
-            let rec buildctx args ctx = match args with
-              | [] -> ctx
-              | arg::args -> buildctx args (add_rte_variable None arg ctx) in
-            let rec buildargs n =
-              if n >= 0
-              then (Var ((loc, "<dummy>"), n))::buildargs (n - 1)
-              else [] in
-            let rec buildbody n =
-              if n > 0 then
-                Lambda ((loc, "<dummy>"), buildbody (n - 1))
-              else Call (Builtin (dloc, name), buildargs (arity - 1)) in
-            Closure ("<dummy>",
-                     buildbody (arity - nargs - 1),
-                     buildctx args Myers.nil)
+  | Vbuiltin (name), args
+    -> (try let (builtin, arity) = SMap.find name !builtin_functions in
+           let nargs = List.length args in
+           if nargs = arity then
+             builtin loc i args        (* Fast common case.  *)
+           else if nargs > arity then
+             let rec split n vs acc = match (n, vs) with
+               | 0, _ -> let v = eval_call loc i f (List.rev acc) in
+                        eval_call loc i v vs
+               | _, (v::vs) -> split (n - 1) vs (v::acc)
+               | _ -> error loc "Impossible!"
+             in split nargs args []
+           else
+             let rec buildctx args ctx = match args with
+               | [] -> ctx
+               | arg::args -> buildctx args (add_rte_variable None arg ctx) in
+             let rec buildargs n =
+               if n >= 0
+               then (Var ((loc, "<dummy>"), n))::buildargs (n - 1)
+               else [] in
+             let rec buildbody n =
+               if n > 0 then
+                 Lambda ((loc, "<dummy>"), buildbody (n - 1))
+               else Call (Builtin (dloc, name), buildargs (arity - 1)) in
+             Closure ("<dummy>",
+                      buildbody (arity - nargs - 1),
+                      buildctx args Myers.nil)
 
-      with Not_found ->
-           error loc ("Requested Built-in `" ^ name ^ "` does not exist")
+       with Not_found ->
+            error loc ("Requested Built-in `" ^ name ^ "` does not exist")
           | e -> error loc ("Exception thrown from primitive `" ^ name ^"`"))
 
-  | _ ->
-     value_fatal loc f "Trying to call a non-function!"
+  | _ -> value_fatal loc f "Trying to call a non-function!"
 
 and eval_case ctx i loc target pat dflt =
     (* Eval target *)
@@ -425,26 +415,6 @@ and _eval_decls (decls: (vdef * elexp) list)
 
 (* -------------------------------------------------------------------------- *)
 (*              Builtin Implementation  (Some require eval)                   *)
-
-and typer_builtins_impl = [
-    ("_+_"           , iadd_impl);
-    ("_*_"           , imult_impl);
-    ("block_"        , make_block);
-    ("symbol_"       , make_symbol);
-    ("string_"       , make_string);
-    ("integer_"      , make_integer);
-    ("float_"        , make_float);
-    ("node_"         , make_node);
-    ("sexp_dispatch_", sexp_dispatch);
-    ("string_eq"     , string_eq);
-    ("int_eq"        , int_eq);
-    ("sexp_eq"       , sexp_eq);
-    ("open"          , open_impl);
-    ("bind"          , bind_impl);
-    ("run-io"        , run_io);
-    ("read"          , read_impl);
-    ("write"         , write_impl);
-]
 
 and bind_impl loc depth args_val =
   match args_val with
@@ -567,8 +537,6 @@ and print_eval_trace trace =
 
 let _ = List.iter (fun (name, f, arity) -> add_builtin_function name f arity)
                   [
-                    ("_+_"           , iadd_impl, 2);
-                    ("_*_"           , imult_impl, 2);
                     ("block_"        , make_block, 1);
                     ("symbol_"       , make_symbol, 1);
                     ("string_"       , make_string, 1);
