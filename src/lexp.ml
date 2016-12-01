@@ -341,7 +341,9 @@ let lexp_name e =
     | Susp      _ -> "Susp"
     | Builtin   (_, _, None) -> "Builtin"
     | Builtin   _ -> "AttributeTable"
-    | _ -> "lexp_to_string: not implemented"
+    | Metavar   _ -> "Metavar"
+    | Sort      _ -> "Sort"
+    | SortLevel _ -> "SortLevel"
 
 (* ugly printing (sexp_print (pexp_unparse (lexp_unparse e))) *)
 let rec lexp_unparse lxp =

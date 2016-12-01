@@ -71,7 +71,6 @@ type-impl = lambda (x : List Sexp) ->
     (cons (a := Sexp) name ctor) in
 
   % Create a forward declaration in case the declaration is recursive
-  % let fdecl = make-ann type-name (symbol_ "Type") in
   let decl  = make-decl type-name inductive in
 
   % Add constructors
@@ -85,7 +84,6 @@ type-impl = lambda (x : List Sexp) ->
       in for-each ctor (nil (a := Sexp)) in
 
   % return decls
-  %   cons (a := Sexp) fdecl     % Forward declaration
     (cons (a := Sexp) decl       % inductive type declaration
                       ctors);    % constructor declarations
 

@@ -72,6 +72,8 @@ let append_typer_trace trace (expr : elexp) =
   let r = (a, expr::b) in
     _global_eval_trace := r; r
 
+let get_trace () = !_global_eval_trace
+
 let rec_depth trace =
   let (a, b) = trace in
     List.length b
@@ -243,8 +245,6 @@ let write_impl loc depth args_val =
     fprintf channel "%s" msg;
       Vdummy
 
-(* This is an internal definition
- * 'i' is the recursion depth used to print the call trace *)
 let rec _eval lxp (ctx : Env.runtime_env) (trace : eval_debug_info): (value_type) =
 
     let trace = append_eval_trace trace lxp in
@@ -281,12 +281,15 @@ let rec _eval lxp (ctx : Env.runtime_env) (trace : eval_debug_info): (value_type
             eval inst nctx
 
         (* Function call *)
-        | Call (f, args)
-          (* FIXME: Add the trace only once we enter the function?  *)
-          -> let ntrace = append_typer_trace trace lxp in
-            eval_call (elexp_location f) ntrace
-                      (_eval f ctx ntrace)
-                      (List.map (fun e -> _eval e ctx ntrace) args)
+        | Call (f, args) ->
+          (* we need to keep the trace from f and args evaluation
+           * else the trace will be truncated.
+           * we use _global_eval_trace to keep in memory previous steps *)
+          let ef = _eval f ctx trace in
+          let eargs = (List.map (fun e -> _eval e ctx (get_trace ())) args) in
+            eval_call (elexp_location f) f (get_trace ())
+                      ef
+                      eargs
 
         (* Case *)
         | Case (loc, target, pat, dflt)
@@ -302,7 +305,8 @@ and eval_var ctx lxp v =
       elexp_fatal loc lxp
         ("Variable: " ^ name ^ (str_idx idx) ^ " was not found ")
 
-and eval_call loc i f args =
+(* unef: unevaluated function (to make the trace readable) *)
+and eval_call loc unef i f args =
   match f, args with
   (* return result of eval *)
   | _, [] -> f
@@ -315,8 +319,10 @@ and eval_call loc i f args =
        | (v::vs, Lambda ((_, x), e))
          (* "Uncurry" on the fly.  *)
          -> bindargs e vs (add_rte_variable (Some x) v ctx)
-       | ([], _) -> _eval e ctx i
-       | _ -> eval_call loc i (_eval e ctx i) vs in
+       | ([], _) ->
+        let trace = append_typer_trace i unef in
+        _eval e ctx trace
+       | _ -> eval_call loc unef i (_eval e ctx i) vs in
      bindargs e vs (add_rte_variable (Some x) v ctx)
 
   | Vbuiltin (name), args
@@ -326,8 +332,8 @@ and eval_call loc i f args =
              builtin loc i args        (* Fast common case.  *)
            else if nargs > arity then
              let rec split n vs acc = match (n, vs) with
-               | 0, _ -> let v = eval_call loc i f (List.rev acc) in
-                        eval_call loc i v vs
+               | 0, _ -> let v = eval_call loc unef i f (List.rev acc) in
+                        eval_call loc unef i v vs
                | _, (v::vs) -> split (n - 1) vs (v::acc)
                | _ -> error loc "Impossible!"
              in split nargs args []
@@ -417,10 +423,12 @@ and _eval_decls (decls: (vdef * elexp) list)
 (*              Builtin Implementation  (Some require eval)                   *)
 
 and bind_impl loc depth args_val =
+  let trace_dum = (Var ((loc, "<dummy>"), -1)) in
+
   match args_val with
   | [Vcommand (cmd); callback]
     -> (* bind returns another Vcommand *)
-     Vcommand (fun () -> eval_call loc depth callback [cmd ()])
+     Vcommand (fun () -> eval_call loc trace_dum depth callback [cmd ()])
   | _ -> error loc "Wrong number of args or wrong first arg value in `bind`"
 
 and run_io loc depth args_val =
@@ -503,7 +511,7 @@ and print_typer_trace trace =
       print_typer_trace' b
 
 and print_trace title trace default =
-  (* If no trace is provided take the most revent one *)
+  (* If no trace is provided take the most recent one *)
   let trace = match trace with
     | Some trace -> trace
     | None -> default in
