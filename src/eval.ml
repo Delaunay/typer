@@ -52,7 +52,15 @@ let dloc = dummy_location
 let _global_eval_trace = ref ([], [])
 let _global_eval_ctx = ref make_runtime_ctx
 let _eval_max_recursion_depth = ref 255
-let _builtin_lookup = ref SMap.empty
+
+let builtin_functions
+  = ref (SMap.empty : ((location -> eval_debug_info
+                        -> value_type list -> value_type)
+                       (* The primitive's arity.  *)
+                       * int) SMap.t)
+
+let add_builtin_function name f arity =
+  builtin_functions := SMap.add name (f, arity) (!builtin_functions)
 
 let append_eval_trace trace (expr : elexp) =
   let (a, b) = trace in
@@ -113,29 +121,22 @@ let elexp_fatal = debug_message fatal elexp_name elexp_string
 (*
  *                  Builtins
  *)
-let none_fun : (location -> eval_debug_info -> value_type list -> runtime_env -> value_type)
-    = (fun loc args_val ctx -> error loc "Requested Built-in was not implemented")
-
 (* Builtin of builtin * string * ltype *)
-let _generic_binary_iop name f loc (depth : eval_debug_info)
-          (args_val: value_type list) (ctx: runtime_env) =
+let add_binary_iop name f =
+  let name = "Int." ^ name in
+  let f loc (depth : eval_debug_info) (args_val: value_type list) =
+    match args_val with
+    | [Vint(v); Vint(w)] -> Vint (f v w)
+    | _ -> error loc ("`" ^ name ^ "` expects 2 Integers arguments") in
+  add_builtin_function name f 2
 
-   let l, r = match args_val with
-        | [l; r] -> l, r
-        | _ -> error loc (name ^ " expects 2 Integers arguments") in
 
-        match l, r with
-            | Vint(v), Vint(w) -> Vint(f v w)
-            | _ ->
-              debug_messages fatal loc (name ^ " expects Integers as arguments") [
-                "(" ^ name ^ " " ^ (value_string l) ^ " " ^ (value_string r) ^ ")";]
+let _ = add_binary_iop "+"  (+);
+        add_binary_iop "-"  (-);
+        add_binary_iop "*" ( * );
+        add_binary_iop "/"  (/)
 
-let iadd_impl  = _generic_binary_iop "Integer::add"  (fun a b -> a + b)
-let isub_impl  = _generic_binary_iop "Integer::sub"  (fun a b -> a - b)
-let imult_impl = _generic_binary_iop "Integer::mult" (fun a b -> a * b)
-let idiv_impl  = _generic_binary_iop "Integer::div"  (fun a b -> a / b)
-
-let make_symbol loc depth args_val ctx  =
+let make_symbol loc depth args_val  =
     (* symbol is a simple string *)
     let lxp = match args_val with
         | [r] -> r
@@ -145,7 +146,7 @@ let make_symbol loc depth args_val ctx  =
             | Vstring(str) -> Vsexp(Symbol(loc, str))
             | _ -> value_error loc lxp "symbol_ expects one string as argument"
 
-let make_node loc depth args_val ctx    =
+let make_node loc depth args_val    =
 
     let op, tlist = match args_val with
         | [Vsexp(op); lst] -> op, lst
@@ -162,12 +163,12 @@ let make_node loc depth args_val ctx    =
         | Vint (i)    -> Integer(dloc, i)
         | Vstring (s) -> String(dloc, s)
         | _ ->
-          print_rte_ctx ctx;
+          (* print_rte_ctx ctx; *)
           value_error loc g "node_ expects 'List Sexp' second as arguments") args in
 
         Vsexp(Node(op, s))
 
-let make_string loc depth args_val ctx  =
+let make_string loc depth args_val  =
     let lxp = match args_val with
         | [r] -> r
         | _ -> error loc "string_ expects 1 argument" in
@@ -176,7 +177,7 @@ let make_string loc depth args_val ctx  =
             | Vstring(str) -> Vsexp(String(loc, str))
             | _ -> value_error loc lxp "string_ expects one string as argument"
 
-let make_integer loc depth args_val ctx =
+let make_integer loc depth args_val =
     let lxp = match args_val with
         | [r] -> r
         | _ -> error loc "integer_ expects 1 argument" in
@@ -185,29 +186,29 @@ let make_integer loc depth args_val ctx =
             | Vint(str) -> Vsexp(Integer(loc, str))
             | _ -> value_error loc lxp "integer_ expects one string as argument"
 
-let make_float loc depth args_val ctx   = Vdummy
-let make_block loc depth args_val ctx   = Vdummy
+let make_float loc depth args_val   = Vdummy
+let make_block loc depth args_val   = Vdummy
 
 let ttrue = Vcons((dloc, "True"), [])
 let tfalse = Vcons((dloc, "False"), [])
 let btyper b = if b then ttrue else tfalse
 
-let string_eq loc depth args_val ctx =
+let string_eq loc depth args_val =
     match args_val with
         | [Vstring(s1); Vstring(s2)] -> btyper (s1 = s2)
         | _ -> error loc "string_eq expects 2 strings"
 
-let int_eq loc depth args_val ctx =
+let int_eq loc depth args_val =
     match args_val with
         | [Vint(s1); Vint(s2)] -> btyper (s1 = s2)
         | _ -> error loc "int_eq expects 2 integer"
 
-let sexp_eq loc depth args_val ctx =
+let sexp_eq loc depth args_val =
     match args_val with
     | [Vsexp (s1); Vsexp (s2)] -> btyper (sexp_equal s1 s2)
     | _ -> error loc "sexp_eq expects 2 sexp"
 
-let open_impl loc depth args_val ctx =
+let open_impl loc depth args_val =
 
   let file, mode = match args_val with
     | [Vstring(file_name); Vstring(mode)] -> file_name, mode
@@ -220,7 +221,7 @@ let open_impl loc depth args_val ctx =
         | "w" -> Vout(open_out file)
         | _ -> error loc "wrong open mode")
 
-let read_impl loc depth args_val ctx =
+let read_impl loc depth args_val =
 
   let channel = match args_val with
     | [Vin(c); _] -> c
@@ -231,7 +232,7 @@ let read_impl loc depth args_val ctx =
   let line = input_line channel in
     Vstring(line)
 
-let write_impl loc depth args_val ctx =
+let write_impl loc depth args_val =
 
   let channel, msg = match args_val with
     | [Vout(c); Vstring(msg)] -> c, msg
@@ -280,8 +281,12 @@ let rec _eval lxp (ctx : Env.runtime_env) (trace : eval_debug_info): (value_type
             eval inst nctx
 
         (* Function call *)
-        | Call (lname, args) ->
-            eval_call ctx (append_typer_trace trace lxp) lname args
+        | Call (f, args)
+          (* FIXME: Add the trace only once we enter the function?  *)
+          -> let ntrace = append_typer_trace trace lxp in
+            eval_call (elexp_location f) ntrace
+                      (_eval f ctx ntrace)
+                      (List.map (fun e -> _eval e ctx ntrace) args)
 
         (* Case *)
         | Case (loc, target, pat, dflt)
@@ -290,11 +295,6 @@ let rec _eval lxp (ctx : Env.runtime_env) (trace : eval_debug_info): (value_type
         | Type -> Vcons((tloc, "Unit"), [])
 
 
-and get_predef_eval name ctx =
-  let r = (get_rte_size ctx) - !builtin_size in
-  let v = mkSusp (get_predef_raw name) (S.shift r) in
-    _eval (OL.erase_type v) ctx ([], [])
-
 and eval_var ctx lxp v =
     let ((loc, name), idx) = v in
     try get_rte_variable (Some name) (idx) ctx
@@ -302,36 +302,56 @@ and eval_var ctx lxp v =
       elexp_fatal loc lxp
         ("Variable: " ^ name ^ (str_idx idx) ^ " was not found ")
 
-and eval_call ctx i lname eargs =
-    let loc = elexp_location lname in
-    let f = _eval lname ctx i in
+and eval_call loc i f args =
+  match f, args with
+  (* return result of eval *)
+  | _, [] -> f
 
-    (* standard function *)
-    let rec eval_call f args ctx =
-      match f, args with
-        | Vcons (n, []), _ ->
-          let e = Vcons(n, args) in
-            (* value_print e; print_string "\n"; *) e
+  | Vcons (n, fields), _
+    -> Vcons (n, List.append fields args)
 
-        (* we add an argument to the closure *)
-        | Closure (n, lxp, ctx), hd::tl ->
-            let nctx = add_rte_variable (Some n) hd ctx in
-            let ret = _eval lxp nctx i in
-                eval_call ret tl nctx
+  | Closure (x, e, ctx), v::vs
+    -> let rec bindargs e vs ctx = match (vs, e) with
+       | (v::vs, Lambda ((_, x), e))
+         (* "Uncurry" on the fly.  *)
+         -> bindargs e vs (add_rte_variable (Some x) v ctx)
+       | ([], _) -> _eval e ctx i
+       | _ -> eval_call loc i (_eval e ctx i) vs in
+     bindargs e vs (add_rte_variable (Some x) v ctx)
 
-        | Vbuiltin (str), args ->
-            (* lookup the built-in implementation and call it *)
-            (get_builtin_impl str loc) loc i args ctx
+  | Vbuiltin (name), args
+    -> (try let (builtin, arity) = SMap.find name !builtin_functions in
+           let nargs = List.length args in
+           if nargs = arity then
+             builtin loc i args        (* Fast common case.  *)
+           else if nargs > arity then
+             let rec split n vs acc = match (n, vs) with
+               | 0, _ -> let v = eval_call loc i f (List.rev acc) in
+                        eval_call loc i v vs
+               | _, (v::vs) -> split (n - 1) vs (v::acc)
+               | _ -> error loc "Impossible!"
+             in split nargs args []
+           else
+             let rec buildctx args ctx = match args with
+               | [] -> ctx
+               | arg::args -> buildctx args (add_rte_variable None arg ctx) in
+             let rec buildargs n =
+               if n >= 0
+               then (Var ((loc, "<dummy>"), n))::buildargs (n - 1)
+               else [] in
+             let rec buildbody n =
+               if n > 0 then
+                 Lambda ((loc, "<dummy>"), buildbody (n - 1))
+               else Call (Builtin (dloc, name), buildargs (arity - 1)) in
+             Closure ("<dummy>",
+                      buildbody (arity - nargs - 1),
+                      buildctx args Myers.nil)
 
-        (* return result of eval *)
-        | _, [] -> f
+       with Not_found ->
+            error loc ("Requested Built-in `" ^ name ^ "` does not exist")
+          | e -> error loc ("Exception thrown from primitive `" ^ name ^"`"))
 
-        | _ ->
-          value_fatal loc f "Cannot eval function" in
-
-    (* eval function here *)
-    let args = List.map (fun e -> _eval e ctx i) eargs in
-      eval_call f args ctx
+  | _ -> value_fatal loc f "Trying to call a non-function!"
 
 and eval_case ctx i loc target pat dflt =
     (* Eval target *)
@@ -396,55 +416,14 @@ and _eval_decls (decls: (vdef * elexp) list)
 (* -------------------------------------------------------------------------- *)
 (*              Builtin Implementation  (Some require eval)                   *)
 
-and typer_builtins_impl = [
-    ("_+_"           , iadd_impl);
-    ("_*_"           , imult_impl);
-    ("block_"        , make_block);
-    ("symbol_"       , make_symbol);
-    ("string_"       , make_string);
-    ("integer_"      , make_integer);
-    ("float_"        , make_float);
-    ("node_"         , make_node);
-    ("sexp_dispatch_", sexp_dispatch);
-    ("string_eq"     , string_eq);
-    ("int_eq"        , int_eq);
-    ("sexp_eq"       , sexp_eq);
-    ("eval_"         , typer_eval);
-    ("open"          , open_impl);
-    ("bind"          , bind_impl);
-    ("run-io"        , run_io);
-    ("read"          , read_impl);
-    ("write"         , write_impl);
-]
+and bind_impl loc depth args_val =
+  match args_val with
+  | [Vcommand (cmd); callback]
+    -> (* bind returns another Vcommand *)
+     Vcommand (fun () -> eval_call loc depth callback [cmd ()])
+  | _ -> error loc "Wrong number of args or wrong first arg value in `bind`"
 
-and bind_impl loc depth args_val ctx =
-
-  let io, cb = match args_val with
-    | [io; callback] -> io, callback
-    | _ -> error loc "bind expects two arguments" in
-
-  (* build Vcommand from io function *)
-  let cmd = match io with
-    | Vcommand (cmd) -> cmd
-    | _ -> error loc "bind first arguments must be a monad" in
-
-  (* bind returns another Vcommand *)
-  Vcommand (fun () ->
-    (* get callback *)
-    let body, ctx = match cb with
-      | Closure(_, body, ctx) -> body, ctx
-      | _ -> error loc "A Closure was expected" in
-
-    (* run given command *)
-    let underlying = cmd () in
-
-    (* add evaluated IO to arg list *)
-    let nctx = add_rte_variable None underlying ctx in
-
-    (* eval callback *)
-    _eval body nctx depth)
-
-and run_io loc depth args_val ctx =
+and run_io loc depth args_val =
 
   let io, ltp = match args_val with
     | [io; ltp] -> io, ltp
@@ -460,33 +439,10 @@ and run_io loc depth args_val ctx =
   (* return given type *)
     ltp
 
-and typer_eval loc depth args ctx =
-    let arg = match args with
-        | [a] -> a
-        | _ -> error loc "eval_ expects a single argument" in
-    (* I need to be able to lexp sexp but I don't have lexp ctx *)
-    match arg with
-        (* Nodes that can be evaluated *)
-        | Closure (_, body, ctx) -> _eval body ctx depth
-        (* Leaf *)
-        | _ -> arg
-
-and get_builtin_impl str loc =
-    (* Make built-in lookup table *)
-    (match (SMap.is_empty !_builtin_lookup) with
-        | true ->
-            _builtin_lookup := (List.fold_left (fun lkup (name, f) ->
-                SMap.add name f lkup) SMap.empty typer_builtins_impl)
-        | _ -> ());
-
-    try SMap.find str !_builtin_lookup
-    with Not_found ->
-        error loc ("Requested Built-in \"" ^ str ^ "\" does not exist")
-
 (* Sexp -> (Sexp -> List Sexp -> Sexp) -> (String -> Sexp) ->
     (String -> Sexp) -> (Int -> Sexp) -> (Float -> Sexp) -> (List Sexp -> Sexp)
         ->  Sexp *)
-and sexp_dispatch loc depth args ctx =
+and sexp_dispatch loc depth args =
     let eval a b = _eval a b depth in
     let sxp, nd, sym, str, it, flt, blk, rctx = match args with
         | [sxp; Closure(_, nd, rctx); Closure(_, sym, _);
@@ -578,6 +534,25 @@ and print_trace title trace default =
 and print_eval_trace trace =
     let (a, b) = !_global_eval_trace in
       print_trace " EVAL TRACE " trace a
+
+let _ = List.iter (fun (name, f, arity) -> add_builtin_function name f arity)
+                  [
+                    ("block_"        , make_block, 1);
+                    ("symbol_"       , make_symbol, 1);
+                    ("string_"       , make_string, 1);
+                    ("integer_"      , make_integer, 1);
+                    ("float_"        , make_float, 1);
+                    ("node_"         , make_node, 2);
+                    ("sexp_dispatch_", sexp_dispatch, 7);
+                    ("string_eq"     , string_eq, 2);
+                    ("int_eq"        , int_eq, 2);
+                    ("sexp_eq"       , sexp_eq, 2);
+                    ("open"          , open_impl, 2);
+                    ("bind"          , bind_impl, 2);
+                    ("run-io"        , run_io, 2);
+                    ("read"          , read_impl, 2);
+                    ("write"         , write_impl, 2);
+                  ]
 
 let eval lxp ctx = _eval lxp ctx ([], [])
 

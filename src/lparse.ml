@@ -44,7 +44,7 @@ open Lexp
 open Env
 open Debruijn
 module DB = Debruijn
-open Eval
+module EV = Eval
 
 open Grammar
 module BI = Builtin
@@ -74,7 +74,7 @@ let fatal = msg_fatal "LPARSE"
 
 (* Print Lexp name followed by the lexp in itself, finally throw an exception *)
 let debug_message error_type type_name type_string loc expr message =
-  debug_messages error_type loc
+  EV.debug_messages error_type loc
     message [
       (type_name expr) ^ ": " ^ (type_string expr);
     ]
@@ -165,7 +165,7 @@ let elab_check_def (ctx : elab_context) var lxp ltype =
   then
     elab_check_proper_type ctx ltype (Some var)
   else
-    (debug_messages fatal loc "Type check error: ¡¡ctx_define error!!" [
+    (EV.debug_messages fatal loc "Type check error: ¡¡ctx_define error!!" [
       lexp_string lxp ^ " !: " ^ lexp_string ltype;
       "                    because";
       lexp_string ltype' ^ " != " ^ lexp_string ltype])
@@ -868,11 +868,11 @@ and lexp_expand_macro_ macro_funct sargs ctx expand_fun : value_type =
 
   let macro = mkCall (macro_expand, args) in
   let emacro = OL.erase_type macro in
-  let rctx = from_lctx ctx in
+  let rctx = EV.from_lctx ctx in
 
   (* eval macro *)
-  let vxp = try _eval emacro rctx ([], [])
-    with e -> print_eval_trace None; raise e in
+  let vxp = try EV._eval emacro rctx ([], [])
+    with e -> EV.print_eval_trace None; raise e in
     (* Return results *)
     (* Vint/Vstring/Vfloat might need to be converted to sexp *)
       vxp
@@ -1089,6 +1089,8 @@ let sform_built_in ctx loc sargs =
       let meta_ctx, _ = !global_substitution in
       let ltp' = OL.lexp_close meta_ctx (ectx_to_lctx ctx) ltp in
       let bi = mkBuiltin ((loc, name), ltp', None) in
+      if not (SMap.mem name (!EV.builtin_functions)) then
+        sexp_error loc ("Unknown built-in `" ^ name ^ "`");
       BI.add_builtin_cst name bi;
       bi
 
@@ -1175,7 +1177,7 @@ let default_lctx =
         lctx in
       lctx
 
-let default_rctx = from_lctx default_lctx
+let default_rctx = EV.from_lctx default_lctx
 
 (*      String Parsing
  * --------------------------------------------------------- *)
@@ -1211,12 +1213,12 @@ let lexp_decl_str str lctx =
 let _eval_expr_str str lctx rctx silent =
     let lxps = lexp_expr_str str lctx in
     let elxps = List.map OL.erase_type lxps in
-        (eval_all elxps rctx silent)
+        (EV.eval_all elxps rctx silent)
 
 let eval_expr_str str lctx rctx = _eval_expr_str str lctx rctx false
 
 let eval_decl_str str lctx rctx =
     let lxps, lctx = lexp_decl_str str lctx in
     let elxps = (List.map OL.clean_decls lxps) in
-        (eval_decls_toplevel elxps rctx), lctx
+        (EV.eval_decls_toplevel elxps rctx), lctx
 

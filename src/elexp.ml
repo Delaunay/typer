@@ -118,7 +118,7 @@ and elexp_string lxp =
     match lxp with
         | Imm(s)          -> sexp_string s
         | Builtin((_, s)) -> s
-        | Var((_, s), _)  -> s
+        | Var((_, s), i)  -> s ^ "[" ^ string_of_int i ^ "]"
         | Cons((_, s))    -> s
 
         | Lambda((_, s), b)  -> "lambda " ^ s ^ " -> " ^ (elexp_string b)
