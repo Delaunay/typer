@@ -355,6 +355,17 @@ let _ = test_eval_eqv_named
 
   "3; 3"
 
+let _ = test_eval_eqv_named
+  "Equalities"
+
+  "f : (α : Type) ≡> (p : Eq (t := Type) Int α) -> Int -> α;
+   f = lambda α ≡> lambda p x ->
+       Eq_cast (t := Type) (x := Int) (y := α) (f := (lambda v -> v)) (p := p) x"
+
+  (* FIXME: If I remove the (l := ?) I get
+   *     Explicit actual args `t, x` have no matching formal args  *)
+  "f (Eq_refl (l := ?) (t := Type) (x := Int)) 3"
+  "3"
 
 (* run all tests *)
 let _ = run_all ()

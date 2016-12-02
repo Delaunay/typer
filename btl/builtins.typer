@@ -42,6 +42,27 @@ unit    = datacons Unit unit;
 % The empty type, with no constructors: nothing can have this type.
 Void = inductive_ Void;
 
+% Eq : (l : TypeLevel) ≡> (t : Type_ l) ≡> t -> t -> Type_ l
+% Eq' : (l : TypeLevel) ≡> Type_ l -> Type_ l -> Type_ l
+Eq_refl = Built-in "Eq.refl"
+                   ((l : TypeLevel) ≡> (t : Type_ l) ≡> (x : t)
+                    ≡> Eq (t := t) x x);
+
+Eq_cast = Built-in "Eq.cast"
+                   ((l1 : TypeLevel) ≡> (t : Type_ l1) ≡> (x : t) ≡> (y : t)
+                    ≡> (p : Eq (t := t) x y)
+                    ≡> (l2 : TypeLevel) ≡> (f : t -> Type_ l2)
+                    ≡> f x -> f y);
+
+%% Commutativity of equality!
+Eq_comm : (l : TypeLevel) ≡> (t : Type_ l) ≡> (x : t) ≡> (y : t)
+          ≡> (p : Eq (t := t) x y) -> Eq (t := t) y x;
+Eq_comm = lambda l t x y ≡> lambda p ->
+          Eq_cast (f := lambda xy -> Eq (t := t) xy x)
+                  (p := p)
+                  %% FIXME: Removing (l := l) gives bogus error!
+                  (Eq_refl (l := l) (t := t) (x := x));
+
 % Basic operators
 _+_ = Built-in "Int.+" (Int -> Int -> Int);
 _-_ = Built-in "Int.-" (Int -> Int -> Int);

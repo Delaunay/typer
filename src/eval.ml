@@ -545,24 +545,33 @@ and print_eval_trace trace =
     let (a, b) = !_global_eval_trace in
       print_trace " EVAL TRACE " trace a
 
-let _ = List.iter (fun (name, f, arity) -> add_builtin_function name f arity)
-                  [
-                    ("block_"        , make_block, 1);
-                    ("symbol_"       , make_symbol, 1);
-                    ("string_"       , make_string, 1);
-                    ("integer_"      , make_integer, 1);
-                    ("float_"        , make_float, 1);
-                    ("node_"         , make_node, 2);
-                    ("sexp_dispatch_", sexp_dispatch, 7);
-                    ("string_eq"     , string_eq, 2);
-                    ("int_eq"        , int_eq, 2);
-                    ("sexp_eq"       , sexp_eq, 2);
-                    ("open"          , open_impl, 2);
-                    ("bind"          , bind_impl, 2);
-                    ("run-io"        , run_io, 2);
-                    ("read"          , read_impl, 2);
-                    ("write"         , write_impl, 2);
-                  ]
+let arity0_fun loc _ _ = error loc "Called a 0-arity function!?"
+let nop_fun loc _ vs = match vs with
+  | [v] -> v
+  | _ -> error loc "Wrong number of argument to nop"
+
+let register_built_functions () =
+  List.iter (fun (name, f, arity) -> add_builtin_function name f arity)
+            [
+              ("block_"        , make_block, 1);
+              ("symbol_"       , make_symbol, 1);
+              ("string_"       , make_string, 1);
+              ("integer_"      , make_integer, 1);
+              ("float_"        , make_float, 1);
+              ("node_"         , make_node, 2);
+              ("sexp_dispatch_", sexp_dispatch, 7);
+              ("string_eq"     , string_eq, 2);
+              ("int_eq"        , int_eq, 2);
+              ("sexp_eq"       , sexp_eq, 2);
+              ("open"          , open_impl, 2);
+              ("bind"          , bind_impl, 2);
+              ("run-io"        , run_io, 2);
+              ("read"          , read_impl, 2);
+              ("write"         , write_impl, 2);
+              ("Eq.refl"       , arity0_fun, 0);
+              ("Eq.cast"       , nop_fun, 1);
+            ]
+let _ = register_built_functions ()
 
 let eval lxp ctx = _eval lxp ctx ([], [])
 

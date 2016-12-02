@@ -99,17 +99,18 @@ let dloc    = DB.dloc
 let op_binary t = mkArrow (Aexplicit, None, t, dloc,
                            mkArrow (Aexplicit, None, t, dloc, t))
 
-let type_eq = let lv = (dloc, "l") in
-   let tv = (dloc, "t") in
-   mkArrow (Aerasable, Some lv,
-            DB.type_level, dloc,
-            mkArrow (Aerasable, Some tv,
-                     mkSort (dloc, Stype (Var (lv, 0))), dloc,
-                     mkArrow (Aexplicit, None, Var (tv, 0), dloc,
-                              mkArrow (Aexplicit, None,
-                                       mkVar (tv, 1), dloc,
-                                       DB.type0))))
-
+let type_eq =
+  let lv = (dloc, "l") in
+  let tv = (dloc, "t") in
+  mkArrow (Aerasable, Some lv,
+           DB.type_level, dloc,
+           mkArrow (Aerasable, Some tv,
+                    mkSort (dloc, Stype (Var (lv, 0))), dloc,
+                    mkArrow (Aexplicit, None,
+                             Var (tv, 0), dloc,
+                             mkArrow (Aexplicit, None,
+                                      mkVar (tv, 1), dloc,
+                                      mkSort (dloc, Stype (Var (lv, 3)))))))
 
 let o2l_bool ctx b = get_predef (if b then "true" else "false") ctx
 
@@ -158,7 +159,7 @@ let new_builtin_type name kind =
   add_builtin_cst name t;
   t
 
-let builtins =
+let register_builtin_csts () =
   add_builtin_cst "TypeLevel" DB.type_level;
   add_builtin_cst "TypeLevel.z" DB.level0;
   add_builtin_cst "Type" DB.type0;
@@ -167,7 +168,13 @@ let builtins =
   add_builtin_cst "Float" DB.type_float;
   add_builtin_cst "String" DB.type_string
 
-let _ = new_builtin_type "Sexp" DB.type0
-let _ = new_builtin_type
-          "IO" (mkArrow (Aexplicit, None, DB.type0, dloc, DB.type0))
-let _ = new_builtin_type "FileHandle" DB.type0
+let register_builtin_types () =
+  let _ = new_builtin_type "Sexp" DB.type0 in
+  let _ = new_builtin_type
+            "IO" (mkArrow (Aexplicit, None, DB.type0, dloc, DB.type0)) in
+  let _ = new_builtin_type "FileHandle" DB.type0 in
+  let _ = new_builtin_type "Eq" type_eq in
+  ()
+
+let _ = register_builtin_csts ();
+        register_builtin_types ()
