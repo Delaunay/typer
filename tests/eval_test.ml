@@ -231,11 +231,11 @@ let _ = test_eval_eqv_named
    add = lambda x y -> (x + y);
 
    inc1 = add 1;
-   inc2 = _+_ 2;"
+   inc2 = _-_ 5;"
 
   "inc1 1; inc2 2; inc1 3;"
 
-  "2; 4; 4"
+  "2; 3; 4"
 
 (*
  *  Lists

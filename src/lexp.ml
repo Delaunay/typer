@@ -114,6 +114,7 @@ type ltype = lexp
  and sort_level =
    | SLz
    | SLsucc of lexp
+   | SLlub of lexp * lexp
 
 type varbind =
   | Variable
@@ -184,6 +185,7 @@ let rec lexp_location e =
   match e with
   | Sort (l,_) -> l
   | SortLevel (SLsucc e) -> lexp_location e
+  | SortLevel (SLlub (e, _)) -> lexp_location e
   | SortLevel SLz -> U.dummy_location
   | Imm s -> sexp_location s
   | Var ((l,_),_) -> l
@@ -210,6 +212,7 @@ let rec push_susp e s =            (* Push a suspension one level down.  *)
   | Imm _ -> e
   | SortLevel (SLz) -> e
   | SortLevel (SLsucc e') -> mkSortLevel (SLsucc (mkSusp e' s))
+  | SortLevel (SLlub (e1, e2)) -> mkSortLevel (SLlub (mkSusp e1 s, mkSusp e2 s))
   | Sort (l, Stype e) -> mkSort (l, Stype (mkSusp e s))
   | Sort (l, _) -> e
   | Builtin _ -> e
@@ -275,6 +278,7 @@ let clean meta_ctx e =
     | Imm _ -> e
     | SortLevel (SLz) -> e
     | SortLevel (SLsucc e) -> mkSortLevel (SLsucc (clean s e))
+    | SortLevel (SLlub (e1, e2)) -> mkSortLevel (SLlub (clean s e1, clean s e2))
     | Sort (l, Stype e) -> mkSort (l, Stype (clean s e))
     | Sort (l, _) -> e
     | Builtin _ -> e
@@ -423,6 +427,9 @@ let rec lexp_unparse lxp =
     | SortLevel (SLsucc l)
       -> Pcall (Pbuiltin (lexp_location l, "TypeLevel.succ"),
                [pexp_unparse (lexp_unparse l)])
+    | SortLevel (SLlub (l1, l2))
+      -> Pcall (Pbuiltin (lexp_location l1, "TypeLevel.∪"),
+               [pexp_unparse (lexp_unparse l1); pexp_unparse (lexp_unparse l2)])
     | Sort (l, StypeOmega) -> Pbuiltin (l, "Type_ω")
     | Sort (l, StypeLevel) -> Pbuiltin (l, "Type_ℓ")
     | Sort (l, Stype sl)
@@ -665,6 +672,8 @@ and _lexp_to_str ctx exp =
 
         | SortLevel (SLz) -> "##TypeLevel.z"
         | SortLevel (SLsucc e) -> "(##TypeLevel.succ " ^ lexp_string e ^ ")"
+        | SortLevel (SLlub (e1, e2))
+          -> "(##TypeLevel.∪ " ^ lexp_string e1 ^ " " ^ lexp_string e1 ^ ")"
 
 and lexp_str_ctor ctx ctors =
   SMap.fold (fun key value str
@@ -707,6 +716,8 @@ let rec eq meta_ctx e1 e2 =
     | (Imm s1, Imm s2) -> s1 = s2
     | (SortLevel SLz, SortLevel SLz) -> true
     | (SortLevel (SLsucc e1), SortLevel (SLsucc e2)) -> eq e1 e2
+    | (SortLevel (SLlub (e11, e21)), SortLevel (SLlub (e12, e22)))
+      -> eq e11 e12 && eq e21 e22
     | (Sort (_, StypeOmega), Sort (_, StypeOmega)) -> true
     | (Sort (_, StypeLevel), Sort (_, StypeLevel)) -> true
     | (Sort (_, Stype e1), Sort (_, Stype e2)) -> eq e1 e2

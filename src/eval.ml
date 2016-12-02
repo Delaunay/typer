@@ -588,6 +588,7 @@ let eval_all lxps rctx silent =
 let varname s = match s with Some (_, v) -> v | _ -> "<anon>"
 
 (* build a rctx from a lctx.  *)
+(* FIXME: `eval` with a disabled runIO, and then memoize, memoize, ...  *)
 let from_lctx (ctx: elab_context): runtime_env =
     let (_, lctx) = ctx in
     let rctx : runtime_env
