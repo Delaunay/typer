@@ -49,15 +49,15 @@ m = lambda n -> n;
 %     > Root:
 
 idt = inductive_ (idt) (cons1) (cons2 Int);
-cons1 = inductive-cons idt cons1;
-cons2 = inductive-cons idt cons2;
-cons3 = inductive-cons idt cons3;
+cons1 = datacons idt cons1;
+cons2 = datacons idt cons2;
+cons3 = datacons idt cons3;
 
 % [!] Error     [Ln  32, cl  28] LPARSE   Not an Inductive Type
 %     > Builtin: Int
 %     > Root:
 
-cons4 = inductive-cons Int cons3;
+cons4 = datacons Int cons3;
 
 % /!\ Warning   [Ln  70, cl  17] LPARSE   Pattern cons2 is a duplicate. It will override previous pattern.
 
@@ -95,8 +95,8 @@ fun2 n = case n
 % [!] Error     [Ln  86, cl   1] LPARSE   Variable `fun4` declared but not defined!
 
 % idtb = inductive_ (idtb) (cons1b) (cons2b Int);
-% cons1b = inductive-cons idtb cons1b;
-% cons2b = inductive-cons idtb cons2b;
+% cons1b = datacons idtb cons1b;
+% cons2b = datacons idtb cons2b;
 
 % fun4 : idt -> Int;
 % fun4 n = case n

@@ -36,7 +36,7 @@
 % -----------------------------------------------------
 
 Unit    = inductive_ Unit unit;
-unit    = inductive-cons Unit unit;
+unit    = datacons Unit unit;
 
 % Basic operators
 _+_ = Built-in "Int.+" (Int -> Int -> Int);
@@ -45,13 +45,13 @@ _*_ = Built-in "Int.*" (Int -> Int -> Int);
 _/_ = Built-in "Int./" (Int -> Int -> Int);
 
 Bool = inductive_ (Boolean) (True) (False);
-True = inductive-cons Bool True;
-False = inductive-cons Bool False;
+True = datacons Bool True;
+False = datacons Bool False;
 
 %Option : Type -> Type;
 Option = inductive_ (Option (a : Type)) (None) (Some a);
-Some = inductive-cons Option Some;
-None = inductive-cons Option None;
+Some = datacons Option Some;
+None = datacons Option None;
 
 string_eq = Built-in "string_eq" (String -> String -> Bool);
 int_eq    = Built-in    "int_eq" (Int -> Int -> Bool);
@@ -64,8 +64,8 @@ sexp_eq   = Built-in   "sexp_eq" (Sexp -> Sexp -> Bool);
 List : Type -> Type;
 List = inductive_ (List (a : Type)) (nil) (cons a (List a));
 
-nil = inductive-cons List nil;
-cons = inductive-cons List cons;
+nil = datacons List nil;
+cons = datacons List cons;
 
 length : (a : Type) ≡> List a -> Int;
 length = lambda a ≡>
@@ -109,8 +109,8 @@ Macro  = inductive_ (Macro)
   (Macro_ (List Sexp -> Sexp))
   (DMacro_ (List Sexp -> List Sexp));
 
-Macro_ = inductive-cons Macro Macro_ ;
-DMacro_ = inductive-cons Macro DMacro_ ;
+Macro_ = datacons Macro Macro_ ;
+DMacro_ = datacons Macro DMacro_ ;
 
 expand_macro_ : Macro -> List Sexp -> Sexp;
 expand_macro_ m args = case m

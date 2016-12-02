@@ -28,8 +28,8 @@ a = 3;
 
 Nat : Type
 Nat = inductive_ (dummy_Nat) (zero) (succ Nat);
-zero = inductive-cons Nat zero;
-succ = inductive-cons Nat succ;
+zero = datacons Nat zero;
+succ = datacons Nat succ;
 toZero = lambda z ->
              case z
              | zero => zero
@@ -53,8 +53,8 @@ plus = lambda x y ->
 List = inductive (dummy_List (α : Type))
                  (nil)
                  (cons α (List α));
-nil = inductive-cons List nil;
-cons = inductive-cons List cons;
+nil = datacons List nil;
+cons = datacons List cons;
 length : (α : Type) ≡> List α -> Nat;
 length = lambda α ≡> lambda (xs : List α) ->
                          case xs
@@ -70,7 +70,7 @@ length = lambda α ≡> lambda (xs : List α) ->
 
 False = inductive (dummy_False);
 Unit = inductive (dummy_Unit) (unit);
-unit = inductive-cons Unit unit;
+unit = datacons Unit unit;
 Bool = inductive (dummy_Bool) (true) (false);
-false = inductive-cons Bool false;
-true = inductive-cons Bool true;
+false = datacons Bool false;
+true = datacons Bool true;

@@ -339,7 +339,7 @@ let lexp_name e =
     | Arrow  _ -> "Arrow"
     | Lambda _ -> "lambda"
     | Call   _ -> "Call"
-    | Cons   _ -> "inductive-cons"
+    | Cons   _ -> "datacons"
     | Case   _ -> "case"
     | Inductive _ -> "inductive_"
     | Susp      _ -> "Susp"
@@ -349,6 +349,8 @@ let lexp_name e =
     | Sort      _ -> "Sort"
     | SortLevel _ -> "SortLevel"
 
+let pdatacons = Pbuiltin (U.dummy_location, "datacons")
+
 (* ugly printing (sexp_print (pexp_unparse (lexp_unparse e))) *)
 let rec lexp_unparse lxp =
   match lxp with
@@ -356,7 +358,8 @@ let rec lexp_unparse lxp =
     | Imm (sexp) -> Pimm (sexp)
     | Builtin (s, _, _) -> Pbuiltin s
     | Var ((loc, name), _) -> Pvar((loc, name))
-    | Cons (t, ctor) -> Pcons (lexp_unparse t, ctor)
+    | Cons (t, (l, name))
+      -> Pcall (pdatacons, [pexp_unparse (lexp_unparse t); Symbol (l, name)])
     | Lambda (kind, vdef, ltp, body) ->
       Plambda(kind, vdef, Some (lexp_unparse ltp), lexp_unparse body)
     | Arrow (arg_kind, vdef, ltp1, loc, ltp2) ->
@@ -407,7 +410,10 @@ let rec lexp_unparse lxp =
                           args
             (* FIXME: Rather than a Pcons we'd like to refer to an existing
              * binding with that value!  *)
-            in Ppatcons (Pcons (bt, (loc, str)), pat_args), lexp_unparse bch
+             in (Ppatcons (Pcall (pdatacons,
+                                  [pexp_unparse bt; Symbol (loc, str)]),
+                           pat_args),
+                 lexp_unparse bch)
         ) (SMap.bindings branches) in
 
       let pbranch = match default with
@@ -583,7 +589,7 @@ and _lexp_to_str ctx exp =
                 (make_indent 1) ^ (lexp_to_stri 1 lbody)
 
         | Cons(t, (_, ctor_name)) ->
-            (keyword "inductive-cons ") ^ (lexp_to_str t) ^ " " ^ ctor_name
+            (keyword "datacons ") ^ (lexp_to_str t) ^ " " ^ ctor_name
 
         | Call(fname, args) -> (
             (*  get function name *)

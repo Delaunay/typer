@@ -6,12 +6,12 @@ make-decl var-name value-expr =
     (cons (a := Sexp) var-name
       (cons (a := Sexp) value-expr (nil (a := Sexp))));
 
-% build inductive-cons
-% ctor-name = inductive-cons type-name ctor-name;
+% build datacons
+% ctor-name = datacons type-name ctor-name;
 make-cons : Sexp -> Sexp -> Sexp;
 make-cons ctor-name type-name =
   make-decl ctor-name
-    (node_ (symbol_ "inductive-cons")
+    (node_ (symbol_ "datacons")
       (cons (a := Sexp) type-name
         (cons (a := Sexp) ctor-name (nil (a := Sexp)))));
 
@@ -117,5 +117,5 @@ get-y p = case p | point x y => y;
 % transformed to:
 % Nat : Type;
 % Nat = inductive_ (Nat) (succ Nat) (zero);
-% zero = inductive-cons Nat zero;
-% succ = inductive-cons Nat succ;
+% zero = datacons Nat zero;
+% succ = datacons Nat succ;

@@ -47,12 +47,12 @@ Sym = inductive_ (dSym)
     (inv Sym)
     (neg Sym);
 
-constant    = inductive-cons Sym constant;
-placeholder = inductive-cons Sym placeholder;
-add         = inductive-cons Sym add;
-mult        = inductive-cons Sym mult;
-inv         = inductive-cons Sym inv;
-neg         = inductive-cons Sym neg;
+constant    = datacons Sym constant;
+placeholder = datacons Sym placeholder;
+add         = datacons Sym add;
+mult        = datacons Sym mult;
+inv         = datacons Sym inv;
+neg         = datacons Sym neg;
 
 div : Sym -> Sym -> Sym;
 div = lambda (up : Sym) ->

@@ -335,50 +335,6 @@ let rec infer (p : pexp) (ctx : elab_context): lexp * ltype =
 
     | Pcall (fname, args) -> infer_call fname args ctx
 
-    | Pcons(t, sym)
-      -> let idt, _ = infer t ctx in
-        let (loc, cname) = sym in
-        let meta_ctx, _ = !global_substitution in
-
-        (* Get constructor args.  *)
-        let formal, args = match OL.lexp_whnf idt
-                                              (ectx_to_lctx ctx) meta_ctx with
-          | Inductive(_, _, formal, ctor_def) as lxp
-            -> (try formal, (SMap.find cname ctor_def)
-               with Not_found ->
-                 lexp_error loc lxp
-                            ("Constructor \"" ^ cname ^ "\" does not exist");
-                 [], [])
-
-          | lxp -> lexp_error loc lxp ("`" ^ lexp_string idt
-                                      ^ "` is not an inductive type");
-                  [], [] in
-
-        (* Build Arrow type.  *)
-        let target = let targs, _
-                       = List.fold_right
-                           (fun (ak, v, _) (targs, i)
-                            -> ((ak, Var (v, i)) :: targs,
-                               i - 1))
-                           formal
-                           ([], List.length formal + List.length args - 1) in
-                     mkCall (push_susp idt (S.shift (List.length formal
-                                                     + List.length args)),
-                             targs) in
-        let cons_type
-          = List.fold_left (fun ltp (kind, v, tp)
-                            -> mkArrow (kind, v, tp, loc, ltp))
-                           target
-                           (List.rev args) in
-
-        (* Add Aerasable arguments.  *)
-        let cons_type = List.fold_left
-                          (fun ltp (kind, v, tp)
-                           -> mkArrow (Aerasable, Some v, tp, loc, ltp))
-                          cons_type (List.rev formal) in
-
-        mkCons(idt, sym), cons_type
-
     | Phastype (_, pxp, ptp)
       -> let ltp = infer_type ptp ctx None in
         (check pxp ltp ctx, ltp)
@@ -1102,6 +1058,30 @@ let sform_built_in ctx loc sargs =
   | false, _ -> error loc "Use of `Built-in` in user code";
                dlxp
 
+let sform_datacons ctx loc sargs =
+  match sargs with
+  | [t; Symbol ((sloc, cname) as sym)]
+    -> let pt = pexp_parse t in
+      let idt, _ = infer pt ctx in
+      mkCons(idt, sym)
+
+  | [_;_] -> sexp_error loc "Second arg of ##constr should be a symbol";
+            dlxp
+  | _ -> sexp_error loc "##constr requires two arguments";
+        dlxp
+
+(* Actually `Type_` could also be defined as a plain constant
+ *     Lambda("l", TypeLevel, Sort (Stype (Var "l")))
+ * But it would be less efficient (such a lambda can't be passed as argument
+ * so it really can only be used applied to something, so it always generates
+ * β-redexes.  Furthermore, I'm not sure if my PTS definition is correct to
+ * allow such a lambda.  *)
+let sform_type ctx loc sargs =
+  match sargs with
+  | [l] -> let l = pexp_parse l in
+          let l, _ = infer l ctx in
+          mkSort (loc, Stype l)
+  | _ -> sexp_error loc "##Type_ expects one argument"; dlxp
 
 (*  Only print var info *)
 and lexp_print_var_info ctx =
@@ -1122,62 +1102,72 @@ and lexp_print_var_info ctx =
     done
 
 (* Register special forms.  *)
-let _ = List.iter add_special_form
-                  [
-                    ("Built-in",      sform_built_in);
-                    (* FIXME: We should add here `let_in_`, `case_`, etc...  *)
-                    ("get-attribute", sform_get_attribute);
-                    ("new-attribute", sform_new_attribute);
-                    ("has-attribute", sform_has_attribute);
-                    ("add-attribute", sform_add_attribute);
-                    (* FIXME: These should be functions!  *)
-                    ("decltype",      sform_decltype);
-                    ("declexpr",      sform_declexpr);
-                  ]
+let register_special_forms () =
+  List.iter add_special_form
+            [
+              ("Built-in",      sform_built_in);
+              ("datacons",      sform_datacons);
+              ("Type_",         sform_type);
+              (* FIXME: We should add here `let_in_`, `case_`, etc...  *)
+              ("get-attribute", sform_get_attribute);
+              ("new-attribute", sform_new_attribute);
+              ("has-attribute", sform_has_attribute);
+              ("add-attribute", sform_add_attribute);
+              (* FIXME: These should be functions!  *)
+              ("decltype",      sform_decltype);
+              ("declexpr",      sform_declexpr);
+            ]
 
 (*      Default context with builtin types
  * --------------------------------------------------------- *)
 
+let dynamic_bind r v body =
+  let old = !r in
+  try r := v;
+      let res = body () in
+      r := old;
+      res
+  with e -> r := old; raise e
+
 (* Make lxp context with built-in types *)
-let default_lctx =
+let default_lctx
+  = let _ = register_special_forms () in
+    (* Empty context *)
+    let lctx = make_elab_context in
+    let lctx = SMap.fold (fun key (e, t) ctx
+                          -> if String.get key 0 = '-' then ctx
+                            else ctx_define ctx (dloc, key) e t)
+                         (!BI.lmap) lctx in
 
-      (* Empty context *)
-      let lctx = make_elab_context in
-      let lctx = SMap.fold (fun key (e, t) ctx
-                            -> if String.get key 0 = '-' then ctx
-                              else ctx_define ctx (dloc, key) e t)
-                           (!BI.lmap) lctx in
+    (* Read BTL files *)
+    let pres = prelex_file (!btl_folder ^ "builtins.typer") in
+    let sxps = lex default_stt pres in
+    let nods = sexp_parse_all_to_list default_grammar sxps (Some ";") in
+    let pxps = pexp_decls_all nods in
 
-      (* Read BTL files *)
-      let pres = prelex_file (!btl_folder ^ "builtins.typer") in
-      let sxps = lex default_stt pres in
-      let nods = sexp_parse_all_to_list default_grammar sxps (Some ";") in
-      let pxps = pexp_decls_all nods in
+    let d, lctx = dynamic_bind _parsing_internals true
+                               (fun () -> lexp_p_decls pxps lctx) in
 
-      _parsing_internals := true;
-          let d, lctx = lexp_p_decls pxps lctx in
-      _parsing_internals := false;
+    (* dump grouped decls * )
+       List.iter (fun decls ->
+       print_string "[";
+       List.iter (fun ((_, s), _, _) ->
+       print_string (s ^ ", ")) decls; print_string "] \n") d; *)
 
-      (* dump grouped decls * )
-      List.iter (fun decls ->
-        print_string "[";
-        List.iter (fun ((_, s), _, _) ->
-          print_string (s ^ ", ")) decls; print_string "] \n") d; *)
+    builtin_size := get_size lctx;
 
-      builtin_size := get_size lctx;
-
-      (* Once default builtin are set we can populate the predef table *)
-      let lctx = try
-          List.iter (fun name ->
-              let idx = senv_lookup name lctx in
-              let v = Var((dloc, name), idx) in
-              BI.set_predef name v) BI.predef_name;
-      (* -- DONE -- *)
-          lctx
+    (* Once default builtin are set we can populate the predef table *)
+    let lctx = try
+        List.iter (fun name ->
+            let idx = senv_lookup name lctx in
+            let v = Var((dloc, name), idx) in
+            BI.set_predef name v) BI.predef_name;
+        (* -- DONE -- *)
+        lctx
       with e ->
         warning dloc "Predef not found";
         lctx in
-      lctx
+    lctx
 
 let default_rctx = EV.from_lctx default_lctx
 
