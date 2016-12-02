@@ -157,7 +157,7 @@ let make_node loc depth args_val    =
 
     (* value_print tlist; print_string "\n"; *)
 
-    let args = tlist2olist [] tlist in
+    let args = v2o_list tlist in
 
     let s = List.map (fun g -> match g with
         | Vsexp(sxp)  -> sxp
@@ -191,23 +191,25 @@ let make_integer loc depth args_val =
 let make_float loc depth args_val   = Vdummy
 let make_block loc depth args_val   = Vdummy
 
-let ttrue = Vcons((dloc, "True"), [])
-let tfalse = Vcons((dloc, "False"), [])
-let btyper b = if b then ttrue else tfalse
+(* FIXME: We're not using predef here.  This will break if we change
+ * the definition of `Bool` in builtins.typer.  *)
+let ttrue = Vcons ((dloc, "true"), [])
+let tfalse = Vcons ((dloc, "false"), [])
+let o2v_bool b = if b then ttrue else tfalse
 
 let string_eq loc depth args_val =
     match args_val with
-        | [Vstring(s1); Vstring(s2)] -> btyper (s1 = s2)
+        | [Vstring(s1); Vstring(s2)] -> o2v_bool (s1 = s2)
         | _ -> error loc "string_eq expects 2 strings"
 
 let int_eq loc depth args_val =
     match args_val with
-        | [Vint(s1); Vint(s2)] -> btyper (s1 = s2)
+        | [Vint(s1); Vint(s2)] -> o2v_bool (s1 = s2)
         | _ -> error loc "int_eq expects 2 integer"
 
 let sexp_eq loc depth args_val =
     match args_val with
-    | [Vsexp (s1); Vsexp (s2)] -> btyper (sexp_equal s1 s2)
+    | [Vsexp (s1); Vsexp (s2)] -> o2v_bool (sexp_equal s1 s2)
     | _ -> error loc "sexp_eq expects 2 sexp"
 
 let open_impl loc depth args_val =
@@ -466,7 +468,7 @@ and sexp_dispatch loc depth args =
     match sxp with
         | Node    (op, s)    ->(
             let rctx = add_rte_variable None (Vsexp(op)) rctx in
-            let rctx = add_rte_variable None (olist2tlist_rte s) rctx in
+            let rctx = add_rte_variable None (o2v_list s) rctx in
                 match eval nd rctx with
                     | Closure(_, nd, _) -> eval nd rctx
                     | _ -> error loc "Node has 2 arguments")
@@ -480,7 +482,7 @@ and sexp_dispatch loc depth args =
         | Float   (_ , f)    ->
              eval flt (add_rte_variable None (Vfloat(f)) rctx) (*
         | Block   (_ , s, _) ->
-             eval blk (add_rte_variable None (olist2tlist_rte s)) *)
+             eval blk (add_rte_variable None (o2v_list s)) *)
         | _ -> error loc "sexp_dispatch error"
 
 (* -------------------------------------------------------------------------- *)

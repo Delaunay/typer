@@ -258,7 +258,7 @@ let _ = test_eval_eqv_named
    head my_list;
    head (tail my_list)"
 
-  "4; Some 1; Some 2"
+  "4; some 1; some 2"
 
 (*
  *  Special forms
@@ -279,7 +279,7 @@ let _ = test_eval_eqv_named
   "has-attribute greater-than w;
    (get-attribute greater-than w) 3;"
 
-  "True; 3"
+  "true; 3"
 
 let _ = (add_test "EVAL" "Monads" (fun () ->
 

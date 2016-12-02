@@ -62,7 +62,7 @@ module OL = Opslexp
 open Lexp
 
 module DB = Debruijn
-open Env       (* get_rte_variable *)
+module E = Env
 
 let error loc msg = msg_error "BUILT-IN" loc msg; raise (internal_error msg)
 let warning loc msg = msg_warning "BUILT-IN" loc msg
@@ -70,10 +70,8 @@ let warning loc msg = msg_warning "BUILT-IN" loc msg
 let predef_name = [
     "cons";
     "nil";
-    "Unit";
-    "True";
-    "False";
-    "Bool";
+    "true";
+    "false";
     "Macro";
     "expand_macro_";
     "expand_dmacro_";
@@ -113,33 +111,38 @@ let type_eq = let lv = (dloc, "l") in
                                        DB.type0))))
 
 
+let o2l_bool ctx b = get_predef (if b then "true" else "false") ctx
+
 (* lexp Imm list *)
-let olist2tlist_lexp lst ctx =
+let o2l_list ctx lst =
     let tcons = get_predef "cons" ctx in
     let tnil  = get_predef "nil" ctx in
 
     let rlst = List.rev lst in
         List.fold_left (fun tail elem ->
-            mkCall(tcons, [(Aexplicit, (Imm(elem)));
+            mkCall(tcons, [(Aexplicit, (Imm (elem)));
                            (Aexplicit, tail)])) tnil rlst
 
 (* typer list as seen during runtime *)
-let olist2tlist_rte lst =
-    let tnil  = Vcons((dloc, "nil"), []) in
-    let rlst = List.rev lst in
-        List.fold_left (fun tail elem ->
-            Vcons((dloc, "cons"), [Vsexp(elem); tail])) tnil rlst
+let o2v_list lst =
+  (* FIXME: We're not using predef here.  This will break if we change
+   * the definition of `List` in builtins.typer.  *)
+  List.fold_left (fun tail elem
+                  -> E.Vcons ((dloc, "cons"), [E.Vsexp (elem); tail]))
+                 (E.Vcons ((dloc, "nil"), []))
+                 (List.rev lst)
 
 
 (* Typer list to Ocaml list *)
-let rec tlist2olist acc expr =
-    match expr with
-        | Vcons((_, "cons"), [hd; tl]) -> tlist2olist (hd::acc) tl
-        | Vcons((_, "nil"), []) -> List.rev acc
-        | _ ->
-            print_string (value_name expr); print_string "\n";
-            value_print expr;
-            error dloc "List conversion failure'"
+let v2o_list v =
+  let rec v2o_list acc v =
+    match v with
+    | E.Vcons ((_, "cons"), [hd; tl]) -> v2o_list (hd::acc) tl
+    | E.Vcons ((_, "nil"), []) -> List.rev acc
+    | _ -> print_string (E.value_name v); print_string "\n";
+          E.value_print v;
+          error dloc "List conversion failure'" in
+  v2o_list [] v
 
 (* Map of lexp builtin elements accessible via (## <name>).  *)
 let lmap = ref (SMap.empty : (lexp * ltype) SMap.t)

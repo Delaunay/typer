@@ -821,7 +821,7 @@ and lexp_expand_macro_ macro_funct sargs ctx expand_fun : value_type =
   (* Build the function to be called *)
   let macro_expand = BI.get_predef expand_fun ctx in
   let args = [(Aexplicit, macro_funct);
-              (Aexplicit, (BI.olist2tlist_lexp sargs ctx))] in
+              (Aexplicit, (BI.o2l_list ctx sargs))] in
 
   (* FIXME: Don't `mkCall + eval` but use eval_call instead!  *)
   let macro = mkCall (macro_expand, args) in
@@ -842,7 +842,7 @@ and lexp_decls_macro (loc, mname) sargs ctx: (pdecl list * elab_context) =
       let ret = lexp_expand_dmacro lxp sargs ctx in
 
       (* convert typer list to ocaml *)
-      let decls = BI.tlist2olist [] ret in
+      let decls = BI.v2o_list ret in
 
       (* extract sexp from result *)
       let decls = List.map (fun g ->
@@ -1014,12 +1014,10 @@ and sform_has_attribute ctx loc (sargs : sexp list) =
   let meta_ctx, _ = !global_substitution in
   let map, attr_type = match OL.lexp_whnf table (ectx_to_lctx ctx) meta_ctx with
     | Builtin (_, attr_type, Some map) -> map, attr_type
-    | lxp -> lexp_fatal loc lxp "get-attribute expects a table as first argument" in
+    | lxp -> lexp_fatal loc lxp
+                       "get-attribute expects a table as first argument" in
 
-    try let _ = AttributeMap.find var map in
-      BI.get_predef "True" ctx
-    with Not_found ->
-      BI.get_predef "False" ctx
+  BI.o2l_bool ctx (AttributeMap.mem var map)
 
 and sform_declexpr ctx loc sargs =
   match List.map (lexp_parse_sexp ctx) sargs with

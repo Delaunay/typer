@@ -35,8 +35,8 @@ node : Sexp -> List Sexp -> Sexp;
 node = lambda (op : Sexp) ->
     lambda (y : List Sexp) ->
       case (sexp_eq op (symbol_ "uquote"))
-        | True  => has-uquote y
-        | False => hasnot-uquote op y;
+        | true  => has-uquote y
+        | false => hasnot-uquote op y;
 
 
 % tree traversal
