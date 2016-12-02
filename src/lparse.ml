@@ -804,16 +804,17 @@ and infer_call (func: pexp) (sargs: sexp list) ctx =
         infer pxp ctx  in
 
     (* This is the builtin Macro type *)
-    let macro_type = match BI.get_predef_option "Macro" ctx with
-      | Some lxp -> OL.lexp_whnf lxp (ectx_to_lctx ctx) meta_ctx
-      (* When type.typer is being parsed and the predef is not yet available *)
-      | None -> impossible     in
+    let macro_type = BI.get_predef "Macro" ctx in
 
     (* determine function type *)
     if (OL.conv_p meta_ctx (ectx_to_lctx ctx) ltp type_special_form) then
       match OL.lexp_whnf body (ectx_to_lctx ctx) meta_ctx with
       | Builtin ((_, name), _, _) ->
          (* Special form.  *)
+         (* FIXME: Special forms like `##case_` and `##lambda_`
+          * want to know the context's expected type.
+          * Also, for `##_->_`, calling `check` would be algorithmically
+          * expensive: a complexity of O(N²) for t₁ → t₂ ... → tₙ.  *)
          let e = (get_special_form loc name) ctx loc sargs in
          let meta_ctx, _ = !global_substitution in
          (* FIXME: We don't actually need to typecheck `e`, we just need
@@ -866,6 +867,7 @@ and lexp_expand_macro_ macro_funct sargs ctx expand_fun : value_type =
   let args = [(Aexplicit, macro_funct);
               (Aexplicit, (BI.olist2tlist_lexp sargs ctx))] in
 
+  (* FIXME: Don't `mkCall + eval` but use eval_call instead!  *)
   let macro = mkCall (macro_expand, args) in
   let emacro = OL.erase_type macro in
   let rctx = EV.from_lctx ctx in
@@ -1169,7 +1171,7 @@ let default_lctx =
           List.iter (fun name ->
               let idx = senv_lookup name lctx in
               let v = Var((dloc, name), idx) in
-              BI.set_predef name (Some v)) BI.predef_name;
+              BI.set_predef name v) BI.predef_name;
       (* -- DONE -- *)
           lctx
       with e ->

@@ -521,31 +521,38 @@ let rec check' meta_ctx erased ctx e =
                                      ^ string_of_int diff ^ " cases missing"))
        | _,_ -> U.msg_error "TC" l "Case on a non-inductive type!");
       ret
-  | Cons (t, (_, name))
+  | Cons (t, (l, name))
     -> (match lexp_whnf t ctx meta_ctx with
        | Inductive (l, _, fargs, constructors)
-         -> let fieldtypes = SMap.find name constructors in
-           let rec indtype fargs start_index =
-             match fargs with
-             | [] -> []
-             | (ak, vd, _)::fargs -> (ak, Var (vd, start_index))
-                                    :: indtype fargs (start_index - 1) in
-           let rec fieldargs ftypes =
-             match ftypes with
-             | [] -> let nargs = List.length fieldtypes + List.length fargs in
-                    mkCall (mkSusp t (S.shift nargs), indtype fargs (nargs - 1))
-             | (ak, vd, ftype) :: ftypes
-               -> mkArrow (ak, vd, ftype, lexp_location ftype,
-                          fieldargs ftypes) in
-           let rec buildtype fargs =
-             match fargs with
-             | [] -> fieldargs fieldtypes
-             | (ak, ((l,_) as vd), atype) :: fargs
-               -> mkArrow (P.Aerasable, Some vd, atype, l,
-                        buildtype fargs) in
-           buildtype fargs
+         -> (try
+              let fieldtypes = SMap.find name constructors in
+              let rec indtype fargs start_index =
+                match fargs with
+                | [] -> []
+                | (ak, vd, _)::fargs -> (ak, Var (vd, start_index))
+                                       :: indtype fargs (start_index - 1) in
+              let rec fieldargs ftypes =
+                match ftypes with
+                | [] -> let nargs = List.length fieldtypes + List.length fargs in
+                       mkCall (mkSusp t (S.shift nargs),
+                               indtype fargs (nargs - 1))
+                | (ak, vd, ftype) :: ftypes
+                  -> mkArrow (ak, vd, ftype, lexp_location ftype,
+                             fieldargs ftypes) in
+              let rec buildtype fargs =
+                match fargs with
+                | [] -> fieldargs fieldtypes
+                | (ak, ((l,_) as vd), atype) :: fargs
+                  -> mkArrow (P.Aerasable, Some vd, atype, l,
+                             buildtype fargs) in
+              buildtype fargs
+            with Not_found
+                 -> (U.msg_error "TC" l
+                                ("Constructor \"" ^ name ^ "\" does not exist");
+                    DB.type_int))
        | _ -> (U.msg_error "TC" (lexp_location e)
-                          "Cons of a non-inductive type!";
+                          ("Cons of a non-inductive type: "
+                           ^ lexp_string t);
               DB.type_int))
   | Metavar (idx, s, _, t)
     -> try check erased ctx (push_susp (L.VMap.find idx meta_ctx) s)

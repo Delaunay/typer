@@ -511,7 +511,7 @@ and print_typer_trace trace =
       print_typer_trace' b
 
 and print_trace title trace default =
-  (* If no trace is provided take the most recent one *)
+  (* If no trace is provided take the most revent one *)
   let trace = match trace with
     | Some trace -> trace
     | None -> default in

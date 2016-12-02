@@ -67,8 +67,6 @@ open Env       (* get_rte_variable *)
 let error loc msg = msg_error "BUILT-IN" loc msg; raise (internal_error msg)
 let warning loc msg = msg_warning "BUILT-IN" loc msg
 
-type predef_table = (lexp option ref) SMap.t
-
 let predef_name = [
     "cons";
     "nil";
@@ -81,39 +79,21 @@ let predef_name = [
     "expand_dmacro_";
 ]
 
-let default_predef_map : predef_table =
-    (* add predef name, expr will be populated when parsing *)
-    List.fold_left (fun m name ->
-        SMap.add name (ref None) m) SMap.empty predef_name
-
-let predef_map = ref default_predef_map
-
-let get_predef_raw (name: string) : lexp =
-    match !(SMap.find name (!predef_map)) with
-        | Some exp -> exp
-        | None -> error dloc ("\""^ name ^ "\" was not predefined")
-
-let get_predef_option (name: string) (ctx: DB.elab_context) =
-  let r = (DB.get_size ctx) - !builtin_size - 0 in
-    match !(SMap.find name (!predef_map)) with
-        | Some exp -> Some (mkSusp exp (S.shift r))
-        | None -> None
+(* FIXME: Actually, we should map the predefs to *values* since that's
+ * where they're really needed!  *)
+let predef_map : lexp SMap.t ref
+  (* Pre-fill "Macro" with a dummy value, to avoid errors while reading
+   * the builtins.typer file.  *)
+  = ref (SMap.add "Macro" impossible SMap.empty)
 
 let get_predef (name: string) (ctx: DB.elab_context) =
-  let r = (DB.get_size ctx) - !builtin_size - 0 in
-  let p = get_predef_raw name in
-    (mkSusp p (S.shift r))
+  try let r = (DB.get_size ctx) - !builtin_size - 0 in
+      let p = SMap.find name (!predef_map) in
+      mkSusp p (S.shift r)
+  with Not_found -> error dummy_location ("\""^ name ^ "\" was not predefined")
 
-let set_predef name lexp =
-    SMap.find name (!predef_map) := lexp
-
-let dump_predef () =
-  let _ = SMap.iter (fun key item ->
-    print_string key; print_string " ";
-    let _ = match !item with
-      | Some lxp -> lexp_print lxp
-      | None -> print_string "None"; in
-    print_string "\n") !predef_map in ()
+let set_predef name lexp
+  = predef_map := SMap.add name lexp (!predef_map)
 
 (*                Builtin types               *)
 let dloc    = DB.dloc
@@ -161,17 +141,8 @@ let rec tlist2olist acc expr =
             value_print expr;
             error dloc "List conversion failure'"
 
-let is_lbuiltin idx ctx =
-    let bsize = 1 in
-    let csize = DB.get_size ctx in
-
-    if idx >= csize - bsize then
-        true
-    else
-        false
-
 (* Map of lexp builtin elements accessible via (## <name>).  *)
-let lmap = ref (SMap.empty : (L.lexp * L.ltype) SMap.t)
+let lmap = ref (SMap.empty : (lexp * ltype) SMap.t)
 
 let add_builtin_cst (name : string) (e : lexp)
   = let map = !lmap in

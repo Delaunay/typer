@@ -269,7 +269,7 @@ and nosusp e =                  (* Return `e` with no outermost `Susp`.  *)
     | _ -> e
 
 
-(* Get rid of `Susp`ensions and instantiated `Maetavar`s.  *)
+(* Get rid of `Susp`ensions and instantiated `Metavar`s.  *)
 let clean meta_ctx e =
   let rec clean s e = match e with
     | Imm _ -> e
@@ -419,13 +419,15 @@ let rec lexp_unparse lxp =
       -> Pimm (Symbol (loc, "?<" ^ name ^ "-" ^ string_of_int idx
                            ^ "[" ^ subst_string subst ^ "]>"))
 
-    | SortLevel (SLz) -> Pimm (Integer (U.dummy_location, 0))
-    | SortLevel (SLsucc sl) -> Pcall (Pimm (Symbol (U.dummy_location, "<S>")),
-                                     [pexp_unparse (lexp_unparse sl)])
-    | Sort (l, StypeOmega) -> Pimm (Symbol (l, "<TypeOmega>"))
-    | Sort (l, StypeLevel) -> Pimm (Symbol (l, "<TypeLevel>"))
-    | Sort (l, Stype sl) -> Pcall (Pimm (Symbol (l, "<Type>")),
-                                  [pexp_unparse (lexp_unparse sl)])
+    | SortLevel (SLz) -> Pbuiltin (U.dummy_location, "TypeLevel.z")
+    | SortLevel (SLsucc l)
+      -> Pcall (Pbuiltin (lexp_location l, "TypeLevel.succ"),
+               [pexp_unparse (lexp_unparse l)])
+    | Sort (l, StypeOmega) -> Pbuiltin (l, "Type_ω")
+    | Sort (l, StypeLevel) -> Pbuiltin (l, "Type_ℓ")
+    | Sort (l, Stype sl)
+      -> Pcall (Pbuiltin (lexp_location sl, "Type_"),
+               [pexp_unparse (lexp_unparse sl)])
 
 (* FIXME: ¡Unify lexp_print and lexp_string!  *)
 and lexp_string lxp = sexp_string (pexp_unparse (lexp_unparse lxp))
@@ -657,12 +659,12 @@ and _lexp_to_str ctx exp =
 
         | Sort (_, Stype (SortLevel SLz)) -> "##Type"
         | Sort (_, Stype (SortLevel (SLsucc (SortLevel SLz)))) -> "##Type1"
+        | Sort (_, Stype l) -> "(##Type_ " ^ lexp_string l ^ ")"
         | Sort (_, StypeLevel) -> "##Type_ℓ"
-        | Sort (_, Stype _) -> "##Type_?"    (* FIXME!  *)
         | Sort (_, StypeOmega) -> "##Type_ω"
 
         | SortLevel (SLz) -> "##TypeLevel.z"
-        | SortLevel (SLsucc e) -> "##TypeLevel.succ"
+        | SortLevel (SLsucc e) -> "(##TypeLevel.succ " ^ lexp_string e ^ ")"
 
 and lexp_str_ctor ctx ctors =
   SMap.fold (fun key value str
