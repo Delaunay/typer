@@ -31,8 +31,8 @@ node : Sexp -> List Sexp -> Sexp;
 node = lambda (op : Sexp) ->
     lambda (y : List Sexp) ->
       case (sexp_eq op (symbol_ "uquote"))
-        | True  => has-uquote y
-        | False => node_ op (quote' y);
+        | true  => has-uquote y
+        | false => node_ op (quote' y);
 
 % tree traversal
 quote' = lambda (x : List Sexp) ->
@@ -48,6 +48,39 @@ quote' = lambda (x : List Sexp) ->
 qq = lambda (x : List Sexp) -> get-head (quote' x);
 quote = Macro_ qq;
 
-mn = quote (x * x);
+% Raw
+my_sqr = lambda (x : List Sexp) ->
+  let hd = (case x
+    | cons hd tl => hd
+    | nil => symbol_ "x") : Sexp in
+      (node_ (symbol_ "_*_")  (cons hd (cons hd nil)));
 
+sqr = Macro_ my_sqr;
+
+my_fun = lambda (arg : List Sexp) ->
+  let x = sqr 2 in
+    integer_ 2;
+
+fun = Macro_ my_fun;
+main = fun 2;
+
+
+% Quote
+%my_fun = lambda (args : List Sexp) ->
+%  let hd : Sexp;
+%      hd = case args
+%        | cons hd tl => hd
+%        | nil => symbol_ "sqr expects a single argument" in
+%
+%    quote ((uquote hd) * (uquote hd));
+
+x = 2;
+sqr = Macro_ my_fun;
+
+% main = sqr 2;
+% a  = Macro_ (lambda x -> quote (2 + 2));
+
+% main  = a Unit;
+% main = let x = 2 in quote (x * x);
+% main = let x = 2 in quote ((uquote x) * (uquote x));
 

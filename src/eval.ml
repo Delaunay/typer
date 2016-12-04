@@ -157,7 +157,7 @@ let make_node loc depth args_val    =
 
     (* value_print tlist; print_string "\n"; *)
 
-    let args = tlist2olist [] tlist in
+    let args = v2o_list tlist in
 
     let s = List.map (fun g -> match g with
         | Vsexp(sxp)  -> sxp
@@ -191,23 +191,25 @@ let make_integer loc depth args_val =
 let make_float loc depth args_val   = Vdummy
 let make_block loc depth args_val   = Vdummy
 
-let ttrue = Vcons((dloc, "True"), [])
-let tfalse = Vcons((dloc, "False"), [])
-let btyper b = if b then ttrue else tfalse
+(* FIXME: We're not using predef here.  This will break if we change
+ * the definition of `Bool` in builtins.typer.  *)
+let ttrue = Vcons ((dloc, "true"), [])
+let tfalse = Vcons ((dloc, "false"), [])
+let o2v_bool b = if b then ttrue else tfalse
 
 let string_eq loc depth args_val =
     match args_val with
-        | [Vstring(s1); Vstring(s2)] -> btyper (s1 = s2)
+        | [Vstring(s1); Vstring(s2)] -> o2v_bool (s1 = s2)
         | _ -> error loc "string_eq expects 2 strings"
 
 let int_eq loc depth args_val =
     match args_val with
-        | [Vint(s1); Vint(s2)] -> btyper (s1 = s2)
+        | [Vint(s1); Vint(s2)] -> o2v_bool (s1 = s2)
         | _ -> error loc "int_eq expects 2 integer"
 
 let sexp_eq loc depth args_val =
     match args_val with
-    | [Vsexp (s1); Vsexp (s2)] -> btyper (sexp_equal s1 s2)
+    | [Vsexp (s1); Vsexp (s2)] -> o2v_bool (sexp_equal s1 s2)
     | _ -> error loc "sexp_eq expects 2 sexp"
 
 let open_impl loc depth args_val =
@@ -282,14 +284,9 @@ let rec _eval lxp (ctx : Env.runtime_env) (trace : eval_debug_info): (value_type
 
         (* Function call *)
         | Call (f, args) ->
-          (* we need to keep the trace from f and args evaluation
-           * else the trace will be truncated.
-           * we use _global_eval_trace to keep in memory previous steps *)
-          let ef = _eval f ctx trace in
-          let eargs = (List.map (fun e -> _eval e ctx (get_trace ())) args) in
-            eval_call (elexp_location f) f (get_trace ())
-                      ef
-                      eargs
+            eval_call (elexp_location f) f trace
+                      (_eval f ctx trace)
+                      (List.map (fun e -> _eval e ctx trace) args)
 
         (* Case *)
         | Case (loc, target, pat, dflt)
@@ -452,11 +449,18 @@ and run_io loc depth args_val =
         ->  Sexp *)
 and sexp_dispatch loc depth args =
     let eval a b = _eval a b depth in
-    let sxp, nd, sym, str, it, flt, blk, rctx = match args with
-        | [sxp; Closure(_, nd, rctx); Closure(_, sym, _);
-                Closure(_, str, _); Closure(_, it, _);
-                Closure(_, flt, _); Closure(_, blk, _)] ->
-            sxp, nd, sym, str, it, flt, blk, rctx
+    let sxp, nd, ctx_nd,
+            sym, ctx_sym,
+            str, ctx_str,
+             it, ctx_it,
+            flt, ctx_flt,
+            blk, ctx_blk = match args with
+
+        | [sxp; Closure(_, nd,  ctx_nd); Closure(_, sym, ctx_sym);
+                Closure(_, str, ctx_str); Closure(_, it, ctx_it);
+                Closure(_, flt, ctx_flt); Closure(_, blk, ctx_blk)] ->
+            sxp, nd, ctx_nd, sym, ctx_sym, str, ctx_str, it, ctx_it,
+            flt, ctx_flt, blk, ctx_blk
         | _ ->  error loc "sexp_dispatch expects 7 arguments" in
 
     let sxp = match sxp with
@@ -465,23 +469,30 @@ and sexp_dispatch loc depth args =
 
     match sxp with
         | Node    (op, s)    ->(
+            let rctx = ctx_nd in
             let rctx = add_rte_variable None (Vsexp(op)) rctx in
-            let rctx = add_rte_variable None (olist2tlist_rte s) rctx in
+            let rctx = add_rte_variable None (o2v_list s) rctx in
                 match eval nd rctx with
                     | Closure(_, nd, _) -> eval nd rctx
                     | _ -> error loc "Node has 2 arguments")
 
         | Symbol  (_ , s)    ->
+             let rctx = ctx_sym in
              eval sym (add_rte_variable None (Vstring(s)) rctx)
         | String  (_ , s)    ->
+             let rctx = ctx_str in
              eval str (add_rte_variable None (Vstring(s)) rctx)
         | Integer (_ , i)    ->
+             let rctx = ctx_it in
              eval it (add_rte_variable None (Vint(i)) rctx)
         | Float   (_ , f)    ->
+             let rctx = ctx_flt in
              eval flt (add_rte_variable None (Vfloat(f)) rctx) (*
         | Block   (_ , s, _) ->
-             eval blk (add_rte_variable None (olist2tlist_rte s)) *)
-        | _ -> error loc "sexp_dispatch error"
+             eval blk (add_rte_variable None (o2v_list s)) *)
+        | _ ->
+          print_string "match error\n"; flush stdout;
+          error loc "sexp_dispatch error"
 
 (* -------------------------------------------------------------------------- *)
 and print_eval_result i lxp =
@@ -511,7 +522,7 @@ and print_typer_trace trace =
       print_typer_trace' b
 
 and print_trace title trace default =
-  (* If no trace is provided take the most recent one *)
+  (* If no trace is provided take the most revent one *)
   let trace = match trace with
     | Some trace -> trace
     | None -> default in
@@ -543,24 +554,33 @@ and print_eval_trace trace =
     let (a, b) = !_global_eval_trace in
       print_trace " EVAL TRACE " trace a
 
-let _ = List.iter (fun (name, f, arity) -> add_builtin_function name f arity)
-                  [
-                    ("block_"        , make_block, 1);
-                    ("symbol_"       , make_symbol, 1);
-                    ("string_"       , make_string, 1);
-                    ("integer_"      , make_integer, 1);
-                    ("float_"        , make_float, 1);
-                    ("node_"         , make_node, 2);
-                    ("sexp_dispatch_", sexp_dispatch, 7);
-                    ("string_eq"     , string_eq, 2);
-                    ("int_eq"        , int_eq, 2);
-                    ("sexp_eq"       , sexp_eq, 2);
-                    ("open"          , open_impl, 2);
-                    ("bind"          , bind_impl, 2);
-                    ("run-io"        , run_io, 2);
-                    ("read"          , read_impl, 2);
-                    ("write"         , write_impl, 2);
-                  ]
+let arity0_fun loc _ _ = error loc "Called a 0-arity function!?"
+let nop_fun loc _ vs = match vs with
+  | [v] -> v
+  | _ -> error loc "Wrong number of argument to nop"
+
+let register_built_functions () =
+  List.iter (fun (name, f, arity) -> add_builtin_function name f arity)
+            [
+              ("block_"        , make_block, 1);
+              ("symbol_"       , make_symbol, 1);
+              ("string_"       , make_string, 1);
+              ("integer_"      , make_integer, 1);
+              ("float_"        , make_float, 1);
+              ("node_"         , make_node, 2);
+              ("sexp_dispatch_", sexp_dispatch, 7);
+              ("string_eq"     , string_eq, 2);
+              ("int_eq"        , int_eq, 2);
+              ("sexp_eq"       , sexp_eq, 2);
+              ("open"          , open_impl, 2);
+              ("bind"          , bind_impl, 2);
+              ("run-io"        , run_io, 2);
+              ("read"          , read_impl, 2);
+              ("write"         , write_impl, 2);
+              ("Eq.refl"       , arity0_fun, 0);
+              ("Eq.cast"       , nop_fun, 1);
+            ]
+let _ = register_built_functions ()
 
 let eval lxp ctx = _eval lxp ctx ([], [])
 
@@ -588,6 +608,7 @@ let eval_all lxps rctx silent =
 let varname s = match s with Some (_, v) -> v | _ -> "<anon>"
 
 (* build a rctx from a lctx.  *)
+(* FIXME: `eval` with a disabled runIO, and then memoize, memoize, ...  *)
 let from_lctx (ctx: elab_context): runtime_env =
     let (_, lctx) = ctx in
     let rctx : runtime_env

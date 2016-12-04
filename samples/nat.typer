@@ -1,8 +1,8 @@
 Nat : Type;
 Nat = inductive_ (dNat) (zero) (succ Nat);
 
-zero = inductive-cons Nat zero;
-succ = inductive-cons Nat succ;
+zero = datacons Nat zero;
+succ = datacons Nat succ;
 
 to-num : Nat -> Int;
 to-num = lambda (x : Nat) -> case x

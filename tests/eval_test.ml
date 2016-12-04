@@ -88,7 +88,7 @@ let _ = test_eval_eqv_named
   "c = 3; e = 1; f = 2; d = 4;"
 
   "let TrueProp = inductive_ TrueProp I;
-       I = inductive-cons TrueProp I;
+       I = datacons TrueProp I;
        x = let a = 1; b = 2 in I
     in (case x | I => c) : Int;" (* == *) "3"
 
@@ -100,7 +100,7 @@ let _ = test_eval_eqv_named
   "let TrueProp : Type;
        I : TrueProp;
        TrueProp = inductive_ TrueProp I;
-       I = inductive-cons TrueProp I;
+       I = datacons TrueProp I;
        x = let a = 1; b = 2 in I
     in (case x | I => c) : Int;" (* == *) "3"
 
@@ -137,10 +137,10 @@ let _ = test_eval_eqv_named
    idt : Type;
    idt = inductive_ (idtd) (ctr0) (ctr1 idt) (ctr2 idt) (ctr3 idt);
                                      d = 10;
-   ctr0 = inductive-cons idt ctr0;   e = 20;
-   ctr1 = inductive-cons idt ctr1;   f = 30;
-   ctr2 = inductive-cons idt ctr2;   g = 40;
-   ctr3 = inductive-cons idt ctr3;   h = 50;
+   ctr0 = datacons idt ctr0;   e = 20;
+   ctr1 = datacons idt ctr1;   f = 30;
+   ctr2 = datacons idt ctr2;   g = 40;
+   ctr3 = datacons idt ctr3;   h = 50;
 
    a = (ctr1 (ctr2 ctr0));   y = 2;
    b = (ctr2 (ctr2 ctr0));   z = 3;
@@ -161,8 +161,8 @@ let nat_decl = "
     Nat : Type;
     Nat = inductive_ (dNat) (zero) (succ Nat);
 
-    zero = inductive-cons Nat zero;
-    succ = inductive-cons Nat succ;
+    zero = datacons Nat zero;
+    succ = datacons Nat succ;
 
     to-num : Nat -> Int;
     to-num = lambda (x : Nat) -> case x
@@ -231,11 +231,11 @@ let _ = test_eval_eqv_named
    add = lambda x y -> (x + y);
 
    inc1 = add 1;
-   inc2 = _+_ 2;"
+   inc2 = _-_ 5;"
 
   "inc1 1; inc2 2; inc1 3;"
 
-  "2; 4; 4"
+  "2; 3; 4"
 
 (*
  *  Lists
@@ -250,15 +250,15 @@ let _ = test_eval_eqv_named
    List' = let L : Type -> Type;
                L = inductive_ (L (a : Type)) (nil) (cons a (L a))
            in L;
-   cons' = inductive-cons List' cons;
-   nil' = inductive-cons List' nil;
+   cons' = datacons List' cons;
+   nil' = datacons List' nil;
    my_list' = (cons' 1 nil');"
 
   "length my_list;
    head my_list;
    head (tail my_list)"
 
-  "4; Some 1; Some 2"
+  "4; some 1; some 2"
 
 (*
  *  Special forms
@@ -279,7 +279,7 @@ let _ = test_eval_eqv_named
   "has-attribute greater-than w;
    (get-attribute greater-than w) 3;"
 
-  "True; 3"
+  "true; 3"
 
 let _ = (add_test "EVAL" "Monads" (fun () ->
 
@@ -327,7 +327,7 @@ let _ = test_eval_eqv_named
   "Explicit field patterns"
   "Triplet = inductive_ Triplet
              (triplet (a ::: Int) (b :: Float) (c : String) (d :: Int));
-   triplet = inductive-cons Triplet triplet;
+   triplet = datacons Triplet triplet;
    t = triplet (b := 5.0) (a := 3) (d := 7) (c := \"hello\");"
 
   "case t | triplet (b := bf) cf => cf;
@@ -355,6 +355,17 @@ let _ = test_eval_eqv_named
 
   "3; 3"
 
+let _ = test_eval_eqv_named
+  "Equalities"
+
+  "f : (α : Type) ≡> (p : Eq (t := Type) Int α) -> Int -> α;
+   f = lambda α ≡> lambda p x ->
+       Eq_cast (t := Type) (x := Int) (y := α) (f := (lambda v -> v)) (p := p) x"
+
+  (* FIXME: If I remove the (l := ?) I get
+   *     Explicit actual args `t, x` have no matching formal args  *)
+  "f (Eq_refl (l := ?) (t := Type) (x := Int)) 3"
+  "3"
 
 (* run all tests *)
 let _ = run_all ()
