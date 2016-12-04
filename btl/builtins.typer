@@ -35,8 +35,33 @@
 %       Base Types
 % -----------------------------------------------------
 
+% The trivial type which carries no information.
 Unit    = inductive_ Unit unit;
-unit    = inductive-cons Unit unit;
+unit    = datacons Unit unit;
+
+% The empty type, with no constructors: nothing can have this type.
+Void = inductive_ Void;
+
+% Eq : (l : TypeLevel) ≡> (t : Type_ l) ≡> t -> t -> Type_ l
+% Eq' : (l : TypeLevel) ≡> Type_ l -> Type_ l -> Type_ l
+Eq_refl = Built-in "Eq.refl"
+                   ((l : TypeLevel) ≡> (t : Type_ l) ≡> (x : t)
+                    ≡> Eq (t := t) x x);
+
+Eq_cast = Built-in "Eq.cast"
+                   ((l1 : TypeLevel) ≡> (t : Type_ l1) ≡> (x : t) ≡> (y : t)
+                    ≡> (p : Eq (t := t) x y)
+                    ≡> (l2 : TypeLevel) ≡> (f : t -> Type_ l2)
+                    ≡> f x -> f y);
+
+%% Commutativity of equality!
+Eq_comm : (l : TypeLevel) ≡> (t : Type_ l) ≡> (x : t) ≡> (y : t)
+          ≡> (p : Eq (t := t) x y) -> Eq (t := t) y x;
+Eq_comm = lambda l t x y ≡> lambda p ->
+          Eq_cast (f := lambda xy -> Eq (t := t) xy x)
+                  (p := p)
+                  %% FIXME: Removing (l := l) gives bogus error!
+                  (Eq_refl (l := l) (t := t) (x := x));
 
 % Basic operators
 _+_ = Built-in "Int.+" (Int -> Int -> Int);
@@ -44,14 +69,13 @@ _-_ = Built-in "Int.-" (Int -> Int -> Int);
 _*_ = Built-in "Int.*" (Int -> Int -> Int);
 _/_ = Built-in "Int./" (Int -> Int -> Int);
 
-Bool = inductive_ (Boolean) (True) (False);
-True = inductive-cons Bool True;
-False = inductive-cons Bool False;
+Bool = inductive_ (Boolean) (true) (false);
+true = datacons Bool true;
+false = datacons Bool false;
 
-%Option : Type -> Type;
-Option = inductive_ (Option (a : Type)) (None) (Some a);
-Some = inductive-cons Option Some;
-None = inductive-cons Option None;
+Option = inductive_ (Option (a : Type)) (none) (some a);
+some = datacons Option some;
+none = datacons Option none;
 
 string_eq = Built-in "string_eq" (String -> String -> Bool);
 int_eq    = Built-in    "int_eq" (Int -> Int -> Bool);
@@ -64,8 +88,8 @@ sexp_eq   = Built-in   "sexp_eq" (Sexp -> Sexp -> Bool);
 List : Type -> Type;
 List = inductive_ (List (a : Type)) (nil) (cons a (List a));
 
-nil = inductive-cons List nil;
-cons = inductive-cons List cons;
+nil = datacons List nil;
+cons = datacons List cons;
 
 length : (a : Type) ≡> List a -> Int;
 length = lambda a ≡>
@@ -83,8 +107,8 @@ head : (a : Type) ≡> List a -> Option a;
 head = lambda a ≡>
   lambda xs ->
     case xs
-      | nil => None
-      | cons hd tl => Some hd;
+      | nil => none
+      | cons hd tl => some hd;
 
 tail : (a : Type) ≡> List a -> List a;
 tail = lambda a ≡>
@@ -109,8 +133,8 @@ Macro  = inductive_ (Macro)
   (Macro_ (List Sexp -> Sexp))
   (DMacro_ (List Sexp -> List Sexp));
 
-Macro_ = inductive-cons Macro Macro_ ;
-DMacro_ = inductive-cons Macro DMacro_ ;
+Macro_ = datacons Macro Macro_ ;
+DMacro_ = datacons Macro DMacro_ ;
 
 expand_macro_ : Macro -> List Sexp -> Sexp;
 expand_macro_ m args = case m
@@ -164,3 +188,20 @@ run-io = Built-in "run-io" ((a : Type) ≡> IO Unit -> a -> a);
 open  = Built-in "open"  (String -> String -> IO FileHandle);
 write = Built-in "write" (FileHandle -> String -> IO Unit);
 read  = Built-in "read"  (FileHandle -> Int -> IO String);
+
+
+% -----------------------------------------------------
+% Logic
+% -----------------------------------------------------
+
+% False should be one of the many empty types.
+% Other common choices are False = ∀a.a and True = ∃a.a.
+False = Void;
+True = Unit;
+
+Not : Type -> Type;
+Not prop = prop -> False;
+
+% Like Bool, except that it additionally carries the meaning of its value.
+Decidable = inductive_ (Decidable (prop : Type))
+                       (true (p ::: prop)) (false (p ::: Not prop));

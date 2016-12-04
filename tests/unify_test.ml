@@ -81,9 +81,9 @@ let fmt (lst: (lexp * lexp * result * result) list): string list =
 let str_induct = "Nat : Type; Nat = inductive_ (dNat) (zero) (succ Nat)"
 let str_int_3  = "i = 3"
 let str_int_4  = "i = 4"
-let str_case   = "i = case True
-| True => 2
-| False => 42"
+let str_case   = "i = case true
+| true => 2
+| false => 42"
 let str_case2 = "i = case nil(a := Int)
 | nil => 12
 | _ => 24"

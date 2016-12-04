@@ -1,12 +1,12 @@
 
 Reify = inductive_ (Reify (a : Type))
-  (RInt (a = Int))
-  (RFloat (a = Float))
-  (RString (a = String));
+  (RInt (Eq (t := Type) Int a))
+  (RFloat (Eq (t := Type) Float a))
+  (RString (Eq (t := Type) String a));
 
-RInt = inductive-cons Reify RInt;
-RFloat = inductive-cons Reify RFloat;
-RString = inductive-cons Reify RString;
+RInt = datacons Reify RInt;
+RFloat = datacons Reify RFloat;
+RString = datacons Reify RString;
 
 float-to-int : Float -> Int;
 float-to-int x = 1;

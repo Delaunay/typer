@@ -2,8 +2,6 @@
 
 Nat = inductive_ Type (zero : Nat) (succ : Nat -> Nat);
 
-False = inductive_ Type;
-
 Macro = inductive_ Type (MacroExp : Nat -> Macro);
 
 %% Use for `cast'.
@@ -13,6 +11,4 @@ or = inductive_ (t -> t -> Type)
                 (left: t1 -> or t1 t2)
                 (right: t2 -> or t1 t2);
 
-not = lambda x -> (x -> False);
-
-classical-or = lambda x -> lambda y -> not (not (or x y));
+classical-or = lambda x -> lambda y -> Not (Not (or x y));

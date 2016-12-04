@@ -114,6 +114,7 @@ type ltype = lexp
  and sort_level =
    | SLz
    | SLsucc of lexp
+   | SLlub of lexp * lexp
 
 type varbind =
   | Variable
@@ -184,6 +185,7 @@ let rec lexp_location e =
   match e with
   | Sort (l,_) -> l
   | SortLevel (SLsucc e) -> lexp_location e
+  | SortLevel (SLlub (e, _)) -> lexp_location e
   | SortLevel SLz -> U.dummy_location
   | Imm s -> sexp_location s
   | Var ((l,_),_) -> l
@@ -210,6 +212,7 @@ let rec push_susp e s =            (* Push a suspension one level down.  *)
   | Imm _ -> e
   | SortLevel (SLz) -> e
   | SortLevel (SLsucc e') -> mkSortLevel (SLsucc (mkSusp e' s))
+  | SortLevel (SLlub (e1, e2)) -> mkSortLevel (SLlub (mkSusp e1 s, mkSusp e2 s))
   | Sort (l, Stype e) -> mkSort (l, Stype (mkSusp e s))
   | Sort (l, _) -> e
   | Builtin _ -> e
@@ -269,12 +272,13 @@ and nosusp e =                  (* Return `e` with no outermost `Susp`.  *)
     | _ -> e
 
 
-(* Get rid of `Susp`ensions and instantiated `Maetavar`s.  *)
+(* Get rid of `Susp`ensions and instantiated `Metavar`s.  *)
 let clean meta_ctx e =
   let rec clean s e = match e with
     | Imm _ -> e
     | SortLevel (SLz) -> e
     | SortLevel (SLsucc e) -> mkSortLevel (SLsucc (clean s e))
+    | SortLevel (SLlub (e1, e2)) -> mkSortLevel (SLlub (clean s e1, clean s e2))
     | Sort (l, Stype e) -> mkSort (l, Stype (clean s e))
     | Sort (l, _) -> e
     | Builtin _ -> e
@@ -335,7 +339,7 @@ let lexp_name e =
     | Arrow  _ -> "Arrow"
     | Lambda _ -> "lambda"
     | Call   _ -> "Call"
-    | Cons   _ -> "inductive-cons"
+    | Cons   _ -> "datacons"
     | Case   _ -> "case"
     | Inductive _ -> "inductive_"
     | Susp      _ -> "Susp"
@@ -345,6 +349,8 @@ let lexp_name e =
     | Sort      _ -> "Sort"
     | SortLevel _ -> "SortLevel"
 
+let pdatacons = Pbuiltin (U.dummy_location, "datacons")
+
 (* ugly printing (sexp_print (pexp_unparse (lexp_unparse e))) *)
 let rec lexp_unparse lxp =
   match lxp with
@@ -352,7 +358,8 @@ let rec lexp_unparse lxp =
     | Imm (sexp) -> Pimm (sexp)
     | Builtin (s, _, _) -> Pbuiltin s
     | Var ((loc, name), _) -> Pvar((loc, name))
-    | Cons (t, ctor) -> Pcons (lexp_unparse t, ctor)
+    | Cons (t, (l, name))
+      -> Pcall (pdatacons, [pexp_unparse (lexp_unparse t); Symbol (l, name)])
     | Lambda (kind, vdef, ltp, body) ->
       Plambda(kind, vdef, Some (lexp_unparse ltp), lexp_unparse body)
     | Arrow (arg_kind, vdef, ltp1, loc, ltp2) ->
@@ -403,7 +410,10 @@ let rec lexp_unparse lxp =
                           args
             (* FIXME: Rather than a Pcons we'd like to refer to an existing
              * binding with that value!  *)
-            in Ppatcons (Pcons (bt, (loc, str)), pat_args), lexp_unparse bch
+             in (Ppatcons (Pcall (pdatacons,
+                                  [pexp_unparse bt; Symbol (loc, str)]),
+                           pat_args),
+                 lexp_unparse bch)
         ) (SMap.bindings branches) in
 
       let pbranch = match default with
@@ -419,13 +429,18 @@ let rec lexp_unparse lxp =
       -> Pimm (Symbol (loc, "?<" ^ name ^ "-" ^ string_of_int idx
                            ^ "[" ^ subst_string subst ^ "]>"))
 
-    | SortLevel (SLz) -> Pimm (Integer (U.dummy_location, 0))
-    | SortLevel (SLsucc sl) -> Pcall (Pimm (Symbol (U.dummy_location, "<S>")),
-                                     [pexp_unparse (lexp_unparse sl)])
-    | Sort (l, StypeOmega) -> Pimm (Symbol (l, "<TypeOmega>"))
-    | Sort (l, StypeLevel) -> Pimm (Symbol (l, "<TypeLevel>"))
-    | Sort (l, Stype sl) -> Pcall (Pimm (Symbol (l, "<Type>")),
-                                  [pexp_unparse (lexp_unparse sl)])
+    | SortLevel (SLz) -> Pbuiltin (U.dummy_location, "TypeLevel.z")
+    | SortLevel (SLsucc l)
+      -> Pcall (Pbuiltin (lexp_location l, "TypeLevel.succ"),
+               [pexp_unparse (lexp_unparse l)])
+    | SortLevel (SLlub (l1, l2))
+      -> Pcall (Pbuiltin (lexp_location l1, "TypeLevel.∪"),
+               [pexp_unparse (lexp_unparse l1); pexp_unparse (lexp_unparse l2)])
+    | Sort (l, StypeOmega) -> Pbuiltin (l, "Type_ω")
+    | Sort (l, StypeLevel) -> Pbuiltin (l, "Type_ℓ")
+    | Sort (l, Stype sl)
+      -> Pcall (Pbuiltin (lexp_location sl, "Type_"),
+               [pexp_unparse (lexp_unparse sl)])
 
 (* FIXME: ¡Unify lexp_print and lexp_string!  *)
 and lexp_string lxp = sexp_string (pexp_unparse (lexp_unparse lxp))
@@ -574,7 +589,7 @@ and _lexp_to_str ctx exp =
                 (make_indent 1) ^ (lexp_to_stri 1 lbody)
 
         | Cons(t, (_, ctor_name)) ->
-            (keyword "inductive-cons ") ^ (lexp_to_str t) ^ " " ^ ctor_name
+            (keyword "datacons ") ^ (lexp_to_str t) ^ " " ^ ctor_name
 
         | Call(fname, args) -> (
             (*  get function name *)
@@ -657,12 +672,14 @@ and _lexp_to_str ctx exp =
 
         | Sort (_, Stype (SortLevel SLz)) -> "##Type"
         | Sort (_, Stype (SortLevel (SLsucc (SortLevel SLz)))) -> "##Type1"
+        | Sort (_, Stype l) -> "(##Type_ " ^ lexp_string l ^ ")"
         | Sort (_, StypeLevel) -> "##Type_ℓ"
-        | Sort (_, Stype _) -> "##Type_?"    (* FIXME!  *)
         | Sort (_, StypeOmega) -> "##Type_ω"
 
         | SortLevel (SLz) -> "##TypeLevel.z"
-        | SortLevel (SLsucc e) -> "##TypeLevel.succ"
+        | SortLevel (SLsucc e) -> "(##TypeLevel.succ " ^ lexp_string e ^ ")"
+        | SortLevel (SLlub (e1, e2))
+          -> "(##TypeLevel.∪ " ^ lexp_string e1 ^ " " ^ lexp_string e1 ^ ")"
 
 and lexp_str_ctor ctx ctors =
   SMap.fold (fun key value str
@@ -705,6 +722,8 @@ let rec eq meta_ctx e1 e2 =
     | (Imm s1, Imm s2) -> s1 = s2
     | (SortLevel SLz, SortLevel SLz) -> true
     | (SortLevel (SLsucc e1), SortLevel (SLsucc e2)) -> eq e1 e2
+    | (SortLevel (SLlub (e11, e21)), SortLevel (SLlub (e12, e22)))
+      -> eq e11 e12 && eq e21 e22
     | (Sort (_, StypeOmega), Sort (_, StypeOmega)) -> true
     | (Sort (_, StypeLevel), Sort (_, StypeLevel)) -> true
     | (Sort (_, Stype e1), Sort (_, Stype e2)) -> eq e1 e2

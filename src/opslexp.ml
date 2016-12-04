@@ -283,21 +283,46 @@ let conv_p meta_ctx (ctx : DB.lexp_context) e1 e2
 
 (********* Testing if a lexp is properly typed  *********)
 
-let rec sort_level_max l1 l2 = match nosusp l1, nosusp l2 with
-  | SortLevel SLz, l2 -> l2
-  | l1, SortLevel SLz -> l1
-  | SortLevel (SLsucc l1), SortLevel (SLsucc l2)
-    -> mkSortLevel (SLsucc (sort_level_max l1 l2))
-  | _, _ (* FIXME: This requires s.th. like `SLmax of lexp * lexp`!  *)
-    -> U.msg_error "TC" (lexp_location l1)
-                  ("Can't compute the max of levels `"
-                   ^ lexp_string l1 ^ "` and `"
-                   ^ lexp_string l2 ^ "`");
-      mkSortLevel SLz
+(* Turn e into its canonical representation, which is basically the set
+ * of vars it references along with the number of `succ` applied to them.
+ * `c` is the maximum "constant" level that occurs in `e`
+ * and `m` maps variable indices to the maxmimum depth at which they were
+ * found.  *)
+let level_canon e =
+  let rec canon e d ((c,m) as acc) = match e with
+    | SortLevel SLz -> if c < d then (d, m) else acc
+    | SortLevel (SLsucc e) -> canon e (d + 1) acc
+    | SortLevel (SLlub (e1, e2)) -> canon e1 d (canon e2 d acc)
+    | Var (_, i) -> let o = try VMap.find i m with Not_found -> -1 in
+                   if o < d then (c, VMap.add i d m) else acc
+    | Metavar (i, _, _, _)
+      -> let o = try VMap.find (- i) m with Not_found -> -1 in
+        if o < d then (c, VMap.add (- i) d m) else acc
+    | _ -> (max_int, m)
+  in canon e 0 (0,VMap.empty)
 
-let sort_compose l s1 s2 =
+let level_leq (c1, m1) (c2, m2) =
+  c1 <= c2
+  && c1 != max_int
+  && VMap.for_all (fun i d -> try d <= VMap.find i m2 with Not_found -> false)
+                 m1
+
+let rec mkSLlub meta_ctx ctx e1 e2 =
+  match (lexp_whnf e1 ctx meta_ctx, lexp_whnf e2 ctx meta_ctx) with
+  | (SortLevel SLz, e2) -> e2
+  | (e1, SortLevel SLz) -> e1
+  | (SortLevel (SLsucc e1), SortLevel (SLsucc e2))
+    -> mkSortLevel (SLsucc (mkSLlub meta_ctx ctx e1 e2))
+  | (e1', e2')
+    -> let ce1 = level_canon (L.clean meta_ctx e1') in
+      let ce2 = level_canon (L.clean meta_ctx e2') in
+      if level_leq ce1 ce2 then e1
+      else if level_leq ce2 ce1 then e2
+      else mkSortLevel (SLlub (e1, e2))
+
+let sort_compose meta_ctx ctx l s1 s2 =
   match s1, s2 with
-  | (Stype l1, Stype l2) -> Stype (sort_level_max l1 l2)
+  | (Stype l1, Stype l2) -> Stype (mkSLlub meta_ctx ctx l1 l2)
   | ( (StypeLevel, Stype _)
     | (StypeLevel, StypeOmega)
     | (Stype _, StypeOmega))
@@ -339,7 +364,15 @@ let rec check' meta_ctx erased ctx e =
   | SortLevel SLz -> DB.type_level
   | SortLevel (SLsucc e)
     -> let t = check erased ctx e in
+      (* FIXME: Actually, we should probably have a special function to check
+       * that `e` is a level, so as to avoid `case` and other funny things.  *)
       assert_type ctx e t DB.type_level;
+      DB.type_level
+  | SortLevel (SLlub (e1, e2))
+    -> let t1 = check erased ctx e1 in
+      assert_type ctx e1 t1 DB.type_level;
+      let t2 = check erased ctx e2 in
+      assert_type ctx e2 t2 DB.type_level;
       DB.type_level
   | Sort (l, Stype e)
     -> let t = check erased ctx e in
@@ -347,8 +380,8 @@ let rec check' meta_ctx erased ctx e =
       mkSort (l, Stype (mkSortLevel (SLsucc e)))
   | Sort (_, StypeLevel) -> DB.sort_omega
   | Sort (_, StypeOmega)
-    -> (U.msg_error "TC" (lexp_location e) "Reached unreachable sort!";
-       (* U.internal_error "Reached unreachable sort!"; *)
+    -> ((* U.msg_error "TC" (lexp_location e) "Reached unreachable sort!";
+        * U.internal_error "Reached unreachable sort!"; *)
        DB.sort_omega)
   | Builtin (_, t, _)
     -> let _ = check_type DB.set_empty Myers.nil t in
@@ -391,7 +424,7 @@ let rec check' meta_ctx erased ctx e =
          (* FIXME: fix scoping of `k2` and `s2`.  *)
          -> if ak == P.Aerasable && impredicative_erase && s1 != StypeLevel
            then k2
-           else mkSort (l, sort_compose l s1 s2)
+           else mkSort (l, sort_compose meta_ctx ctx l s1 s2)
        | (Sort (_, _), _) -> (U.msg_error "TC" (lexp_location t2)
                             "Not a proper type";
                              mkSort (l, StypeOmega))
@@ -444,14 +477,14 @@ let rec check' meta_ctx erased ctx e =
                              -> level
                            | Sort (_, Stype level')
                              (* FIXME: scoping of level vars!  *)
-                             -> sort_level_max level level'
+                             -> mkSLlub meta_ctx ctx level level'
                            | tt -> U.msg_error "TC" (lexp_location t)
                                               ("Field type "
                                                ^ lexp_string t
                                                ^ " is not a Type! ("
                                                ^ lexp_string tt ^")");
-                                  (* DB.print_lexp_ctx ctx;
-                                   * U.internal_error "Oops"; *)
+                                  DB.print_lexp_ctx ctx;
+                                  (* U.internal_error "Oops"; *)
                                   level),
                           DB.lctx_extend ctx v Variable t)
                         (level, ctx)
@@ -521,31 +554,38 @@ let rec check' meta_ctx erased ctx e =
                                      ^ string_of_int diff ^ " cases missing"))
        | _,_ -> U.msg_error "TC" l "Case on a non-inductive type!");
       ret
-  | Cons (t, (_, name))
+  | Cons (t, (l, name))
     -> (match lexp_whnf t ctx meta_ctx with
        | Inductive (l, _, fargs, constructors)
-         -> let fieldtypes = SMap.find name constructors in
-           let rec indtype fargs start_index =
-             match fargs with
-             | [] -> []
-             | (ak, vd, _)::fargs -> (ak, Var (vd, start_index))
-                                    :: indtype fargs (start_index - 1) in
-           let rec fieldargs ftypes =
-             match ftypes with
-             | [] -> let nargs = List.length fieldtypes + List.length fargs in
-                    mkCall (mkSusp t (S.shift nargs), indtype fargs (nargs - 1))
-             | (ak, vd, ftype) :: ftypes
-               -> mkArrow (ak, vd, ftype, lexp_location ftype,
-                          fieldargs ftypes) in
-           let rec buildtype fargs =
-             match fargs with
-             | [] -> fieldargs fieldtypes
-             | (ak, ((l,_) as vd), atype) :: fargs
-               -> mkArrow (P.Aerasable, Some vd, atype, l,
-                        buildtype fargs) in
-           buildtype fargs
+         -> (try
+              let fieldtypes = SMap.find name constructors in
+              let rec indtype fargs start_index =
+                match fargs with
+                | [] -> []
+                | (ak, vd, _)::fargs -> (ak, Var (vd, start_index))
+                                       :: indtype fargs (start_index - 1) in
+              let rec fieldargs ftypes =
+                match ftypes with
+                | [] -> let nargs = List.length fieldtypes + List.length fargs in
+                       mkCall (mkSusp t (S.shift nargs),
+                               indtype fargs (nargs - 1))
+                | (ak, vd, ftype) :: ftypes
+                  -> mkArrow (ak, vd, ftype, lexp_location ftype,
+                             fieldargs ftypes) in
+              let rec buildtype fargs =
+                match fargs with
+                | [] -> fieldargs fieldtypes
+                | (ak, ((l,_) as vd), atype) :: fargs
+                  -> mkArrow (P.Aerasable, Some vd, atype, l,
+                             buildtype fargs) in
+              buildtype fargs
+            with Not_found
+                 -> (U.msg_error "TC" l
+                                ("Constructor \"" ^ name ^ "\" does not exist");
+                    DB.type_int))
        | _ -> (U.msg_error "TC" (lexp_location e)
-                          "Cons of a non-inductive type!";
+                          ("Cons of a non-inductive type: "
+                           ^ lexp_string t);
               DB.type_int))
   | Metavar (idx, s, _, t)
     -> try check erased ctx (push_susp (L.VMap.find idx meta_ctx) s)
