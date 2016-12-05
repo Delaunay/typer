@@ -131,13 +131,23 @@ let builtin_size = ref 0
 
 (********************** Hash-consing **********************)
 
-(* FIXME: We'd want this hash-table to be weak in its values: as soon
- * as one of its values can be GC'd, the entry should be removed.  *)
-let hc_table : (lexp, lexp) Hashtbl.t = Hashtbl.create 1000
-let hc (e : lexp) : lexp =
-  try Hashtbl.find hc_table e
-  with Not_found -> Hashtbl.add hc_table e e;
-                            e
+(* let hc_table : (lexp, lexp) Hashtbl.t = Hashtbl.create 1000
+ * let hc (e : lexp) : lexp =
+ *   try Hashtbl.find hc_table e
+ *   with Not_found -> Hashtbl.add hc_table e e; e *)
+
+module WHC = Tweak.Make (struct type t = lexp
+                                (* Using (=) instead of `compare` results
+                                 * in an *enormous* slowdown.  Apparently
+                                 * `compare` checks == before recursing
+                                 * but (=) doesn't?  *)
+                                let equal x y = (compare x y = 0)
+                                let hash = Hashtbl.hash
+                         end)
+let hc_table : WHC.t = WHC.create 1000
+let hc : lexp -> lexp = WHC.merge hc_table
+  
+
 let mkImm s                    = hc (Imm s)
 let mkSortLevel l              = hc (SortLevel l)
 let mkSort (l, s)              = hc (Sort (l, s))

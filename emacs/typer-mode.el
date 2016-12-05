@@ -3,7 +3,8 @@
 ;; Copyright (C) 2011-2016  Free Software Foundation, Inc.
 
 ;; Author: Stefan Monnier <monnier@iro.umontreal.ca>
-;; Keywords: 
+;; Keywords:
+;; Version: 0
 
 ;; This file is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -20,7 +21,7 @@
 
 ;;; Commentary:
 
-;; 
+;;
 
 ;;; Code:
 
@@ -185,5 +186,4 @@
   )
 
 (provide 'typer-mode)
-;; arch-tag: b5d7a461-b1bc-4f32-b3b7-cad11d95017d
 ;;; typer-mode.el ends here

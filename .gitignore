@@ -21,3 +21,5 @@ test__.typer
 *.orig
 _tags
 .merlin
+gmon.out
+ocamlprof.dump
