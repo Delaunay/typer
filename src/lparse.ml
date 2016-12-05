@@ -344,15 +344,47 @@ let rec infer (p : pexp) (ctx : elab_context): lexp * ltype =
          let lxp = check p t ctx in
          (lxp, t)
 
+(* Make up an argument of type `t` when none is provided.  *)
+and get_implicit_arg ctx loc name t =
+  (* lookup default attribute of t.  *)
+  match
+    try (* FIXME: We shouldn't hard code as popular a name as `default`.  *)
+      let pidx, pname = (senv_lookup "default" ctx), "default" in
+      let default = Var ((dloc, pname), pidx) in
+      get_attribute ctx loc [default; t]
+    with Not_found -> None with
+  | Some attr
+    -> (* FIXME: The `default` attribute table shouldn't contain elements of
+       * type `Macro` but elements of type `something -> Sexp`.
+       * The point of the `Macro` type is to be able to distinguish
+       * a macro call from a function call, but here, we have no need
+       * to distinguish two cases.
+       * Better yet: let's not do any table lookup here.  Instead,
+       * call a `default-arg-filler` function, implemented in Typer,
+       * just like `expand_macro_` function.  That one can then look
+       * things up in a table and/or do anything else it wants.  *)
+     let v = lexp_expand_macro attr [] ctx in
+
+     (* get the sexp returned by the macro *)
+     let lsarg = match v with
+       | Vsexp (sexp) -> sexp
+       | _ -> value_fatal loc v "default attribute should return a sexp" in
+
+     (* lparse the argument *)
+     let parg = pexp_parse lsarg in
+     check parg t ctx
+  | None -> newMetavar loc name t
+
 (* Build the list of implicit arguments to instantiate.  *)
 and instantiate_implicit e t ctx =
   let (meta_ctx, _) = !global_substitution in
   let rec instantiate t args =
     match OL.lexp_whnf t (ectx_to_lctx ctx) meta_ctx with
     | Arrow ((Aerasable | Aimplicit) as ak, v, t1, _, t2)
-      -> let arg = newMetavar (lexp_location e)
-                             (match v with Some (_, name) -> name | _ -> "v")
-                             t1 in
+      -> let arg = get_implicit_arg
+                    ctx (lexp_location e)
+                    (match v with Some (_, name) -> name | _ -> "v")
+                    t1 in
         instantiate (mkSusp t2 (S.substitute arg)) ((ak, arg)::args)
     | _ -> (mkCall (e, List.rev args), t)
   in instantiate t []
@@ -680,16 +712,17 @@ and infer_call (func: pexp) (sargs: sexp list) ctx =
           handle_fun_args largs sargs pending ltp
 
       (* Aerasable *)
-      | _, Arrow (Aerasable, v, arg_type, _, ret_type)
+      | _, Arrow ((Aerasable | Aimplicit) as ak, v, arg_type, _, ret_type)
            (* Don't instantiate after the last explicit arg: the rest is done,
             * when needed in infer_and_check (via instantiate_implicit).  *)
            when not (sargs = [] && SMap.is_empty pending)
-        -> let larg = newMetavar (match sargs with
-                                 | [] -> pexp_location func
-                                 | sarg::_ -> sexp_location sarg)
-                                (match v with Some (_, name) -> name | _ -> "v")
-                                arg_type in
-          handle_fun_args ((Aerasable, larg) :: largs) sargs pending
+        -> let larg = get_implicit_arg
+                       ctx (match sargs with
+                            | [] -> pexp_location func
+                            | sarg::_ -> sexp_location sarg)
+                       (match v with Some (_, name) -> name | _ -> "v")
+                       arg_type in
+          handle_fun_args ((ak, larg) :: largs) sargs pending
                           (L.mkSusp ret_type (S.substitute larg))
       | [], _
         -> (if not (SMap.is_empty pending) then
@@ -709,37 +742,6 @@ and infer_call (func: pexp) (sargs: sexp list) ctx =
           let larg = check parg arg_type ctx in
           handle_fun_args ((Aexplicit, larg) :: largs) sargs pending
                           (L.mkSusp ret_type (S.substitute larg))
-      (* Aimplicit, FIXME: use a meta var if a default macro is not provided *)
-      | sarg :: sargs, Arrow (Aimplicit, v, arg_type, _, ret_type)
-        -> ((* get default attribute *)
-        (* FIXME: We shouldn't hard code as popular a name as `default`.  *)
-        let pidx, pname = (senv_lookup "default" ctx), "default" in
-        let default = Var((dloc, pname), pidx) in
-
-        (* lookup default attribute of ltp *)
-        let attr = get_attribute ctx loc [default; arg_type] in
-        (* FIXME: The `default` attribute table shouldn't contain elements of
-         * type `Macro` but elements of type `something -> Sexp`.
-         * The point of the `Macro` type is to be able to distinguish
-         * a macro call from a function call, but here, we have no need
-         * to distinguish two cases.
-         * Better yet: let's not do any table lookup here.  Instead,
-         * call a `default-arg-filler` function, implemented in Typer,
-         * just like `expand_macro_` function.  That one can then look
-         * things up in a table and/or do anything else it wants.  *)
-        let v = lexp_expand_macro attr [] ctx in
-
-        (* get the sexp returned by the macro *)
-        let lsarg = match v with
-          | Vsexp (sexp) -> sexp
-          | _ -> value_fatal loc v "default attribute should return a sexp" in
-
-        (* lparse the argument *)
-        let parg = pexp_parse lsarg in
-        let larg = check parg arg_type ctx in
-
-        handle_fun_args ((Aimplicit, larg) :: largs) (sarg::sargs) pending
-                        (L.mkSusp ret_type (S.substitute larg)))
 
       | sarg :: sargs, t
         -> print_lexp_ctx (ectx_to_lctx ctx);
@@ -1004,11 +1006,13 @@ and get_attribute ctx loc largs =
     | Builtin (_, attr_type, Some map) -> map
     | _ -> fatal loc "get-attribute expects a table as first argument" in
 
-  let lxp = AttributeMap.find var map in
-    (lxp : lexp)
+  try Some (AttributeMap.find var map)
+  with Not_found -> None
 
 and sform_get_attribute ctx loc (sargs : sexp list) =
-  get_attribute ctx loc (List.map (lexp_parse_sexp ctx) sargs)
+  match get_attribute ctx loc (List.map (lexp_parse_sexp ctx) sargs) with
+  | Some e -> e
+  | None -> sexp_error loc "No attribute found"; dlxp
 
 and sform_has_attribute ctx loc (sargs : sexp list) =
   let n = get_size ctx in
