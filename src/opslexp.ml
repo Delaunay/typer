@@ -396,20 +396,21 @@ let rec check' meta_ctx erased ctx e =
       lookup_type ctx v
   | Susp (e, s) -> check erased ctx (push_susp e s)
   | Let (l, defs, e)
-    -> let tmp_ctx =
+    -> let _ =
         List.fold_left (fun ctx (v, e, t)
                         -> (let _ = check_type DB.set_empty ctx t in
                            DB.lctx_extend ctx (Some v) ForwardRef t))
                        ctx defs in
       let nerased = DB.set_sink (List.length defs) erased in
+      let nctx = DB.lctx_extend_rec ctx defs in
+      (* FIXME: Termination checking!  Positivity-checker!  *)
       let _ = List.fold_left (fun n (v, e, t)
-                              -> assert_type tmp_ctx e
+                              -> assert_type nctx e
                                             (push_susp t (S.shift n))
-                                            (check nerased tmp_ctx e);
+                                            (check nerased nctx e);
                                 n - 1)
                              (List.length defs) defs in
-      let new_ctx = DB.lctx_extend_rec ctx defs in
-      mkSusp (check nerased new_ctx e)
+      mkSusp (check nerased nctx e)
              (lexp_defs_subst l S.identity defs)
   | Arrow (ak, v, t1, l, t2)
     -> (let k1 = check_type erased ctx t1 in

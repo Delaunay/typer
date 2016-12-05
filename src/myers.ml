@@ -75,6 +75,17 @@ let rec nthcdr n l =
 
 let nth n l = car (nthcdr n l)
 
+(* While `nth` is O(log N), `set_nth` is O(N)!  :-(  *)
+let rec set_nth n v l = match (n, l) with
+  | 0, Mcons (_, cdr, s, tail) -> Mcons (v, cdr, s, tail)
+  | n, Mcons (v', cdr, _, _)
+    -> cons v' (set_nth (n - 1) v cdr)
+  (* We can't set_nth past the end in general because we'd need to
+   * magically fill the intermediate entries with something of the right type.
+   * But we *can* set_nth just past the end.  *)
+  | 0, Mnil -> Mcons (v, Mnil, 1, Mnil)
+  | _, Mnil -> raise Not_found
+
 (* This operation would be more efficient using Myers's choice of keeping
  * the length (instead of the skip-distance) in each node.  *)
 let length l =

@@ -866,13 +866,21 @@ and lexp_check_decls (ectx : elab_context) (* External context.  *)
                      (nctx : elab_context) (* Context with type declarations. *)
                      (defs : (vdef * pexp * ltype) list)
     : (vdef * lexp * ltype) list * elab_context =
-  let declmap = List.fold_right
-                  (fun ((_, vname) as v, pexp, ltp) map ->
+  let (declmap, nctx)
+    = List.fold_right
+                  (fun ((_, vname) as v, pexp, ltp) (map, nctx) ->
                     let i = senv_lookup vname nctx in
-                    let adjusted_ltp = push_susp ltp (S.shift (i + 1)) in
-                    IntMap.add i (v, check pexp adjusted_ltp nctx, ltp)
-                               map)
-                  defs IntMap.empty in
+                    assert (i < List.length defs);
+                    match Myers.nth i (ectx_to_lctx nctx) with
+                    | (o, v', ForwardRef, t)
+                      -> let adjusted_ltp = push_susp ltp (S.shift (i + 1)) in
+                        assert (t == ltp);
+                        let e = check pexp adjusted_ltp nctx in
+                        let (ec, lc) = nctx in
+                        (IntMap.add i (v, e, ltp) map,
+                         (ec, Myers.set_nth i (o, v', LetDef e, t) lc))
+                    | _ -> U.internal_error "Defining same slot!")
+                  defs (IntMap.empty, nctx) in
   let decls = List.rev (List.map (fun (_, d) -> d) (IntMap.bindings declmap)) in
   decls, ctx_define_rec ectx decls
 
