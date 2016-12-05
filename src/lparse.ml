@@ -658,19 +658,6 @@ and infer_call (func: pexp) (sargs: sexp list) ctx =
                           (SMap.remove aname' pending)
                           (L.mkSusp ret_type (S.substitute larg))
 
-      | [], _
-        -> (if not (SMap.is_empty pending) then
-             let pending = SMap.bindings pending in
-             let loc = match pending with
-               | (_, sarg)::_ -> sexp_location sarg
-               | _ -> assert false in
-             pexp_error loc func
-                        ("Explicit actual args `"
-                         ^ String.concat ", " (List.map (fun (l, _) -> l)
-                                                        pending)
-                         ^ "` have no matching formal args"));
-          largs, ltp
-
       | (Node (Symbol (_, "_:=_"), [Symbol (_, aname); sarg])) :: sargs,
         Arrow (ak, _, arg_type, _, ret_type)
            when (aname = "_")
@@ -691,6 +678,31 @@ and infer_call (func: pexp) (sargs: sexp list) ctx =
                      ("Explicit arg `" ^ aname ^ "` to non-function "
                       ^ "(type = " ^ (lexp_string ltp) ^ ")");
           handle_fun_args largs sargs pending ltp
+
+      (* Aerasable *)
+      | _, Arrow (Aerasable, v, arg_type, _, ret_type)
+           (* Don't instantiate after the last explicit arg: the rest is done,
+            * when needed in infer_and_check (via instantiate_implicit).  *)
+           when not (sargs = [] && SMap.is_empty pending)
+        -> let larg = newMetavar (match sargs with
+                                 | [] -> pexp_location func
+                                 | sarg::_ -> sexp_location sarg)
+                                (match v with Some (_, name) -> name | _ -> "v")
+                                arg_type in
+          handle_fun_args ((Aerasable, larg) :: largs) sargs pending
+                          (L.mkSusp ret_type (S.substitute larg))
+      | [], _
+        -> (if not (SMap.is_empty pending) then
+             let pending = SMap.bindings pending in
+             let loc = match pending with
+               | (_, sarg)::_ -> sexp_location sarg
+               | _ -> assert false in
+             pexp_error loc func
+                        ("Explicit actual args `"
+                         ^ String.concat ", " (List.map (fun (l, _) -> l)
+                                                        pending)
+                         ^ "` have no matching formal args"));
+          largs, ltp
 
       | sarg :: sargs, Arrow (Aexplicit, _, arg_type, _, ret_type)
         -> let parg = pexp_parse sarg in
@@ -728,13 +740,6 @@ and infer_call (func: pexp) (sargs: sexp list) ctx =
 
         handle_fun_args ((Aimplicit, larg) :: largs) (sarg::sargs) pending
                         (L.mkSusp ret_type (S.substitute larg)))
-      (* Aerasable *)
-      | sarg :: sargs, Arrow (Aerasable, v, arg_type, _, ret_type)
-        -> let larg = newMetavar (sexp_location sarg)
-                                (match v with Some (_, name) -> name | _ -> "v")
-                                arg_type in
-          handle_fun_args ((Aerasable, larg) :: largs) (sarg::sargs) pending
-                          (L.mkSusp ret_type (S.substitute larg))
 
       | sarg :: sargs, t
         -> print_lexp_ctx (ectx_to_lctx ctx);

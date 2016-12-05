@@ -362,9 +362,7 @@ let _ = test_eval_eqv_named
    f = lambda α ≡> lambda p x ->
        Eq_cast (t := Type) (x := Int) (y := α) (f := (lambda v -> v)) (p := p) x"
 
-  (* FIXME: If I remove the (l := ?) I get
-   *     Explicit actual args `t, x` have no matching formal args  *)
-  "f (Eq_refl (l := ?) (t := Type) (x := Int)) 3"
+  "f Eq_refl 3"
   "3"
 
 (* run all tests *)
