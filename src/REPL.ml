@@ -214,7 +214,7 @@ let readfiles files (i, lctx, rctx) prt =
 (*  Specials commands %[command-name] [args] *)
 let rec repl i clxp rctx =
     let repl = repl (i + 1) in
-    let ipt = read_input i in
+    let ipt = try read_input i with End_of_file -> "%quit" in
         _history := ipt::!_history;
         match ipt with
             (*  Check special keywords *)
