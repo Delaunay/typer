@@ -60,7 +60,7 @@ let generate_lexp_from_str str =
       (List.map
          (fun (_, lxp, _) -> lxp))
         (List.flatten lst))
-       (lexp_decl_str str default_lctx))
+       (lexp_decl_str str default_ectx))
 
 let _ = generate_tests
     "TYPECHECK"
@@ -68,7 +68,7 @@ let _ = generate_tests
     (fun x -> List.map lexp_string x)
     (fun x -> (x, true))
 
-let lctx = default_lctx
+let lctx = default_ectx
 (* let _ = (add_test "TYPECHEK_LEXP" "lexp_print" (fun () ->
  * 
  *     let dcode = "

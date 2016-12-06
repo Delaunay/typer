@@ -39,7 +39,7 @@ open Env
 
 
 (* default environment *)
-let lctx = default_lctx
+let ectx = default_ectx
 let rctx = default_rctx
 
 let _ = (add_test "MACROS" "macros base" (fun () ->
@@ -57,11 +57,11 @@ let _ = (add_test "MACROS" "macros base" (fun () ->
     sqr = Macro_ my_fun;
     " in
 
-    let rctx, lctx = eval_decl_str dcode lctx rctx in
+    let rctx, ectx = eval_decl_str dcode ectx rctx in
 
-    let ecode = "(sqr 3);" in
+    let ecode = "(lambda (x : Int) -> sqr 3) 5;" in
 
-    let ret = eval_expr_str ecode lctx rctx in
+    let ret = eval_expr_str ecode ectx rctx in
 
         match ret with
             | [Vint(r)] -> expect_equal_int r (3 * 3)
@@ -81,11 +81,11 @@ let _ = (add_test "MACROS" "macros decls" (fun () ->
 
       my-decls Nat;" in
 
-    let rctx, lctx = eval_decl_str dcode lctx rctx in
+    let rctx, ectx = eval_decl_str dcode ectx rctx in
 
     let ecode = "a; b;" in
 
-    let ret = eval_expr_str ecode lctx rctx in
+    let ret = eval_expr_str ecode ectx rctx in
 
         match ret with
             | [Vint(a); Vint(b)] ->

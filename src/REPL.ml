@@ -269,7 +269,7 @@ let parse_args () =
 let main () =
     parse_args ();
 
-    let lctx = default_lctx in
+    let ectx = default_ectx in
     let rctx = default_rctx in
 
     print_string (make_title " TYPER REPL ");
@@ -277,12 +277,12 @@ let main () =
     print_string (make_sep '-');
     flush stdout;
 
-    let (i, lctx, rctx) = readfiles (!arg_files) (1, lctx, rctx) true in
+    let (i, ectx, rctx) = readfiles (!arg_files) (1, ectx, rctx) true in
 
     flush stdout;
 
     (* Initiate REPL. This will allow us to inspect interpreted code *)
-    repl i lctx rctx
+    repl i ectx rctx
 
 
 let _ = main ()

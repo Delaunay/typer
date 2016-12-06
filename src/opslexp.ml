@@ -594,6 +594,101 @@ let rec check' meta_ctx erased ctx e =
 
 let check meta_ctx = check' meta_ctx DB.set_empty
 
+(** Compute the set of free (meta)variables.  **)
+
+let rec list_union l1 l2 = match l1 with
+  | [] -> l2
+  | (x::l1) -> list_union l1 (if List.mem x l2 then l2 else (x::l2))
+
+type mv_set = subst list VMap.t
+let mv_set_empty = VMap.empty
+let mv_set_add ms m s
+  = let ss = try VMap.find m ms with Not_found -> [] in
+    if List.mem s ss then ms
+    else VMap.add m (s::ss) ms
+let mv_set_union : mv_set -> mv_set -> mv_set
+  = VMap.merge (fun m oss1 oss2
+                -> match (oss1, oss2) with
+                  | (None, _) -> oss2
+                  | (_, None) -> oss1
+                  | (Some ss1, Some ss2)
+                    ->  Some (list_union ss1 ss2))
+
+module LMap
+  (* Memoization table.  FIXME: Ideally the keys should be "weak", but
+   * I haven't found any such functionality in OCaml's libs.  *)
+  = Hashtbl.Make
+      (struct type t = lexp let hash = Hashtbl.hash let equal = (==) end)
+let fv_memo = LMap.create 1000
+
+let fv_empty = (DB.set_empty, mv_set_empty)
+let fv_union (fv1, mv1) (fv2, mv2)
+  = (DB.set_union fv1 fv2, mv_set_union mv1 mv2)
+let fv_sink n (fvs, mvs) = (DB.set_sink n fvs, mvs)
+let fv_hoist n (fvs, mvs) = (DB.set_hoist n fvs, mvs)
+
+let rec fv (e : lexp) : (DB.set * mv_set) =
+  let fv' e = match e with
+    | Imm _ -> fv_empty
+    | SortLevel SLz -> fv_empty
+    | SortLevel (SLsucc e) -> fv e
+    | SortLevel (SLlub (e1, e2)) -> fv_union (fv e1) (fv e2)
+    | Sort (_, Stype e) -> fv e
+    | Sort (_, (StypeOmega | StypeLevel)) -> fv_empty
+    | Builtin _ -> fv_empty
+    | Var (_, i) -> (DB.set_singleton i, mv_set_empty)
+    | Susp (e, s) -> fv (push_susp e s)
+    | Let (_, defs, e)
+      -> let len = List.length defs in
+        let (s, _)
+          = List.fold_left (fun (s, o) (_, e, t)
+                            -> (fv_union s (fv_union (fv_sink o (fv t))
+                                                    (fv e)),
+                               o - 1))
+                           (fv e, len) defs in
+        fv_hoist len s
+    | Arrow (_, _, t1, _, t2) -> fv_union (fv t1) (fv_hoist 1 (fv t2))
+    | Lambda (_, _, t, e) -> fv_union (fv t) (fv_hoist 1 (fv e))
+    | Call (f, args)
+      -> List.fold_left (fun s (_, arg)
+                        -> fv_union s (fv arg))
+                       (fv f) args
+    | Inductive (_, _, args, cases)
+      -> let alen = List.length args in
+        let s
+          = List.fold_left (fun s (_, _, t)
+                            -> fv_sink 1 (fv_union s (fv t)))
+                           fv_empty args in
+        let s
+          = SMap.fold
+              (fun _ fields s
+               -> fv_union
+                   s
+                   (fv_hoist (List.length fields)
+                             (List.fold_left (fun s (_, _, t)
+                                              -> fv_sink 1 (fv_union s (fv t)))
+                                             fv_empty fields)))
+              cases s in
+        fv_hoist alen s
+    | Cons (t, _) -> fv t
+    | Case (_, e, t, cases, def)
+      -> let s = fv_union (fv e) (fv t) in
+        let s = match def with
+          | None -> s
+          | Some (_, e) -> fv_union s (fv_hoist 1 (fv e)) in
+        SMap.fold (fun _ (_, fields, e) s
+                   -> fv_union s (fv_hoist (List.length fields) (fv e)))
+                  cases s
+    | Metavar (m, s, _, t)
+      -> let (fvs, mvs) = fv t in
+        (fvs, mv_set_add mvs m s)
+  in
+  try LMap.find fv_memo e
+  with Not_found
+       -> let r = fv' e in
+         LMap.add fv_memo e r;
+         r
+
 (*********** Type erasure, before evaluation.  *****************)
 
 let rec erase_type (lxp: L.lexp): E.elexp =

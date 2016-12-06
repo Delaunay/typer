@@ -32,7 +32,6 @@
 
 open Util
 open Fmt
-open Myers
 
 open Prelexer
 open Lexer
@@ -53,7 +52,6 @@ module Unif = Unification
 
 module OL = Opslexp
 module EL = Elexp
-module SU = Subst
 
 (* Shortcut => Create a Var *)
 let make_var name index loc =
@@ -681,13 +679,13 @@ and infer_call (func: pexp) (sargs: sexp list) ctx =
     let rec handle_fun_args largs sargs pending ltp =
       let ltp' = OL.lexp_whnf ltp (ectx_to_lctx ctx) meta_ctx in
       match sargs, ltp' with
-      | _, Arrow (ak, Some (_, aname'), arg_type, _, ret_type)
-           when SMap.mem aname' pending
-        -> let sarg = SMap.find aname' pending in
+      | _, Arrow (ak, Some (_, aname), arg_type, _, ret_type)
+           when SMap.mem aname pending
+        -> let sarg = SMap.find aname pending in
           let parg = pexp_parse sarg in
           let larg = check parg arg_type ctx in
           handle_fun_args ((ak, larg) :: largs) sargs
-                          (SMap.remove aname' pending)
+                          (SMap.remove aname pending)
                           (L.mkSusp ret_type (S.substitute larg))
 
       | (Node (Symbol (_, "_:=_"), [Symbol (_, aname); sarg])) :: sargs,
@@ -833,7 +831,7 @@ and lexp_expand_macro_ macro_funct sargs ctx expand_fun : value_type =
   (* FIXME: Don't `mkCall + eval` but use eval_call instead!  *)
   let macro = mkCall (macro_expand, args) in
   let emacro = OL.erase_type macro in
-  let rctx = EV.from_lctx ctx in
+  let rctx = EV.from_ectx ctx in
 
   (* eval macro *)
   let vxp = try EV._eval emacro rctx ([], [])
@@ -1145,7 +1143,7 @@ let dynamic_bind r v body =
   with e -> r := old; raise e
 
 (* Make lxp context with built-in types *)
-let default_lctx
+let default_ectx
   = let _ = register_special_forms () in
     (* Empty context *)
     let lctx = make_elab_context in
@@ -1184,7 +1182,7 @@ let default_lctx
         lctx in
     lctx
 
-let default_rctx = EV.from_lctx default_lctx
+let default_rctx = EV.from_ectx default_ectx
 
 (*      String Parsing
  * --------------------------------------------------------- *)

@@ -55,6 +55,7 @@ type value_type =
     | Closure of string * elexp * runtime_env
     | Vsexp of sexp             (* Values passed to macros.  *)
     (* Unable to eval during macro expansion, only throw if the value is used *)
+    | Vundefined
     | Vdummy
     | Vin of in_channel
     | Vout of out_channel
@@ -109,6 +110,7 @@ let value_name v =
     | Vsexp  _ -> "Vsexp"
     | Vcons  _ -> "Vcons"
     | Vfloat _ -> "Vfloat"
+    | Vundefined -> "Vundefined"
     | Vdummy     -> "Vdummy"
     | Vstring  _ -> "Vstring"
     | Closure  _ -> "Closure"
@@ -120,6 +122,7 @@ let rec value_string v =
     | Vin   _ -> "in_channel"
     | Vout  _ -> "out_channe;"
     | Vdummy     -> "dummy"
+    | Vundefined -> "<undefined!>"
     | Vcommand _ -> "command"
     | Vstring  s -> "\"" ^ s ^ "\""
     | Vbuiltin s -> s
@@ -212,8 +215,7 @@ let print_rte_ctx_n (ctx: runtime_env) start =
 
 (* Only print user defined variables *)
 let print_rte_ctx ctx =
-  (* FIXME: harcoded -3, runtime_env has 3 variables missing *)
-  print_rte_ctx_n ctx (!L.builtin_size - 3)
+  print_rte_ctx_n ctx (!L.builtin_size)
 
 (* Dump the whole context *)
 let dump_rte_ctx ctx =

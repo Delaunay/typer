@@ -196,7 +196,7 @@ let format_source () =
     let toks = lex default_stt pretoks in
     let nodes = sexp_parse_all_to_list default_grammar toks (Some ";") in
     let pexps = pexp_decls_all nodes in
-    let ctx = default_lctx in
+    let ctx = default_ectx in
     let lexps, _ = lexp_p_decls pexps ctx in
 
     print_string (make_sep '-'); print_string "\n";
@@ -354,7 +354,7 @@ let main () =
             debug_pexp_decls pexps; print_string "\n"));
 
         (* get lexp *)
-        let octx = default_lctx in
+        let octx = default_ectx in
 
         (* Debug declarations merging *)
         (if (get_p_option "merge-debug") then(
