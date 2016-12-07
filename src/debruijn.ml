@@ -92,9 +92,6 @@ let type_int = mkBuiltin ((dloc, "Int"), type0, None)
 let type_float = mkBuiltin ((dloc, "Float"), type0, None)
 let type_string = mkBuiltin ((dloc, "String"), type0, None)
 
-(* FIXME: Make it a metavar.  *)
-let dltype = type0
-
 (* easier to debug with type annotations *)
 type env_elem = (db_offset * vdef option * varbind * ltype)
 type lexp_context = env_elem M.myers

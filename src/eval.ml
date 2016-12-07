@@ -624,8 +624,9 @@ module CMap
 let ctx_memo = CMap.create 1000
 
 let not_closed rctx ((o, vm) : DB.set) =
-  VMap.fold (fun i () nc -> let (_, rc) = Myers.nth (i + o) rctx in
-                         match !rc with Vundefined -> (i+o)::nc | _ -> nc)
+  VMap.fold (fun i () nc -> let i = i + o in
+                         let (_, rc) = Myers.nth i rctx in
+                         match !rc with Vundefined -> i::nc | _ -> nc)
             vm []
 
 let closed_p rctx (fvs, mvs) =
