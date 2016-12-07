@@ -365,6 +365,20 @@ let _ = test_eval_eqv_named
   "f Eq_refl 3"
   "3"
 
+let _ = test_eval_eqv_named
+  "Generic-typed case"
+
+  "P = (a : Type) ≡> a -> Not (Not a);
+   p : P;
+   p = lambda a ≡> lambda x notx -> notx x;
+   tP : Decidable P;
+   tP = (datacons Decidable true) (prop := P) (p := p);"
+
+  "case tP
+   | (datacons ? true) (p := _) => 3
+   | (datacons ? false) (p := _) => 4;"
+  "3;"
+
 (* run all tests *)
 let _ = run_all ()
 

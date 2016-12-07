@@ -689,6 +689,115 @@ let rec fv (e : lexp) : (DB.set * mv_set) =
          LMap.add fv_memo e r;
          r
 
+(** Finding the type of a expression.  **)
+(* This should never signal any warning/error.  *)
+
+let rec get_type meta_ctx ctx e =
+  let get_type = get_type meta_ctx in
+  match e with
+  | Imm (Float (_, _)) -> DB.type_float
+  | Imm (Integer (_, _)) -> DB.type_int
+  | Imm (String (_, _)) -> DB.type_string
+  | Imm (Epsilon | Block (_, _, _) | Symbol _ | Node (_, _)) -> DB.type_int
+  | Builtin (_, t, _) -> t
+  | SortLevel _ -> DB.type_level
+  | Sort (l, Stype e) -> mkSort (l, Stype (mkSortLevel (SLsucc e)))
+  | Sort (_, StypeLevel) -> DB.sort_omega
+  | Sort (_, StypeOmega) -> DB.sort_omega
+  | Var (((_, name), idx) as v) -> lookup_type ctx v
+  | Susp (e, s) -> get_type ctx (push_susp e s)
+  | Let (l, defs, e)
+    -> let nctx = DB.lctx_extend_rec ctx defs in
+      mkSusp (get_type nctx e) (lexp_defs_subst l S.identity defs)
+  | Arrow (ak, v, t1, l, t2)
+    (* FIXME: Use `check` here but silencing errors?  *)
+    -> (let k1 = get_type ctx t1 in
+       let nctx = DB.lexp_ctx_cons ctx 0 v Variable t1 in
+       (* BEWARE!  `k2` can refer to `v`, but this should only happen
+        * if `v` is a TypeLevel, and in that case sort_compose
+        * should ignore `k2` and return TypeOmega anyway.  *)
+       let k2 = get_type nctx t2 in
+       let k2 = mkSusp k2 (S.substitute impossible) in
+       match lexp_whnf k1 ctx meta_ctx, lexp_whnf k2 ctx meta_ctx with
+       | (Sort (_, s1), Sort (_, s2))
+         -> if ak == P.Aerasable && impredicative_erase && s1 != StypeLevel
+           then k2
+           else mkSort (l, sort_compose meta_ctx ctx l s1 s2)
+       | _ -> DB.type0)
+  | Lambda (ak, ((l,_) as v), t, e)
+    -> (mkArrow (ak, Some v, t, l,
+                get_type (DB.lctx_extend ctx (Some v) Variable t)
+                         e))
+  | Call (f, args)
+    -> let ft = get_type ctx f in
+      List.fold_left
+        (fun ft (ak,arg)
+         -> match lexp_whnf ft ctx meta_ctx with
+           | Arrow (ak', v, t1, l, t2)
+             -> mkSusp t2 (S.substitute arg)
+           | _ -> ft)
+        ft args
+  | Inductive (l, label, args, cases)
+    (* FIXME: Use `check` here but silencing errors?  *)
+    -> let rec arg_loop args ctx =
+        match args with
+        | []
+          -> let level
+              = SMap.fold
+                  (fun _ case level ->
+                    let level, _ =
+                      List.fold_left
+                        (fun (level, ctx) (ak, v, t) ->
+                          (match lexp_whnf (get_type ctx t)
+                                           ctx meta_ctx with
+                           | Sort (_, Stype _)
+                                when ak == P.Aerasable && impredicative_erase
+                             -> level
+                           | Sort (_, Stype level')
+                             (* FIXME: scoping of level vars!  *)
+                             -> mkSLlub meta_ctx ctx level level'
+                           | tt -> level),
+                          DB.lctx_extend ctx v Variable t)
+                        (level, ctx)
+                        case in
+                    level)
+                  cases (mkSortLevel SLz) in
+            mkSort (l, Stype level)
+        | (ak, v, t)::args
+          -> mkArrow (ak, Some v, t, lexp_location t,
+                     arg_loop args (DB.lctx_extend ctx (Some v) Variable t)) in
+      let tct = arg_loop args ctx in
+      tct
+  | Case (l, e, ret, branches, default) -> ret
+  | Cons (t, (l, name))
+    -> (match lexp_whnf t ctx meta_ctx with
+       | Inductive (l, _, fargs, constructors)
+         -> (try
+              let fieldtypes = SMap.find name constructors in
+              let rec indtype fargs start_index =
+                match fargs with
+                | [] -> []
+                | (ak, vd, _)::fargs -> (ak, Var (vd, start_index))
+                                       :: indtype fargs (start_index - 1) in
+              let rec fieldargs ftypes =
+                match ftypes with
+                | [] -> let nargs = List.length fieldtypes + List.length fargs in
+                       mkCall (mkSusp t (S.shift nargs),
+                               indtype fargs (nargs - 1))
+                | (ak, vd, ftype) :: ftypes
+                  -> mkArrow (ak, vd, ftype, lexp_location ftype,
+                             fieldargs ftypes) in
+              let rec buildtype fargs =
+                match fargs with
+                | [] -> fieldargs fieldtypes
+                | (ak, ((l,_) as vd), atype) :: fargs
+                  -> mkArrow (P.Aerasable, Some vd, atype, l,
+                             buildtype fargs) in
+              buildtype fargs
+            with Not_found -> DB.type_int)
+       | _ -> DB.type_int)
+  | Metavar (idx, s, _, t) -> t
+
 (*********** Type erasure, before evaluation.  *****************)
 
 let rec erase_type (lxp: L.lexp): E.elexp =

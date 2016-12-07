@@ -559,15 +559,17 @@ and check_case rtype (loc, target, ppatterns) ctx =
 
       let add_branch pctor pargs =
         let loc = pexp_location pctor in
-        let lctor, _ = infer pctor ctx in
+        let lctor, ct = infer pctor ctx in
         let meta_ctx, _ = !global_substitution in
         match OL.lexp_whnf lctor (ectx_to_lctx ctx) meta_ctx with
         | Cons (it', (_, cons_name))
-          -> let _ = if OL.conv_p meta_ctx (ectx_to_lctx ctx) it' it then ()
-                    else lexp_error loc lctor
-                                    ("Expected pattern of type `"
-                                     ^ lexp_string it ^ "` but got `"
-                                    ^ lexp_string it' ^ "`") in
+          -> let _ = match Unif.unify it' it (ectx_to_lctx ctx) meta_ctx with
+              | (None | Some (_, _::_))
+                -> lexp_error loc lctor
+                             ("Expected pattern of type `"
+                              ^ lexp_string it ^ "` but got `"
+                              ^ lexp_string it' ^ "`")
+              | Some subst -> global_substitution := subst in
             let _ = check_uniqueness pat cons_name lbranches in
             let cargs
               = try SMap.find cons_name constructors
@@ -641,6 +643,8 @@ and check_case rtype (loc, target, ppatterns) ctx =
             let lexp = check pexp rtype' nctx in
             SMap.add cons_name (loc, fargs, lexp) lbranches,
             dflt
+        (* FIXME: is `ct` is Special-Form or Macro, pass pargs to it
+         * and try again with the result.  *)
         | _ -> lexp_error loc lctor "Not a constructor"; lbranches, dflt
       in
 
@@ -778,9 +782,7 @@ and infer_call (func: pexp) (sargs: sexp list) ctx =
           * expensive: a complexity of O(N²) for t₁ → t₂ ... → tₙ.  *)
          let e = (get_special_form loc name) ctx loc sargs in
          let meta_ctx, _ = !global_substitution in
-         (* FIXME: We don't actually need to typecheck `e`, we just need
-          * to find its type.  *)
-         (e, OL.check meta_ctx (ectx_to_lctx ctx) e)
+         (e, OL.get_type meta_ctx (ectx_to_lctx ctx) e)
 
       | _ -> lexp_error loc body ("Unknown special-form: "
                                  ^ lexp_string body);
