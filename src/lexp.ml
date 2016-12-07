@@ -243,6 +243,7 @@ let rec push_susp e s =            (* Push a suspension one level down.  *)
     -> let (s, nargs) = L.fold_left (fun (s, nargs) (ak, v, t)
                                     -> (ssink v s, (ak, v, mkSusp t s) :: nargs))
                                    (s, []) args in
+      let nargs = List.rev nargs in
       let ncases = SMap.map (fun args
                              -> let (_, ncase)
                                  = L.fold_left (fun (s, nargs) (ak, v, t)
@@ -257,11 +258,9 @@ let rec push_susp e s =            (* Push a suspension one level down.  *)
   | Case (l, e, ret, cases, default)
     -> mkCase (l, mkSusp e s, mkSusp ret s,
               SMap.map (fun (l, cargs, e)
-                        -> let s' = L.fold_left (fun s carg
-                                                -> match carg with
-                                                  | (_,None) -> s
-                                                  | (_,Some v) -> ssink v s)
-                                               s cargs in
+                        -> let s' = L.fold_left
+                                     (fun s (_,ov) -> ssink (maybev ov) s)
+                                     s cargs in
                           (l, cargs, mkSusp e s'))
                        cases,
               match default with
@@ -296,7 +295,7 @@ let clean meta_ctx e =
       -> let s' = L.fold_left (fun s (v, _, _) -> ssink v s) s defs in
         let (_,ndefs) = L.fold_left (fun (s,ndefs) (v, def, ty)
                                      -> (ssink v s,
-                                        (v, clean s' e, clean s ty) :: ndefs))
+                                        (v, clean s' def, clean s ty) :: ndefs))
                                   (s, []) defs in
         mkLet (l, ndefs, clean s' e)
     | Arrow (ak, v, t1, l, t2)
@@ -308,6 +307,7 @@ let clean meta_ctx e =
       -> let (s, nargs) = L.fold_left (fun (s, nargs) (ak, v, t)
                                     -> (ssink v s, (ak, v, clean s t) :: nargs))
                                    (s, []) args in
+      let nargs = List.rev nargs in
       let ncases = SMap.map (fun args
                              -> let (_, ncase)
                                  = L.fold_left (fun (s, nargs) (ak, v, t)
@@ -322,11 +322,9 @@ let clean meta_ctx e =
     | Case (l, e, ret, cases, default)
       -> mkCase (l, clean s e, clean s ret,
                 SMap.map (fun (l, cargs, e)
-                          -> let s' = L.fold_left (fun s carg
-                                                  -> match carg with
-                                                    | (_,None) -> s
-                                                    | (_,Some v) -> ssink v s)
-                                                 s cargs in
+                          -> let s' = L.fold_left
+                                       (fun s (_,ov) -> ssink (maybev ov) s)
+                                       s cargs in
                             (l, cargs, clean s' e))
                          cases,
                 match default with

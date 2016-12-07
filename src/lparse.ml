@@ -578,8 +578,8 @@ and check_case rtype (loc, target, ppatterns) ctx =
                                    ^ cons_name ^ "` constructor");
                        [] in
 
-            let subst = List.fold_right (fun (_, t) s -> S.cons t s)
-                                        targs S.identity in
+            let subst = List.fold_left (fun s (_, t) -> S.cons t s)
+                                        S.identity targs in
             let rec make_nctx ctx   (* elab context.  *)
                               s     (* Pending substitution.  *)
                               pargs (* Pattern arguments.  *)
@@ -830,8 +830,21 @@ and lexp_expand_macro_ macro_funct sargs ctx expand_fun : value_type =
 
   (* FIXME: Don't `mkCall + eval` but use eval_call instead!  *)
   let macro = mkCall (macro_expand, args) in
+  let meta_ctx, _ = !global_substitution in
+  let macro = L.clean meta_ctx macro in
   let emacro = OL.erase_type macro in
-  let rctx = EV.from_ectx ctx in
+  let rctx = EV.from_ectx meta_ctx ctx in
+
+  if not (EV.closed_p rctx (OL.fv macro)) then
+    (let (fvs, _) = OL.fv macro in
+     let nc = EV.not_closed rctx fvs in
+     lexp_error (lexp_location macro_funct) macro_funct
+                ("Macro function is not closed: "
+                 ^ String.concat
+                     " " (List.map (fun i -> match Myers.nth i rctx with
+                                          | (Some n,_) -> n
+                                          | _ -> "<anon>")
+                                   nc)));
 
   (* eval macro *)
   let vxp = try EV._eval emacro rctx ([], [])
@@ -1182,7 +1195,7 @@ let default_ectx
         lctx in
     lctx
 
-let default_rctx = EV.from_ectx default_ectx
+let default_rctx = EV.from_ectx VMap.empty default_ectx
 
 (*      String Parsing
  * --------------------------------------------------------- *)

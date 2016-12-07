@@ -157,6 +157,7 @@
   ;; along the lines of what's done in Tuareg.
   (pcase (cons kind token)
     (`(:before . "|") (smie-rule-parent))
+    (`(:after . "=") 2)
     ))
 
 ;;;###autoload

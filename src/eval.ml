@@ -623,28 +623,30 @@ module CMap
       (struct type t = lexp_context let hash = Hashtbl.hash let equal = (==) end)
 let ctx_memo = CMap.create 1000
 
-let closed_dbset_p rctx ((o, vm) : DB.set) =
-  VMap.for_all (fun i () -> let (_, rc) = Myers.nth (i + o) rctx in
-                         match !rc with Vundefined -> false | _ -> true)
-               vm
+let not_closed rctx ((o, vm) : DB.set) =
+  VMap.fold (fun i () nc -> let (_, rc) = Myers.nth (i + o) rctx in
+                         match !rc with Vundefined -> (i+o)::nc | _ -> nc)
+            vm []
 
 let closed_p rctx (fvs, mvs) =
-  closed_dbset_p rctx fvs
+  not_closed rctx fvs = []
   (* FIXME: Handle metavars!  *)
   && VMap.is_empty mvs
 
-let rec from_lctx (lctx: lexp_context): runtime_env =
+let rec from_lctx meta_ctx (lctx: lexp_context): runtime_env =
   (* FIXME: `eval` with a disabled runIO.  *)
   let from_lctx' (lctx: lexp_context): runtime_env =
     match lctx with
     | Myers.Mnil -> Myers.nil
     | Myers.Mcons ((0, loname, def, _), lctx, _, _)
-      -> let rctx = from_lctx lctx in
+      -> let rctx = from_lctx meta_ctx lctx in
         Myers.cons (roname loname,
                     ref (match def with
                          | LetDef e
-                              when closed_p rctx (OL.fv e)
-                           -> eval (OL.erase_type e) rctx
+                           -> let e = L.clean meta_ctx e in
+                             if closed_p rctx (OL.fv e) then
+                               eval (OL.erase_type e) rctx
+                             else Vundefined
                          | _ -> Vundefined))
                    rctx
     | Myers.Mcons ((1, loname, LetDef e, _), lctx, _, _)
@@ -652,11 +654,12 @@ let rec from_lctx (lctx: lexp_context): runtime_env =
           match lctx with
           | Myers.Mcons ((o, loname, LetDef e, _), lctx, _, _)
                when o = i
-            -> getdefs (i + 1) lctx ((loname, e) :: rdefs)
+            -> let e = L.clean meta_ctx e in
+              getdefs (i + 1) lctx ((loname, e) :: rdefs)
                       (OL.fv_union fvs (OL.fv e))
           | _ -> (lctx, rdefs, fvs) in
         let (lctx, rdefs, fvs) = getdefs 2 lctx [(loname, e)] OL.fv_empty in
-        let rctx = from_lctx lctx in
+        let rctx = from_lctx meta_ctx lctx in
         let (nrctx, evs)
           = List.fold_left (fun (rctx, evs) (loname, e)
                             -> let rc = ref Vundefined in
@@ -677,5 +680,5 @@ let rec from_lctx (lctx: lexp_context): runtime_env =
          r
 
 (* build a rctx from a ectx.  *)
-let from_ectx (ctx: elab_context): runtime_env =
-  from_lctx (ectx_to_lctx ctx)
+let from_ectx meta_ctx (ctx: elab_context): runtime_env =
+  from_lctx meta_ctx (ectx_to_lctx ctx)

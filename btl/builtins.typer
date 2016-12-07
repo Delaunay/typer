@@ -147,19 +147,20 @@ expand_dmacro_ : Macro -> List Sexp -> List Sexp;
 expand_dmacro_ m args = case m
   | DMacro_ f => (f args)
   % Wrap a Macro in a list of Sexp if Macro_ is used
-  | Macro_ f => cons (a := Sexp) (f args) (nil (a := Sexp));
+  | Macro_ f => cons (f args) nil;
 
 sexp_dispatch_ = Built-in "sexp_dispatch_" (
-                              (a : Type) ≡>
-                              Sexp
-                              -> (Sexp -> List Sexp -> a)
-                              -> (String -> a)
-                              -> (String -> a)
-                              -> (Int -> a)
-                              -> (Float -> a)
-                              -> (List Sexp -> a)
-                              -> a
-                          );
+                         (a : Type) ≡>
+                         Sexp
+                         -> (node   : Sexp -> List Sexp -> a)
+                         -> (symbol : String -> a)
+                         -> (string : String -> a)
+                         -> (int    : Int -> a)
+                         -> (float  : Float -> a)
+                         -> (block  : List Sexp -> a)
+                         -> a
+                     );
+
 
 % -----------------------------------------------------
 %       Monads
