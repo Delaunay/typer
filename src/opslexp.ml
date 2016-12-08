@@ -396,20 +396,21 @@ let rec check' meta_ctx erased ctx e =
       lookup_type ctx v
   | Susp (e, s) -> check erased ctx (push_susp e s)
   | Let (l, defs, e)
-    -> let tmp_ctx =
+    -> let _ =
         List.fold_left (fun ctx (v, e, t)
                         -> (let _ = check_type DB.set_empty ctx t in
                            DB.lctx_extend ctx (Some v) ForwardRef t))
                        ctx defs in
       let nerased = DB.set_sink (List.length defs) erased in
+      let nctx = DB.lctx_extend_rec ctx defs in
+      (* FIXME: Termination checking!  Positivity-checker!  *)
       let _ = List.fold_left (fun n (v, e, t)
-                              -> assert_type tmp_ctx e
+                              -> assert_type nctx e
                                             (push_susp t (S.shift n))
-                                            (check nerased tmp_ctx e);
+                                            (check nerased nctx e);
                                 n - 1)
                              (List.length defs) defs in
-      let new_ctx = DB.lctx_extend_rec ctx defs in
-      mkSusp (check nerased new_ctx e)
+      mkSusp (check nerased nctx e)
              (lexp_defs_subst l S.identity defs)
   | Arrow (ak, v, t1, l, t2)
     -> (let k1 = check_type erased ctx t1 in
@@ -592,6 +593,210 @@ let rec check' meta_ctx erased ctx e =
       with Not_found -> t
 
 let check meta_ctx = check' meta_ctx DB.set_empty
+
+(** Compute the set of free (meta)variables.  **)
+
+let rec list_union l1 l2 = match l1 with
+  | [] -> l2
+  | (x::l1) -> list_union l1 (if List.mem x l2 then l2 else (x::l2))
+
+type mv_set = subst list VMap.t
+let mv_set_empty = VMap.empty
+let mv_set_add ms m s
+  = let ss = try VMap.find m ms with Not_found -> [] in
+    if List.mem s ss then ms
+    else VMap.add m (s::ss) ms
+let mv_set_union : mv_set -> mv_set -> mv_set
+  = VMap.merge (fun m oss1 oss2
+                -> match (oss1, oss2) with
+                  | (None, _) -> oss2
+                  | (_, None) -> oss1
+                  | (Some ss1, Some ss2)
+                    ->  Some (list_union ss1 ss2))
+
+module LMap
+  (* Memoization table.  FIXME: Ideally the keys should be "weak", but
+   * I haven't found any such functionality in OCaml's libs.  *)
+  = Hashtbl.Make
+      (struct type t = lexp let hash = Hashtbl.hash let equal = (==) end)
+let fv_memo = LMap.create 1000
+
+let fv_empty = (DB.set_empty, mv_set_empty)
+let fv_union (fv1, mv1) (fv2, mv2)
+  = (DB.set_union fv1 fv2, mv_set_union mv1 mv2)
+let fv_sink n (fvs, mvs) = (DB.set_sink n fvs, mvs)
+let fv_hoist n (fvs, mvs) = (DB.set_hoist n fvs, mvs)
+
+let rec fv (e : lexp) : (DB.set * mv_set) =
+  let fv' e = match e with
+    | Imm _ -> fv_empty
+    | SortLevel SLz -> fv_empty
+    | SortLevel (SLsucc e) -> fv e
+    | SortLevel (SLlub (e1, e2)) -> fv_union (fv e1) (fv e2)
+    | Sort (_, Stype e) -> fv e
+    | Sort (_, (StypeOmega | StypeLevel)) -> fv_empty
+    | Builtin _ -> fv_empty
+    | Var (_, i) -> (DB.set_singleton i, mv_set_empty)
+    | Susp (e, s) -> fv (push_susp e s)
+    | Let (_, defs, e)
+      -> let len = List.length defs in
+        let (s, _)
+          = List.fold_left (fun (s, o) (_, e, t)
+                            -> (fv_union s (fv_union (fv_sink o (fv t))
+                                                    (fv e)),
+                               o - 1))
+                           (fv e, len) defs in
+        fv_hoist len s
+    | Arrow (_, _, t1, _, t2) -> fv_union (fv t1) (fv_hoist 1 (fv t2))
+    | Lambda (_, _, t, e) -> fv_union (fv t) (fv_hoist 1 (fv e))
+    | Call (f, args)
+      -> List.fold_left (fun s (_, arg)
+                        -> fv_union s (fv arg))
+                       (fv f) args
+    | Inductive (_, _, args, cases)
+      -> let alen = List.length args in
+        let s
+          = List.fold_left (fun s (_, _, t)
+                            -> fv_sink 1 (fv_union s (fv t)))
+                           fv_empty args in
+        let s
+          = SMap.fold
+              (fun _ fields s
+               -> fv_union
+                   s
+                   (fv_hoist (List.length fields)
+                             (List.fold_left (fun s (_, _, t)
+                                              -> fv_sink 1 (fv_union s (fv t)))
+                                             fv_empty fields)))
+              cases s in
+        fv_hoist alen s
+    | Cons (t, _) -> fv t
+    | Case (_, e, t, cases, def)
+      -> let s = fv_union (fv e) (fv t) in
+        let s = match def with
+          | None -> s
+          | Some (_, e) -> fv_union s (fv_hoist 1 (fv e)) in
+        SMap.fold (fun _ (_, fields, e) s
+                   -> fv_union s (fv_hoist (List.length fields) (fv e)))
+                  cases s
+    | Metavar (m, s, _, t)
+      -> let (fvs, mvs) = fv t in
+        (fvs, mv_set_add mvs m s)
+  in
+  try LMap.find fv_memo e
+  with Not_found
+       -> let r = fv' e in
+         LMap.add fv_memo e r;
+         r
+
+(** Finding the type of a expression.  **)
+(* This should never signal any warning/error.  *)
+
+let rec get_type meta_ctx ctx e =
+  let get_type = get_type meta_ctx in
+  match e with
+  | Imm (Float (_, _)) -> DB.type_float
+  | Imm (Integer (_, _)) -> DB.type_int
+  | Imm (String (_, _)) -> DB.type_string
+  | Imm (Epsilon | Block (_, _, _) | Symbol _ | Node (_, _)) -> DB.type_int
+  | Builtin (_, t, _) -> t
+  | SortLevel _ -> DB.type_level
+  | Sort (l, Stype e) -> mkSort (l, Stype (mkSortLevel (SLsucc e)))
+  | Sort (_, StypeLevel) -> DB.sort_omega
+  | Sort (_, StypeOmega) -> DB.sort_omega
+  | Var (((_, name), idx) as v) -> lookup_type ctx v
+  | Susp (e, s) -> get_type ctx (push_susp e s)
+  | Let (l, defs, e)
+    -> let nctx = DB.lctx_extend_rec ctx defs in
+      mkSusp (get_type nctx e) (lexp_defs_subst l S.identity defs)
+  | Arrow (ak, v, t1, l, t2)
+    (* FIXME: Use `check` here but silencing errors?  *)
+    -> (let k1 = get_type ctx t1 in
+       let nctx = DB.lexp_ctx_cons ctx 0 v Variable t1 in
+       (* BEWARE!  `k2` can refer to `v`, but this should only happen
+        * if `v` is a TypeLevel, and in that case sort_compose
+        * should ignore `k2` and return TypeOmega anyway.  *)
+       let k2 = get_type nctx t2 in
+       let k2 = mkSusp k2 (S.substitute impossible) in
+       match lexp_whnf k1 ctx meta_ctx, lexp_whnf k2 ctx meta_ctx with
+       | (Sort (_, s1), Sort (_, s2))
+         -> if ak == P.Aerasable && impredicative_erase && s1 != StypeLevel
+           then k2
+           else mkSort (l, sort_compose meta_ctx ctx l s1 s2)
+       | _ -> DB.type0)
+  | Lambda (ak, ((l,_) as v), t, e)
+    -> (mkArrow (ak, Some v, t, l,
+                get_type (DB.lctx_extend ctx (Some v) Variable t)
+                         e))
+  | Call (f, args)
+    -> let ft = get_type ctx f in
+      List.fold_left
+        (fun ft (ak,arg)
+         -> match lexp_whnf ft ctx meta_ctx with
+           | Arrow (ak', v, t1, l, t2)
+             -> mkSusp t2 (S.substitute arg)
+           | _ -> ft)
+        ft args
+  | Inductive (l, label, args, cases)
+    (* FIXME: Use `check` here but silencing errors?  *)
+    -> let rec arg_loop args ctx =
+        match args with
+        | []
+          -> let level
+              = SMap.fold
+                  (fun _ case level ->
+                    let level, _ =
+                      List.fold_left
+                        (fun (level, ctx) (ak, v, t) ->
+                          (match lexp_whnf (get_type ctx t)
+                                           ctx meta_ctx with
+                           | Sort (_, Stype _)
+                                when ak == P.Aerasable && impredicative_erase
+                             -> level
+                           | Sort (_, Stype level')
+                             (* FIXME: scoping of level vars!  *)
+                             -> mkSLlub meta_ctx ctx level level'
+                           | tt -> level),
+                          DB.lctx_extend ctx v Variable t)
+                        (level, ctx)
+                        case in
+                    level)
+                  cases (mkSortLevel SLz) in
+            mkSort (l, Stype level)
+        | (ak, v, t)::args
+          -> mkArrow (ak, Some v, t, lexp_location t,
+                     arg_loop args (DB.lctx_extend ctx (Some v) Variable t)) in
+      let tct = arg_loop args ctx in
+      tct
+  | Case (l, e, ret, branches, default) -> ret
+  | Cons (t, (l, name))
+    -> (match lexp_whnf t ctx meta_ctx with
+       | Inductive (l, _, fargs, constructors)
+         -> (try
+              let fieldtypes = SMap.find name constructors in
+              let rec indtype fargs start_index =
+                match fargs with
+                | [] -> []
+                | (ak, vd, _)::fargs -> (ak, Var (vd, start_index))
+                                       :: indtype fargs (start_index - 1) in
+              let rec fieldargs ftypes =
+                match ftypes with
+                | [] -> let nargs = List.length fieldtypes + List.length fargs in
+                       mkCall (mkSusp t (S.shift nargs),
+                               indtype fargs (nargs - 1))
+                | (ak, vd, ftype) :: ftypes
+                  -> mkArrow (ak, vd, ftype, lexp_location ftype,
+                             fieldargs ftypes) in
+              let rec buildtype fargs =
+                match fargs with
+                | [] -> fieldargs fieldtypes
+                | (ak, ((l,_) as vd), atype) :: fargs
+                  -> mkArrow (P.Aerasable, Some vd, atype, l,
+                             buildtype fargs) in
+              buildtype fargs
+            with Not_found -> DB.type_int)
+       | _ -> DB.type_int)
+  | Metavar (idx, s, _, t) -> t
 
 (*********** Type erasure, before evaluation.  *****************)
 

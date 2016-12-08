@@ -607,43 +607,74 @@ let eval_all lxps rctx silent =
 
 let varname s = match s with Some (_, v) -> v | _ -> "<anon>"
 
-(* build a rctx from a lctx.  *)
-(* FIXME: `eval` with a disabled runIO, and then memoize, memoize, ...  *)
-let from_lctx (ctx: elab_context): runtime_env =
-    let (_, lctx) = ctx in
-    let rctx : runtime_env
-      = M.map (fun (_, oname, _, _)
-               -> (match (oname : symbol option) with
-                  | Some (_, name) -> Some name
-                  | _ -> None),
-                 ref Vdummy)
-              lctx in
+let roname loname = (match (loname : symbol option) with
+                     | Some (_, name) -> Some name
+                     | _ -> None)
 
-    (* Then fill each slot in turn.  *)
-    let _, evals
-      = M.fold_left
-          (fun (i, evals) (o, oname, def, _)
-           -> match def with
-             | LetDef lxp
-               -> (let elxp = OL.erase_type lxp in
-                  let (_, valcell) = M.nth i rctx in
-                  let octx = M.nthcdr (i - o + 1) rctx in
-                  (i + 1, (valcell, elxp, octx) :: evals))
-             | _
-               (* FIXME: We should stop right here if this variable is
-                * actually used (e.g. if this type's variable is ∀t.t).  *)
-               -> warning dloc ("No definition to compute the value of `"
-                                    ^ varname oname ^ "`");
-                 (i + 1, evals))
-          (0, []) lctx in
-    (* The evaluations have to be done "from the end of the list".  *)
-    List.iter (fun (valcell, elxp, octx)
-               -> try valcell := eval elxp octx
-                 with e -> (* print_lexp_ctx (ectx_to_lctx ctx); *)
-                          print_string "eval-in-from_lctx failed on: ";
-                          (* lexp_print lxp; print_string "\nerased to: "; *)
-                          elexp_print elxp;
-                          print_string "\n"; raise e)
-              evals;
+module CMap
+  (* Memoization table.  FIXME: Ideally the keys should be "weak", but
+   * I haven't found any such functionality in OCaml's libs.  *)
+  = Hashtbl.Make
+      (struct type t = lexp_context let hash = Hashtbl.hash let equal = (==) end)
+let ctx_memo = CMap.create 1000
 
-    rctx
+let not_closed rctx ((o, vm) : DB.set) =
+  VMap.fold (fun i () nc -> let i = i + o in
+                         let (_, rc) = Myers.nth i rctx in
+                         match !rc with Vundefined -> i::nc | _ -> nc)
+            vm []
+
+let closed_p rctx (fvs, mvs) =
+  not_closed rctx fvs = []
+  (* FIXME: Handle metavars!  *)
+  && VMap.is_empty mvs
+
+let rec from_lctx meta_ctx (lctx: lexp_context): runtime_env =
+  (* FIXME: `eval` with a disabled runIO.  *)
+  let from_lctx' (lctx: lexp_context): runtime_env =
+    match lctx with
+    | Myers.Mnil -> Myers.nil
+    | Myers.Mcons ((0, loname, def, _), lctx, _, _)
+      -> let rctx = from_lctx meta_ctx lctx in
+        Myers.cons (roname loname,
+                    ref (match def with
+                         | LetDef e
+                           -> let e = L.clean meta_ctx e in
+                             if closed_p rctx (OL.fv e) then
+                               eval (OL.erase_type e) rctx
+                             else Vundefined
+                         | _ -> Vundefined))
+                   rctx
+    | Myers.Mcons ((1, loname, LetDef e, _), lctx, _, _)
+      -> let rec getdefs i lctx rdefs fvs =
+          match lctx with
+          | Myers.Mcons ((o, loname, LetDef e, _), lctx, _, _)
+               when o = i
+            -> let e = L.clean meta_ctx e in
+              getdefs (i + 1) lctx ((loname, e) :: rdefs)
+                      (OL.fv_union fvs (OL.fv e))
+          | _ -> (lctx, rdefs, fvs) in
+        let (lctx, rdefs, fvs) = getdefs 2 lctx [(loname, e)] OL.fv_empty in
+        let rctx = from_lctx meta_ctx lctx in
+        let (nrctx, evs)
+          = List.fold_left (fun (rctx, evs) (loname, e)
+                            -> let rc = ref Vundefined in
+                              (Myers.cons (roname loname, rc) rctx,
+                               (e, rc)::evs))
+                           (rctx, []) rdefs in
+        let _ =
+          if closed_p rctx (OL.fv_hoist (List.length rdefs) fvs) then
+            List.iter (fun (e, rc) -> rc := eval (OL.erase_type e) nrctx) evs
+          else () in
+        nrctx
+    | _ -> U.internal_error "Unexpected lexp_context shape!"
+  in
+  try CMap.find ctx_memo lctx
+  with Not_found
+       -> let r = from_lctx' lctx in
+         CMap.add ctx_memo lctx r;
+         r
+
+(* build a rctx from a ectx.  *)
+let from_ectx meta_ctx (ctx: elab_context): runtime_env =
+  from_lctx meta_ctx (ectx_to_lctx ctx)

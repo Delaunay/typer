@@ -92,9 +92,6 @@ let type_int = mkBuiltin ((dloc, "Int"), type0, None)
 let type_float = mkBuiltin ((dloc, "Float"), type0, None)
 let type_string = mkBuiltin ((dloc, "String"), type0, None)
 
-(* FIXME: Make it a metavar.  *)
-let dltype = type0
-
 (* easier to debug with type annotations *)
 type env_elem = (db_offset * vdef option * varbind * ltype)
 type lexp_context = env_elem M.myers
@@ -327,6 +324,8 @@ let set_mem i (o, m) = VMap.mem (i - o) m
 let set_set i (o, m) = (o, VMap.add (i - o) () m)
 let set_reset i (o, m) = (o, VMap.remove (i - o) m)
 
+let set_singleton i = (0, VMap.singleton i ())
+
 (* Adjust a set for use in a deeper scope with `o` additional bindings.  *)
 let set_sink o (o', m) = (o + o', m)
 
@@ -336,3 +335,11 @@ let set_hoist o (o', m) =
   let (_, _, newm) = VMap.split (-1 - newo) m
   in (newo, newm)
 
+let set_union (o1, m1) (o2, m2) : set =
+  if o1 = o2 then
+    (o1, VMap.merge (fun k _ _ -> Some ()) m1 m2)
+  else
+    let o = o2 - o1 in
+    (o1, VMap.fold (fun i2 () m1
+                    -> VMap.add (i2 + o) () m1)
+                   m2 m1)

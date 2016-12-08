@@ -214,7 +214,7 @@ let readfiles files (i, lctx, rctx) prt =
 (*  Specials commands %[command-name] [args] *)
 let rec repl i clxp rctx =
     let repl = repl (i + 1) in
-    let ipt = read_input i in
+    let ipt = try read_input i with End_of_file -> "%quit" in
         _history := ipt::!_history;
         match ipt with
             (*  Check special keywords *)
@@ -269,7 +269,7 @@ let parse_args () =
 let main () =
     parse_args ();
 
-    let lctx = default_lctx in
+    let ectx = default_ectx in
     let rctx = default_rctx in
 
     print_string (make_title " TYPER REPL ");
@@ -277,12 +277,12 @@ let main () =
     print_string (make_sep '-');
     flush stdout;
 
-    let (i, lctx, rctx) = readfiles (!arg_files) (1, lctx, rctx) true in
+    let (i, ectx, rctx) = readfiles (!arg_files) (1, ectx, rctx) true in
 
     flush stdout;
 
     (* Initiate REPL. This will allow us to inspect interpreted code *)
-    repl i lctx rctx
+    repl i ectx rctx
 
 
 let _ = main ()

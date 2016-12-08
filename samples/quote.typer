@@ -56,6 +56,21 @@ my_sqr = lambda (x : List Sexp) ->
       (node_ (symbol_ "_*_")  (cons hd (cons hd nil)));
 
 sqr = Macro_ my_sqr;
+  let hd = (case x
+    | cons hd tl => hd
+    | nil => symbol_ "x") : Sexp in
+      (node_ (symbol_ "_=_")  (cons hd (cons hd nil)));
+
+sqr = Macro_ my_sqr;
+add = Macro_ my_add;
+
+my_fun = lambda (arg : List Sexp) ->
+  let x = sqr 2 in
+    integer_ 2;
+
+fun = Macro_ my_fun;
+main = fun 2;
+
 
 my_fun = lambda (arg : List Sexp) ->
   let x = sqr 2 in

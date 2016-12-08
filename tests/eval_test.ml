@@ -38,7 +38,7 @@ open Builtin
 open Env
 
 (* default environment *)
-let lctx = default_lctx
+let ectx = default_ectx
 let rctx = default_rctx
 
 (* Params:
@@ -48,10 +48,10 @@ let rctx = default_rctx
  *)
 let test_eval_eqv_named name decl run res =
   add_test "EVAL" name (fun () ->
-    let rctx, lctx = eval_decl_str decl lctx rctx in
+    let rctx, ectx = eval_decl_str decl ectx rctx in
 
-    let erun = eval_expr_str run lctx rctx in (* evaluated run expr *)
-    let eres = eval_expr_str res lctx rctx in (* evaluated res expr *)
+    let erun = eval_expr_str run ectx rctx in (* evaluated run expr *)
+    let eres = eval_expr_str res ectx rctx in (* evaluated res expr *)
 
       if value_eq_list erun eres
       then success ()
@@ -288,12 +288,12 @@ let _ = (add_test "EVAL" "Monads" (fun () ->
                (lambda f -> write f \"Hello2\");
     " in
 
-    let rctx, lctx = eval_decl_str dcode lctx rctx in
+    let rctx, ectx = eval_decl_str dcode ectx rctx in
 
     let rcode = "run-io c 2" in
 
     (* Eval defined lambda *)
-    let ret = eval_expr_str rcode lctx rctx in
+    let ret = eval_expr_str rcode ectx rctx in
         match ret with
             | [v] -> success ()
             | _ -> failure ()
@@ -362,10 +362,22 @@ let _ = test_eval_eqv_named
    f = lambda α ≡> lambda p x ->
        Eq_cast (t := Type) (x := Int) (y := α) (f := (lambda v -> v)) (p := p) x"
 
-  (* FIXME: If I remove the (l := ?) I get
-   *     Explicit actual args `t, x` have no matching formal args  *)
-  "f (Eq_refl (l := ?) (t := Type) (x := Int)) 3"
+  "f Eq_refl 3"
   "3"
+
+let _ = test_eval_eqv_named
+  "Generic-typed case"
+
+  "P = (a : Type) ≡> a -> Not (Not a);
+   p : P;
+   p = lambda a ≡> lambda x notx -> notx x;
+   tP : Decidable P;
+   tP = (datacons Decidable true) (prop := P) (p := p);"
+
+  "case tP
+   | (datacons ? true) (p := _) => 3
+   | (datacons ? false) (p := _) => 4;"
+  "3;"
 
 (* run all tests *)
 let _ = run_all ()

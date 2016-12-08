@@ -100,14 +100,14 @@ let generate_ltype_from_str str =
       (List.map
          (fun (_, _, ltype) -> ltype))
         (List.flatten lst))
-       (lexp_decl_str str default_lctx))
+       (lexp_decl_str str default_ectx))
 
 let generate_lexp_from_str str =
   List.hd ((fun (lst, _) ->
       (List.map
          (fun (_, lxp, _) -> lxp))
         (List.flatten lst))
-       (lexp_decl_str str default_lctx))
+       (lexp_decl_str str default_ectx))
 
 let input_induct  = generate_lexp_from_str str_induct
 let input_int_4   = generate_lexp_from_str str_int_4

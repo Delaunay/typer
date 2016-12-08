@@ -8,7 +8,7 @@ SRC_FILES := $(wildcard ./src/*.ml)
 CPL_FILES := $(wildcard ./$(BUILDDIR)/src/*.cmo)
 TEST_FILES := $(wildcard ./tests/*_test.ml)
 
-OBFLAGS = -lflags -g -cflags -g -build-dir $(BUILDDIR)
+OBFLAGS = -tag debug -tag profile -build-dir $(BUILDDIR)
 # OBFLAGS         := -I $(SRCDIR) -build-dir $(BUILDDIR) -pkg str
 # OBFLAGS_DEBUG   := -tag debug -tag profile -tag "warn(+20)"
 # OBFLAGS_RELEASE := -tag unsafe -tag inline
