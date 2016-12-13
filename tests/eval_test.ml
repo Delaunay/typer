@@ -379,6 +379,20 @@ let _ = test_eval_eqv_named
    | (datacons ? false) (p := _) => 4;"
   "3;"
 
+let _ = test_eval_eqv_named
+  "Y"
+
+  "length_y = lambda t ≡>
+     Y (a := List t) (witness := (lambda l -> 0))
+       (lambda length l
+        -> case l
+           | nil => 0
+           | cons _ l => 1 + length l);"
+
+  "length_y (cons 1 (cons 5 nil));"
+
+  "2;"
+
 (* run all tests *)
 let _ = run_all ()
 

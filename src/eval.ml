@@ -559,6 +559,21 @@ and print_eval_trace trace =
     let (a, b) = !_global_eval_trace in
       print_trace " EVAL TRACE " trace a
 
+let y_operator loc depth args =
+  match args with
+  | [f] -> let aname = "<anon>" in
+          let yf_ref = ref Vdummy in
+          let yf = Closure(aname,
+                           Call (Var ((dloc, "f"), 1),
+                                 [Var ((dloc, "yf"), 2);
+                                  Var ((dloc, aname), 0)]),
+                           Myers.cons (Some "f", ref f)
+                                      (Myers.cons (Some "yf", yf_ref)
+                                                  Myers.nil)) in
+          yf_ref := yf;
+          yf
+  | _ -> error loc ("Y expects 1 (function) argument")
+
 let arity0_fun loc _ _ = error loc "Called a 0-arity function!?"
 let nop_fun loc _ vs = match vs with
   | [v] -> v
@@ -584,6 +599,7 @@ let register_built_functions () =
               ("write"         , write_impl, 2);
               ("Eq.refl"       , arity0_fun, 0);
               ("Eq.cast"       , nop_fun, 1);
+              ("Y"             , y_operator, 1);
             ]
 let _ = register_built_functions ()
 
