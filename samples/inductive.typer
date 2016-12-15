@@ -6,6 +6,10 @@ make-decl var-name value-expr =
     (cons var-name
       (cons value-expr nil));
 
+chain-decl : Sexp -> Sexp -> Sexp;
+chain-decl a b =
+    node_ (symbol_ "_;_") (cons a (cons b nil));
+
 % build datacons
 % ctor-name = datacons type-name ctor-name;
 make-cons : Sexp -> Sexp -> Sexp;
@@ -22,7 +26,6 @@ make-ann var-name type-expr =
   node_ (symbol_ "_:_")
     (cons var-name
       (cons type-expr nil));
-
 
 type-impl = lambda (x : List Sexp) ->
   % x follow the mask -> (_|_ Nat zero (succ Nat))
@@ -77,32 +80,34 @@ type-impl = lambda (x : List Sexp) ->
 
   % Add constructors
   let ctors =
-   let for-each : List Sexp -> List Sexp -> List Sexp;
+   let for-each : List Sexp -> Sexp -> Sexp;
        for-each ctr acc = case ctr
         | cons hd tl => (
-          let acc2 = cons (make-cons (get-name hd) type-name) acc in
+          let acc2 = chain-decl (make-cons (get-name hd) type-name) acc in
             for-each tl acc2)
         | nil => acc
-      in for-each ctor nil in
+      in for-each ctor (node_ (symbol_ "_;_") nil) in
 
   % return decls
-    (cons decl       % inductive type declaration
-          ctors);    % constructor declarations
+    (chain-decl decl       % inductive type declaration
+                ctors);    % constructor declarations
 
 
-type_ = DMacro_ type-impl;
+type_ = Macro_ type-impl;
 
 % (type_ (_|_ (Either t1 t2) (either-first t1) (either-second t2)))
 %type Either t1 t2
 %  | either-first t1
 %  | either-second t2;
 
+type A
+  | a Int;
 
 %type Pair t1 t2
 %  | pair t1 t2;
 
-type Point t
-  | point (x : t) (y : t);
+%type Point t
+%  | point (x : t) (y : t);
 
 %get-first : (a : Type) => (b : Type) => Pair a b -> a;
 %get-second : (a : Type) => (b : Type) => Pair a b -> b;

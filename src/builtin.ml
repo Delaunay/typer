@@ -74,7 +74,6 @@ let predef_name = [
     "false";
     "Macro";
     "expand_macro_";
-    "expand_dmacro_";
 ]
 
 (* FIXME: Actually, we should map the predefs to *values* since that's

@@ -155,9 +155,6 @@ let lctx_extend (ctx : lexp_context) (def: vdef option) (v: varbind) (t: lexp) =
 let env_extend_rec r (ctx: elab_context) (def: vdef) (v: varbind) (t: lexp) =
   let (loc, name) = def in
   let ((n, map), env) = ctx in
-  (try let _ = senv_lookup name ctx in
-       warning loc ("Variable Shadowing " ^ name);
-   with Not_found -> ());
   let nmap = SMap.add name n map in
   ((n + 1, nmap),
    lexp_ctx_cons env r (Some def) v t)

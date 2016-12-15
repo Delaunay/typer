@@ -71,12 +71,18 @@ let _ = (add_test "MACROS" "macros base" (fun () ->
 let _ = (add_test "MACROS" "macros decls" (fun () ->
     let dcode = "
       decls-impl = lambda (x : List Sexp) ->
-        cons (node_ (symbol_ \"_=_\")
-          (cons (symbol_ \"a\") (cons (integer_ 1) nil)))
-       (cons (node_ (symbol_ \"_=_\")
-        (cons (symbol_ \"b\") (cons (integer_ 2) nil))) nil);
+        let chain-decl : Sexp -> Sexp -> Sexp;
+            chain-decl a b = node_ (symbol_ \"_;_\") (cons a (cons b nil)) in
 
-      my-decls = DMacro_ decls-impl;
+        let make-decl : String -> Int -> Sexp;
+            make-decl name val =
+          (node_ (symbol_ \"_=_\") (cons (symbol_ name) (cons (integer_ val) nil))) in
+
+        let d1 = make-decl \"a\" 1 in
+        let d2 = make-decl \"b\" 2 in
+          chain-decl d1 d2;
+
+      my-decls = Macro_ decls-impl;
 
       my-decls Nat;" in
 

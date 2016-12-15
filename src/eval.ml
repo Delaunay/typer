@@ -162,8 +162,8 @@ let make_node loc depth args_val    =
     let s = List.map (fun g -> match g with
         | Vsexp(sxp)  -> sxp
         (* eval transform sexp into those... *)
-        | Vint (i)    -> Integer(dloc, i)
-        | Vstring (s) -> String(dloc, s)
+        | Vint (i)            -> Integer(dloc, i)
+        | Vstring (s)         -> String(dloc, s)
         | _ ->
           (* print_rte_ctx ctx; *)
           value_error loc g "node_ expects 'List Sexp' second as arguments") args in

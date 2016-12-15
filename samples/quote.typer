@@ -55,42 +55,30 @@ my_sqr = lambda (x : List Sexp) ->
     | nil => symbol_ "x") : Sexp in
       (node_ (symbol_ "_*_")  (cons hd (cons hd nil)));
 
-sqr = Macro_ my_sqr;
-  let hd = (case x
-    | cons hd tl => hd
-    | nil => symbol_ "x") : Sexp in
-      (node_ (symbol_ "_=_")  (cons hd (cons hd nil)));
-
-sqr = Macro_ my_sqr;
-add = Macro_ my_add;
-
-my_fun = lambda (arg : List Sexp) ->
-  let x = sqr 2 in
-    integer_ 2;
-
-fun = Macro_ my_fun;
-main = fun 2;
-
-
-my_fun = lambda (arg : List Sexp) ->
-  let x = sqr 2 in
-    integer_ 2;
-
-fun = Macro_ my_fun;
-main = fun 2;
-
-
 % Quote
-%my_fun = lambda (args : List Sexp) ->
-%  let hd : Sexp;
-%      hd = case args
-%        | cons hd tl => hd
-%        | nil => symbol_ "sqr expects a single argument" in
-%
-%    quote ((uquote hd) * (uquote hd));
+qq_sqr' = lambda (args : List Sexp) ->
+  let hd : Sexp;
+      hd = case args
+        | cons hd tl => hd
+        | nil => symbol_ "sqr expects a single argument" in
 
-x = 2;
-sqr = Macro_ my_fun;
+    quote ((uquote hd) * (uquote hd));
+
+sqr = Macro_ my_sqr;
+qqsqr = Macro_ qq_sqr';
+
+% fun = Macro_ my_fun;
+% main = fun 2;
+
+my_fun = lambda (arg : List Sexp) ->
+  let x = sqr 2 in
+    integer_ 2;
+
+fun = Macro_ my_fun;
+main = qqsqr 2;
+
+% x = 2;
+% sqr = Macro_ my_fun;
 
 % main = sqr 2;
 % a  = Macro_ (lambda x -> quote (2 + 2));
@@ -98,4 +86,4 @@ sqr = Macro_ my_fun;
 % main  = a Unit;
 % main = let x = 2 in quote (x * x);
 % main = let x = 2 in quote ((uquote x) * (uquote x));
-
+% add = Macro_ my_add;

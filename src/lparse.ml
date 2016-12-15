@@ -380,7 +380,7 @@ and parse_special_form ctx f args ot =
             | None -> (e, inferred_t)
             | Some t -> let e = check_inferred ctx e inferred_t t in
                        (e, t))
-     
+
   | _ -> lexp_error loc f ("Unknown special-form: " ^ lexp_string f);
         let t = newMetatype loc in
         (newMetavar loc "<dummy>" t, t)
@@ -404,7 +404,7 @@ and get_implicit_arg ctx loc name t =
        * call a `default-arg-filler` function, implemented in Typer,
        * just like `expand_macro_` function.  That one can then look
        * things up in a table and/or do anything else it wants.  *)
-     let v = lexp_expand_macro attr [] ctx t in
+     let v = lexp_expand_macro attr [] ctx (Some t) in
 
      (* get the sexp returned by the macro *)
      let lsarg = match v with
@@ -730,7 +730,7 @@ and check_case rtype (loc, target, ppatterns) ctx =
     mkCase (loc, tlxp, rtype, lpattern, dflt)
 
 and handle_macro_call ctx func args t =
-  let sxp = match lexp_expand_macro func args ctx t with
+  let sxp = match lexp_expand_macro func args ctx (Some t) with
     | Vsexp (sxp) -> sxp
     | v -> value_fatal (lexp_location func) v
                       "Macros should return a Sexp" in
@@ -844,14 +844,6 @@ and lexp_parse_inductive ctors ctx =
         SMap.add name (make_args args ctx) lctors)
       SMap.empty ctors
 
-(* Macro declaration handling, return a list of declarations
- * to be processed *)
-and lexp_expand_macro macro_funct sargs ctx t
-  = lexp_expand_macro_ macro_funct sargs ctx (Some t) "expand_macro_"
-
-and lexp_expand_dmacro macro_funct sargs ctx
-  = lexp_expand_macro_ macro_funct sargs ctx None "expand_dmacro_"
-
 and track_fv meta_ctx rctx lctx e =
   let (fvs, mvs) = OL.fv e in
   let nc = EV.not_closed rctx fvs in
@@ -878,10 +870,10 @@ and track_fv meta_ctx rctx lctx e =
          | _ -> name
        in String.concat " " (List.map tfv nc)
 
-and lexp_expand_macro_ macro_funct sargs ctx ot expand_fun : value_type =
+and lexp_expand_macro macro_funct sargs ctx ot: value_type =
 
   (* Build the function to be called *)
-  let macro_expand = BI.get_predef expand_fun ctx in
+  let macro_expand = BI.get_predef "expand_macro_" ctx in
   (* FIXME: provide `ot` (the optional expected type) for non-decl macros.  *)
   let args = [(Aexplicit, macro_funct);
               (Aexplicit, (BI.o2l_list ctx sargs))] in
@@ -909,19 +901,13 @@ and lexp_decls_macro (loc, mname) sargs ctx: (pdecl list * elab_context) =
    try let lxp, ltp = infer (Pvar (loc, mname)) ctx in
 
       (* FIXME: Check that (conv_p ltp Macro)!  *)
-      let ret = lexp_expand_dmacro lxp sargs ctx in
-
-      (* convert typer list to ocaml *)
-      let decls = BI.v2o_list ret in
-
-      (* extract sexp from result *)
-      let decls = List.map (fun g ->
-        match g with
-          | Vsexp(sxp) -> sxp
-          | _ -> value_fatal loc g "Macro expects sexp list") decls in
+      let ret = lexp_expand_macro lxp sargs ctx None in
+      let decls = match ret with
+        | Vsexp(sexp) -> sexp
+        | _ -> fatal loc ("Macro `" ^ mname ^ "` should return a sexp") in
 
       (* read as pexp_declaraton *)
-      pexp_decls_all decls, ctx
+      pexp_decls_all [decls], ctx
   with e ->
     fatal loc ("Macro `" ^ mname ^ "`not found")
 

@@ -81,6 +81,20 @@ let rec pexp_location e =
   | Pinductive ((l,_), _, _) -> l
   | Pcase (l, _, _) -> l
 
+let pexp_name e =
+  match e with
+  | Pimm _           -> "Pimm"
+  | Pbuiltin _       -> "Pbuiltin"
+  | Pvar (_,_)       -> "Pvar"
+  | Phastype (_,_,_) -> "Phastype"
+  | Pmetavar (_, _)  -> "Pmetavar"
+  | Plet (_, _, _)   -> "Plet"
+  | Parrow (_, _, _, _, _)   -> "Parrow"
+  | Plambda (_,(_,_), _, _)  -> "Plambda"
+  | Pcall (_, _)             -> "Pcall"
+  | Pinductive ((_,_), _, _) -> "Pinductive"
+  | Pcase (_, _, _) -> "Pcase"
+
 let rec pexp_pat_location e = match e with
   | Ppatany l -> l
   | Ppatsym (l,_) -> l
@@ -297,6 +311,7 @@ and pexp_p_decls e: pdecl list =
    * once expanded the Pmcall macro will produce a list of pdecl        *)
   | Node (Symbol (l, op), args) -> [Pmcall((l, op), args)]
   | _ ->
+    print_string ((sexp_name e) ^ ": \""); sexp_print e; print_string "\"\n";
     pexp_error (sexp_location e) ("Unknown declaration"); []
 
 and pexp_unparse (e : pexp) : sexp =
@@ -367,8 +382,8 @@ and pexp_u_decls (ds: pdecl list) =
   | _ -> Node (Symbol (dummy_location, "_;_"),
               List.map pexp_u_decl ds)
 
-let pexp_print e = sexp_print (pexp_unparse e)
-
+and pexp_string e = sexp_string (pexp_unparse e)
+and pexp_print e = print_string (pexp_string e)
 
 (* Parse All Pexp as a list *)
 let pexp_parse_all (nodes: sexp list) =
@@ -405,20 +420,3 @@ let _pexp_decl_str (str: string) tenv grm limit =
 let pexp_decl_str str =
     _pexp_decl_str str default_stt default_grammar (Some ";")
 
-
-let pexp_string e = sexp_string (pexp_unparse e)
-let pexp_print e = print_string (pexp_string e)
-
-let pexp_name e =
-  match e with
-  | Pimm _           -> "Pimm"
-  | Pbuiltin _       -> "Pbuiltin"
-  | Pvar (_,_)       -> "Pvar"
-  | Phastype (_,_,_) -> "Phastype"
-  | Pmetavar (_, _)  -> "Pmetavar"
-  | Plet (_, _, _)   -> "Plet"
-  | Parrow (_, _, _, _, _)   -> "Parrow"
-  | Plambda (_,(_,_), _, _)  -> "Plambda"
-  | Pcall (_, _)             -> "Pcall"
-  | Pinductive ((_,_), _, _) -> "Pinductive"
-  | Pcase (_, _, _) -> "Pcase"
