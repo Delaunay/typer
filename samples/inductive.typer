@@ -70,7 +70,7 @@ type-impl = lambda (x : List Sexp) ->
   let type-name = get-name name in
 
   % Create the inductive type definition
-  let inductive = node_ (symbol_ "inductive_")
+  let inductive = node_ (symbol_ "typecons")
     (cons name ctor) in
 
   let decl  = make-decl type-name inductive in
@@ -118,6 +118,6 @@ type Point t
 
 % transformed to:
 % Nat : Type;
-% Nat = inductive_ (Nat) (succ Nat) (zero);
+% Nat = typecons (Nat) (succ Nat) (zero);
 % zero = datacons Nat zero;
 % succ = datacons Nat succ;

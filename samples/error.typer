@@ -45,10 +45,10 @@ v = (a 2);
 m = lambda n -> n;
 
 % [!] Error     [Ln  27, cl  28] LPARSE   Constructor "cons3" does not exist
-%     > inductive_: (inductive_ e (cons1) (cons2 Int))
+%     > typecons: (typecons e (cons1) (cons2 Int))
 %     > Root:
 
-idt = inductive_ (idt) (cons1) (cons2 Int);
+idt = typecons (idt) (cons1) (cons2 Int);
 cons1 = datacons idt cons1;
 cons2 = datacons idt cons2;
 cons3 = datacons idt cons3;
@@ -94,7 +94,7 @@ fun2 n = case n
 % [!] Error     [Ln  87, cl   1] LPARSE   `fun4` defined but not declared!
 % [!] Error     [Ln  86, cl   1] LPARSE   Variable `fun4` declared but not defined!
 
-% idtb = inductive_ (idtb) (cons1b) (cons2b Int);
+% idtb = typecons (idtb) (cons1b) (cons2b Int);
 % cons1b = datacons idtb cons1b;
 % cons2b = datacons idtb cons2b;
 

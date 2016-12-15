@@ -1,5 +1,5 @@
 Nat : Type;
-Nat = inductive_ (dNat) (zero) (succ Nat);
+Nat = typecons (dNat) (zero) (succ Nat);
 
 zero = datacons Nat zero;
 succ = datacons Nat succ;
