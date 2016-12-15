@@ -597,6 +597,9 @@ and check_case rtype (loc, target, ppatterns) ctx =
       | _ -> (e,[]) in
     let it, targs = call_split tltp in
     let constructors = match OL.lexp_whnf it (ectx_to_lctx ctx) meta_ctx with
+      (* FIXME: Check that it's `Inductive' only after performing Unif.unify
+       * with the various branches, so that we can infer the type
+       * of the target from the type of the patterns.  *)
       | Inductive (_, _, fargs, constructors)
         -> assert (List.length fargs = List.length targs);
           constructors

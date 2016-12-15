@@ -62,6 +62,34 @@ Eq_comm = lambda l t x y ≡> lambda p ->
                   (p := p)
                   Eq_refl;
 
+%% General recursion!!
+%% Whether this breaks onsistency or not is a good question.
+%% The basic idea is the following:
+%%
+%%   The `witness` argument presumably makes sure that "Y f" can only
+%%   create new recursive values for types which were already inhabited.
+%%   So there's no `f` such that `Y f : False`.
+%%
+%% But this is not sufficient, because you could use `Y` to create
+%% new recursive *types* which then let you construct new arbitrary
+%% recursive values of previously uninhabited types.
+%% E.g. you could create Y <something> = ((... → t) -> t) -> t
+%% and then give the term "λx. x x" inhabiting that type, and from that
+%% get a proof of False.
+%%
+%% So we have a secondary restriction: This `Y` is a builtin primitive/axiom
+%% with no reduction rule, so that Y <something> is never convertible
+%% to something like ((... → t) -> t) -> t
+%%
+%% Of course, we do have a "natural" evaluation rule for it, so after type
+%% checking we can run our recursive functions just fine, but those
+%% recursive functions won't be unfolded during type checking.
+%%
+%% FIXME: Really, this Y should be used internally/transparently for any
+%% function which has not been termination-checked successfully (or at all).
+Y = Built-in "Y" ((a : Type) ≡> (b : Type) ≡> (witness : a -> b) ≡>
+                  ((a -> b) -> (a -> b)) -> (a -> b));
+
 % Basic operators
 _+_ = Built-in "Int.+" (Int -> Int -> Int);
 _-_ = Built-in "Int.-" (Int -> Int -> Int);
