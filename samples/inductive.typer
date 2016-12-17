@@ -103,11 +103,11 @@ type_ = Macro_ type-impl;
 type A
   | a Int;
 
-%type Pair t1 t2
-%  | pair t1 t2;
+type Pair (t1 : Type) (t2 : Type)
+  | pair t1 t2;
 
-%type Point t
-%  | point (x : t) (y : t);
+type Point (t : Type)
+  | point (x : t) (y : t);
 
 %get-first : (a : Type) => (b : Type) => Pair a b -> a;
 %get-second : (a : Type) => (b : Type) => Pair a b -> b;

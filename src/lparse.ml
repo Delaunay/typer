@@ -711,7 +711,12 @@ and handle_macro_call ctx func args t =
     | v -> value_fatal (lexp_location func) v
                       "Macros should return a Sexp" in
 
-  let pxp = pexp_parse sxp in
+  let pxp = try pexp_parse sxp
+    with e ->
+     error dloc "An error occurred while expanding a macro";
+     sexp_print sxp;
+     raise e in
+
   check pxp t ctx
 
 (*  Identify Call Type and return processed call.  *)
@@ -873,6 +878,13 @@ and lexp_expand_macro macro_funct sargs ctx ot: value_type =
     (* Vint/Vstring/Vfloat might need to be converted to sexp *)
       vxp
 
+(* Print each generated decls *)
+and sexp_decls_macro_print sxp_decls =
+  match sxp_decls with
+    | Node(Symbol (_, "_;_"), decls) ->
+      List.iter (fun sxp -> sexp_decls_macro_print sxp) decls
+    | e -> sexp_print e; print_string "\n"
+
 and lexp_decls_macro (loc, mname) sargs ctx: (pdecl list * elab_context) =
    try let lxp, ltp = infer (Pvar (loc, mname)) ctx in
 
@@ -883,7 +895,13 @@ and lexp_decls_macro (loc, mname) sargs ctx: (pdecl list * elab_context) =
         | _ -> fatal loc ("Macro `" ^ mname ^ "` should return a sexp") in
 
       (* read as pexp_declaraton *)
-      pexp_decls_all [decls], ctx
+      (try pexp_decls_all [decls], ctx
+      (* if an error occur print generated code to ease debugging *)
+      with e ->
+        error loc "An error occurred while expanding a macro";
+        sexp_decls_macro_print decls;
+          raise e)
+
   with e ->
     fatal loc ("Macro `" ^ mname ^ "`not found")
 
