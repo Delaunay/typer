@@ -133,6 +133,6 @@ and elexp_string lxp =
             "case " ^ (elexp_string t) ^ (str_cases cases) ^ (maybe_str default)
 
         | Inductive(_, (_, s)) ->
-            "inductive_ " ^ s
+            "typecons " ^ s
 
         | Type -> "Type "

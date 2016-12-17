@@ -349,7 +349,7 @@ let lexp_name e =
     | Call   _ -> "Call"
     | Cons   _ -> "datacons"
     | Case   _ -> "case"
-    | Inductive _ -> "inductive_"
+    | Inductive _ -> "typecons"
     | Susp      _ -> "Susp"
     | Builtin   (_, _, None) -> "Builtin"
     | Builtin   _ -> "AttributeTable"
@@ -358,6 +358,7 @@ let lexp_name e =
     | SortLevel _ -> "SortLevel"
 
 let pdatacons = Pbuiltin (U.dummy_location, "datacons")
+let ptypecons = Pbuiltin (U.dummy_location, "typecons")
 
 (* ugly printing (sexp_print (pexp_unparse (lexp_unparse e))) *)
 let rec lexp_unparse lxp =
@@ -387,7 +388,7 @@ let rec lexp_unparse lxp =
       let sargs = List.map (fun elem -> pexp_unparse elem) pargs in
         Pcall(lexp_unparse lxp, sargs)
 
-    | Inductive(loc, label, lfargs, ctor) ->
+    | Inductive(loc, label, lfargs, ctors) ->
       (* (arg_kind * vdef * ltype) list *)
       (* (arg_kind * pvar * pexp option) list *)
       let pfargs = List.map (fun (kind, vdef, ltp) ->
@@ -395,14 +396,19 @@ let rec lexp_unparse lxp =
 
       (* ((arg_kind * vdef option * ltype) list) SMap.t *)
       (* (symbol * (arg_kind * pvar option * pexp) list) list *)
-      let ctor = List.map (fun (str, largs) ->
+      let ctors = List.map (fun (str, largs) ->
         let pargs = List.map (fun (kind, var, ltp) ->
           match var with
             | Some (loc, name) -> (kind, Some (loc, name), lexp_unparse ltp)
             | None             -> (kind, None, lexp_unparse ltp)) largs
           in ((loc, str), pargs)
-          ) (SMap.bindings ctor)
-        in Pinductive(label, pfargs, ctor)
+          ) (SMap.bindings ctors) in
+      Pcall (ptypecons,
+             Node (Symbol label, List.map pexp_u_formal_arg pfargs)
+             :: List.map (fun ((l,name) as s, types)
+                          -> Node (Symbol s,
+                                  List.map pexp_u_ind_arg types))
+                         ctors)
 
     | Case (loc, target, bltp, branches, default) ->
        let bt = lexp_unparse bltp in
@@ -638,7 +644,7 @@ and _lexp_to_str ctx exp =
                         add_parens outer_parens str)
 
         | Inductive (_, (_, name), [], ctors) ->
-            (keyword "inductive_") ^ " (" ^ name ^") " ^
+            (keyword "typecons") ^ " (" ^ name ^") " ^
                                             (lexp_str_ctor ctx ctors)
 
         | Inductive (_, (_, name), args, ctors)
@@ -649,7 +655,7 @@ and _lexp_to_str ctx exp =
                      ^ (lexp_to_str ltype) ^ ")")
                   "" args in
 
-            (keyword "inductive_") ^ " (" ^ name ^ args_str ^") "
+            (keyword "typecons") ^ " (" ^ name ^ args_str ^") "
             ^ (lexp_str_ctor ctx ctors)
 
         | Case (_, target, _ret, map, dflt) ->(

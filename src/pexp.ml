@@ -49,8 +49,6 @@ type pexp =
   | Pcall of pexp * sexp list           (* Curried call.  *)
   (* The symbols are only used so that we can distinguish two
    * otherwise isomorphic types.  *)
-  | Pinductive of symbol * (arg_kind * pvar * pexp option) list
-                  * (symbol * (arg_kind * pvar option * pexp) list) list
   | Pcase of location * pexp * (ppat * pexp) list
 
 and ppat =
@@ -78,7 +76,6 @@ let rec pexp_location e =
   | Parrow (_, _, _, l, _) -> l
   | Plambda (_,(l,_), _, _) -> l
   | Pcall (f, _) -> pexp_location f
-  | Pinductive ((l,_), _, _) -> l
   | Pcase (l, _, _) -> l
 
 let pexp_name e =
@@ -92,7 +89,6 @@ let pexp_name e =
   | Parrow (_, _, _, _, _)   -> "Parrow"
   | Plambda (_,(_,_), _, _)  -> "Plambda"
   | Pcall (_, _)             -> "Pcall"
-  | Pinductive ((_,_), _, _) -> "Pinductive"
   | Pcase (_, _, _) -> "Pcase"
 
 let rec pexp_pat_location e = match e with
@@ -160,29 +156,6 @@ let rec pexp_parse (s : sexp) : pexp =
         (pexp_parse body)
   | Node (Symbol (start, "lambda_"), _)
     -> pexp_error start "Unrecognized lambda expression"; Pmetavar (start, "_")
-  (* inductive type *)
-  | Node (Symbol (start, "inductive_"), t :: cases)
-    -> let (name, args) = match t with
-        | Node (Symbol s, args) -> (s, args)    (* This a constructor *)
-        | Symbol s -> (s, [])                   (* This is a Label    *)
-        | _ -> pexp_error start "Unrecognized inductive type name";
-              ((dummy_location, ""), []) in
-      let pcases =
-        List.fold_right
-          (fun case pcases
-           -> match case with
-             (* read Constructor name + args => Type ((Symbol * args) list) *)
-             | Node (Symbol s, cases)
-               -> (s, List.map pexp_p_ind_arg cases)::pcases
-             (* This is a constructor with no args *)
-             | Symbol s -> (s, [])::pcases
-
-             | _ -> pexp_error (sexp_location case)
-                             "Unrecognized constructor declaration"; pcases)
-          cases [] in
-      Pinductive (name, List.map pexp_p_formal_arg args, pcases)
-  | Node (Symbol (start, "inductive_"), _)
-    -> pexp_error start "Unrecognized inductive type"; Pmetavar (start, "_")
   (* cases analysis *)
   | Node (Symbol (start, "case_"),
           [Node (Symbol (_, "_|_"), e :: cases)])
@@ -346,14 +319,6 @@ and pexp_unparse (e : pexp) : sexp =
                                          [Symbol v; pexp_unparse t]));
            pexp_unparse body])
   | Pcall (f, args) -> Node (pexp_unparse f, args)
-  (* Pinductive *)
-  | Pinductive (s, t, branches) ->
-    Node (Symbol (dummy_location, "inductive_"),
-          sexp_u_list (List.map pexp_u_formal_arg t)
-          :: List.map (fun ((l,name) as s, types)
-                       -> Node (Symbol s,
-                               List.map pexp_u_ind_arg types))
-                      branches)
   | Pcase (start, e, branches) ->
     Node (Symbol (start, "case_"),
           pexp_unparse e

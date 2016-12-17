@@ -306,30 +306,6 @@ let rec infer (p : pexp) (ctx : elab_context): lexp * ltype =
         let v = mkArrow(kind, ovar, ltp, tloc, lxp) in
         v, type0
 
-    | Pinductive (label, formal_args, ctors)
-      -> let nctx = ref ctx in
-        (* (arg_kind * pvar * pexp option) list *)
-        let formal = List.map (fun (kind, var, opxp)
-                               -> let ltp = match opxp with
-                                   | Some pxp -> let (l,_) = infer pxp !nctx in l
-                                   | None -> let (l,_) = var in newMetatype l in
-
-                                 nctx := env_extend !nctx var Variable ltp;
-                                 (kind, var, ltp))
-                              formal_args in
-
-        let nctx = !nctx in
-        let ltp = List.fold_left (fun tp (kind, v, ltp)
-                                  -> (mkArrow (kind, Some v, ltp, tloc, tp)))
-                                 (* FIXME: See OL.check for how to
-                                  * compute the real target sort
-                                  * (not always type0).  *)
-                                 type0 (List.rev formal) in
-
-        let map_ctor = lexp_parse_inductive ctors nctx in
-        let v = mkInductive(tloc, label, formal, map_ctor) in
-        v, ltp
-
     (* This case can be inferred.  *)
     | Plambda (kind, var, Some ptype, body)
       -> let ltp = infer_type ptype ctx (Some var) in
@@ -1142,6 +1118,50 @@ let sform_datacons ctx loc sargs ot =
   | _ -> sexp_error loc "##constr requires two arguments";
         sform_dummy_ret loc
 
+let sform_typecons ctx loc sargs ot =
+  match sargs with
+  | [] -> sexp_error loc "No arg to ##typecons!"; (mkDummy_type loc, Lazy)
+  | formals :: constrs
+    -> let (label, formals) = match formals with
+        | Node (label, formals) -> (label, formals)
+        | _ -> (formals, []) in
+      let label = match label with
+        | Symbol label -> label
+        | _ -> let loc = sexp_location label in
+              sexp_error loc "Unrecognized inductive type name";
+              (loc, "<error>") in
+
+      let rec parse_formals sformals rformals ctx = match sformals with
+        | [] -> (List.rev rformals, ctx)
+        | sformal :: sformals
+          -> let (kind, var, opxp) = pexp_p_formal_arg sformal in
+            let ltp = match opxp with
+              | Some pxp -> let (l,_) = infer pxp ctx in l
+              | None -> let (l,_) = var in newMetatype l in
+
+            parse_formals sformals ((kind, var, ltp) :: rformals)
+                          (env_extend ctx var Variable ltp) in
+
+      let (formals, nctx) = parse_formals formals [] ctx in
+
+      let ctors
+        = List.fold_right
+          (fun case pcases
+           -> match case with
+             (* read Constructor name + args => Type ((Symbol * args) list) *)
+             | Node (Symbol s, cases)
+               -> (s, List.map pexp_p_ind_arg cases)::pcases
+             (* This is a constructor with no args *)
+             | Symbol s -> (s, [])::pcases
+
+             | _ -> sexp_error (sexp_location case)
+                              "Unrecognized constructor declaration";
+                   pcases)
+          constrs [] in
+
+      let map_ctor = lexp_parse_inductive ctors nctx in
+      (mkInductive (loc, label, formals, map_ctor), Lazy)
+
 (* Actually `Type_` could also be defined as a plain constant
  *     Lambda("l", TypeLevel, Sort (Stype (Var "l")))
  * But it would be less efficient (such a lambda can't be passed as argument
@@ -1181,6 +1201,7 @@ let register_special_forms () =
             [
               ("Built-in",      sform_built_in);
               ("datacons",      sform_datacons);
+              ("typecons",      sform_typecons);
               ("Type_",         sform_type);
               (* FIXME: We should add here `let_in_`, `case_`, etc...  *)
               ("get-attribute", sform_get_attribute);

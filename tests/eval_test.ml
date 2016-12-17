@@ -87,7 +87,7 @@ let _ = test_eval_eqv_named
 
   "c = 3; e = 1; f = 2; d = 4;"
 
-  "let TrueProp = inductive_ TrueProp I;
+  "let TrueProp = typecons TrueProp I;
        I = datacons TrueProp I;
        x = let a = 1; b = 2 in I
     in (case x | I => c) : Int;" (* == *) "3"
@@ -99,7 +99,7 @@ let _ = test_eval_eqv_named
 
   "let TrueProp : Type;
        I : TrueProp;
-       TrueProp = inductive_ TrueProp I;
+       TrueProp = typecons TrueProp I;
        I = datacons TrueProp I;
        x = let a = 1; b = 2 in I
     in (case x | I => c) : Int;" (* == *) "3"
@@ -135,7 +135,7 @@ let _ = test_eval_eqv_named
 
   "i = 90;
    idt : Type;
-   idt = inductive_ (idtd) (ctr0) (ctr1 idt) (ctr2 idt) (ctr3 idt);
+   idt = typecons (idtd) (ctr0) (ctr1 idt) (ctr2 idt) (ctr3 idt);
                                      d = 10;
    ctr0 = datacons idt ctr0;   e = 20;
    ctr1 = datacons idt ctr1;   f = 30;
@@ -159,7 +159,7 @@ let _ = test_eval_eqv_named
 (*  Those wil be used multiple times *)
 let nat_decl = "
     Nat : Type;
-    Nat = inductive_ (dNat) (zero) (succ Nat);
+    Nat = typecons (dNat) (zero) (succ Nat);
 
     zero = datacons Nat zero;
     succ = datacons Nat succ;
@@ -248,7 +248,7 @@ let _ = test_eval_eqv_named
             (cons 3
             (cons 4 nil)));
    List' = let L : Type -> Type;
-               L = inductive_ (L (a : Type)) (nil) (cons a (L a))
+               L = typecons (L (a : Type)) (nil) (cons a (L a))
            in L;
    cons' = datacons List' cons;
    nil' = datacons List' nil;
@@ -325,7 +325,7 @@ let _ = test_eval_eqv_named "Metavars"
 
 let _ = test_eval_eqv_named
   "Explicit field patterns"
-  "Triplet = inductive_ Triplet
+  "Triplet = typecons Triplet
              (triplet (a ::: Int) (b :: Float) (c : String) (d :: Int));
    triplet = datacons Triplet triplet;
    t = triplet (b := 5.0) (a := 3) (d := 7) (c := \"hello\");"

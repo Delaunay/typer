@@ -36,11 +36,11 @@
 % -----------------------------------------------------
 
 % The trivial type which carries no information.
-Unit    = inductive_ Unit unit;
+Unit    = typecons Unit unit;
 unit    = datacons Unit unit;
 
 % The empty type, with no constructors: nothing can have this type.
-Void = inductive_ Void;
+Void = typecons Void;
 
 % Eq : (l : TypeLevel) ≡> (t : Type_ l) ≡> t -> t -> Type_ l
 % Eq' : (l : TypeLevel) ≡> Type_ l -> Type_ l -> Type_ l
@@ -96,11 +96,11 @@ _-_ = Built-in "Int.-" (Int -> Int -> Int);
 _*_ = Built-in "Int.*" (Int -> Int -> Int);
 _/_ = Built-in "Int./" (Int -> Int -> Int);
 
-Bool = inductive_ (Boolean) (true) (false);
+Bool = typecons (Boolean) (true) (false);
 true = datacons Bool true;
 false = datacons Bool false;
 
-Option = inductive_ (Option (a : Type)) (none) (some a);
+Option = typecons (Option (a : Type)) (none) (some a);
 some = datacons Option some;
 none = datacons Option none;
 
@@ -113,7 +113,7 @@ sexp_eq   = Built-in   "sexp_eq" (Sexp -> Sexp -> Bool);
 % -----------------------------------------------------
 
 List : Type -> Type;
-List = inductive_ (List (a : Type)) (nil) (cons a (List a));
+List = typecons (List (a : Type)) (nil) (cons a (List a));
 
 nil = datacons List nil;
 cons = datacons List cons;
@@ -155,9 +155,8 @@ string_  = Built-in "string_"  (String    -> Sexp);
 node_    = Built-in "node_"    (Sexp -> List Sexp -> Sexp);
 integer_ = Built-in "integer_" (Int       -> Sexp);
 float_   = Built-in "float_"   (Float     -> Sexp);
-epsilon_ = Built-in "epsilon_" (Sexp);
 
-Macro  = inductive_ (Macro)
+Macro  = typecons (Macro)
   (Macro_ (List Sexp -> Sexp));
 
 Macro_ = datacons Macro Macro_ ;
@@ -221,5 +220,5 @@ Not : Type -> Type;
 Not prop = prop -> False;
 
 % Like Bool, except that it additionally carries the meaning of its value.
-Decidable = inductive_ (Decidable (prop : Type))
-                       (true (p ::: prop)) (false (p ::: Not prop));
+Decidable = typecons (Decidable (prop : Type))
+                     (true (p ::: prop)) (false (p ::: Not prop));

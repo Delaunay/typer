@@ -1,5 +1,5 @@
 
-Reify = inductive_ (Reify (a : Type))
+Reify = typecons (Reify (a : Type))
   (RInt (Eq (t := Type) Int a))
   (RFloat (Eq (t := Type) Float a))
   (RString (Eq (t := Type) String a));

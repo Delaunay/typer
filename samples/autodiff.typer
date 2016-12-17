@@ -36,7 +36,7 @@
 %* ---------------------------------------------------------------------------*)
 
 Sym : Type;
-Sym = inductive_ (dSym)
+Sym = typecons (dSym)
     % leafs
     (constant Int)
     (placeholder String)
