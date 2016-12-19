@@ -235,9 +235,9 @@ let newMetavar l name t =
   mkMetavar (meta, S.Identity, (l, name), t)
 
 let newMetalevel () =
-  newMetavar Util.dummy_location "l" (mkSort (dummy_location, StypeLevel))
+  newMetavar Util.dummy_location "l" type_level
 
-let newMetatype loc = newMetavar loc "t" (newMetalevel ())
+let newMetatype loc = newMetavar loc "t" (mkSort (loc, Stype (newMetalevel ())))
 
 (* Functions used when we need to return some lexp/ltype but
  * an error makes it impossible to return "the right one".  *)
@@ -377,7 +377,7 @@ and get_implicit_arg ctx loc name t =
        * call a `default-arg-filler` function, implemented in Typer,
        * just like `expand_macro_` function.  That one can then look
        * things up in a table and/or do anything else it wants.  *)
-     let v = lexp_expand_macro attr [] ctx (Some t) in
+     let v = lexp_expand_macro loc attr [] ctx (Some t) in
 
      (* get the sexp returned by the macro *)
      let lsarg = match v with
@@ -703,7 +703,8 @@ and check_case rtype (loc, target, ppatterns) ctx =
     mkCase (loc, tlxp, rtype, lpattern, dflt)
 
 and handle_macro_call ctx func args t =
-  let sxp = match lexp_expand_macro func args ctx (Some t) with
+  let sxp = match lexp_expand_macro (lexp_location func)
+                                    func args ctx (Some t) with
     | Vsexp (sxp) -> sxp
     | v -> value_fatal (lexp_location func) v
                       "Macros should return a Sexp" in
@@ -848,32 +849,37 @@ and track_fv meta_ctx rctx lctx e =
          | _ -> name
        in String.concat " " (List.map tfv nc)
 
-and lexp_expand_macro macro_funct sargs ctx ot: value_type =
+and lexp_eval meta_ctx ectx e =
+  (* FIXME: Make erase_type take meta_ctx directly!  *)
+  let e = L.clean meta_ctx e in
+  let ee = OL.erase_type e in
+  let rctx = EV.from_ectx meta_ctx ectx in
+  
+  if not (EV.closed_p rctx (OL.fv e)) then
+    lexp_error (lexp_location e) e
+               ("Expression `" ^ lexp_string e ^ "` is not closed: "
+                ^ track_fv meta_ctx rctx (ectx_to_lctx ectx) e);
+
+  try EV.eval ee rctx
+  with exc -> EV.print_eval_trace None; raise exc
+
+and lexp_expand_macro loc macro_funct sargs ctx (ot : ltype option)
+    : value_type =
 
   (* Build the function to be called *)
+  let meta_ctx, _ = !global_substitution in
   let macro_expand = BI.get_predef "expand_macro_" ctx in
+  (* FIXME: Rather than remember the lexp of "expand_macro" in predef,
+   * we should remember its value so we don't have to re-eval it everytime.  *)
+  let macro_expand = lexp_eval meta_ctx ctx macro_expand in
   (* FIXME: provide `ot` (the optional expected type) for non-decl macros.  *)
-  let args = [(Aexplicit, macro_funct);
-              (Aexplicit, (BI.o2l_list ctx sargs))] in
+  let macro = lexp_eval meta_ctx ctx macro_funct in
+  let args = [macro; BI.o2v_list sargs] in
 
   (* FIXME: Don't `mkCall + eval` but use eval_call instead!  *)
-  let macro = mkCall (macro_expand, args) in
-  let meta_ctx, _ = !global_substitution in
-  let macro = L.clean meta_ctx macro in
-  let emacro = OL.erase_type macro in
-  let rctx = EV.from_ectx meta_ctx ctx in
-
-  if not (EV.closed_p rctx (OL.fv macro)) then
-    (lexp_error (lexp_location macro_funct) macro_funct
-                ("Macro function is not closed: "
-                 ^ track_fv meta_ctx rctx (ectx_to_lctx ctx) macro));
-
-  (* eval macro *)
-  let vxp = try EV._eval emacro rctx ([], [])
-    with e -> EV.print_eval_trace None; raise e in
-    (* Return results *)
-    (* Vint/Vstring/Vfloat might need to be converted to sexp *)
-      vxp
+  (* FIXME: Make a proper `Var`.  *)
+  EV.eval_call loc (EL.Var ((DB.dloc, "expand_macro"), 0)) ([], [])
+               macro_expand args
 
 (* Print each generated decls *)
 and sexp_decls_macro_print sxp_decls =
@@ -886,13 +892,13 @@ and lexp_decls_macro (loc, mname) sargs ctx: (pdecl list * elab_context) =
    try let lxp, ltp = infer (Pvar (loc, mname)) ctx in
 
       (* FIXME: Check that (conv_p ltp Macro)!  *)
-      let ret = lexp_expand_macro lxp sargs ctx None in
+      let ret = lexp_expand_macro loc lxp sargs ctx None in
       let decls = match ret with
         | Vsexp(sexp) -> sexp
         | _ -> fatal loc ("Macro `" ^ mname ^ "` should return a sexp") in
 
       (* read as pexp_declaraton *)
-      (try pexp_decls_all [decls], ctx
+      (try pexp_p_decls decls, ctx
       (* if an error occur print generated code to ease debugging *)
       with e ->
         error loc "An error occurred while expanding a macro";

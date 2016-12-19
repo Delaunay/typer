@@ -113,17 +113,7 @@ let type_eq =
 
 let o2l_bool ctx b = get_predef (if b then "true" else "false") ctx
 
-(* lexp Imm list *)
-let o2l_list ctx lst =
-    let tcons = get_predef "cons" ctx in
-    let tnil  = get_predef "nil" ctx in
-
-    let rlst = List.rev lst in
-        List.fold_left (fun tail elem ->
-            mkCall(tcons, [(Aexplicit, (Imm (elem)));
-                           (Aexplicit, tail)])) tnil rlst
-
-(* typer list as seen during runtime *)
+(* Typer list as seen during runtime.  *)
 let o2v_list lst =
   (* FIXME: We're not using predef here.  This will break if we change
    * the definition of `List` in builtins.typer.  *)
