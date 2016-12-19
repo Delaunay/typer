@@ -432,6 +432,7 @@ let main () =
         (if (get_p_option "lctx") then(
            print_lexp_ctx (ectx_to_lctx nctx); print_string "\n"));
 
+        (* Type erasure *)
         let clean_lxp = List.map OL.clean_decls lexps in
 
         (* Eval declaration *)

@@ -124,10 +124,22 @@ type varbind =
 module VMap = Map.Make (struct type t = int let compare = compare end)
 type meta_subst = lexp VMap.t
 type constraints  = (lexp * lexp) list
-let empty_meta_subst = VMap.empty
+
+(* What people do to statisfy Ocaml type inference ...*)
+let empty_meta_subst =
+  let lxp = Var((U.dummy_location, "dummy"), -1) in
+  let v = VMap.empty in
+  let c = VMap.add 1 lxp v in VMap.remove 1 c
+
+let empty_constraint =
+  let lxp = Var((U.dummy_location, "dummy"), -1) in List.tl [(lxp, lxp)]
+
 let impossible = Imm Sexp.Epsilon
 
 let builtin_size = ref 0
+
+(* :-( *)
+let global_substitution = ref (empty_meta_subst, empty_constraint)
 
 (********************** Hash-consing **********************)
 
@@ -146,7 +158,7 @@ module WHC = Tweak.Make (struct type t = lexp
                          end)
 let hc_table : WHC.t = WHC.create 1000
 let hc : lexp -> lexp = WHC.merge hc_table
-  
+
 
 let mkImm s                    = hc (Imm s)
 let mkSortLevel l              = hc (SortLevel l)
@@ -482,6 +494,7 @@ type print_context = (bool * int * bool * bool * bool * bool* int)
 let pretty_ppctx  = ref (true , 0, true, false, true,  2, true)
 let compact_ppctx = ref (false, 0, true, false, true,  2, false)
 let debug_ppctx   = ref (false, 0, true, true , false, 2, true)
+let _current_meta_var = ref (Var((U.dummy_location, "dummy"), -1))
 
 let rec lexp_print e =  _lexp_print (!debug_ppctx) e
 and _lexp_print ctx e = print_string (_lexp_to_str ctx e)
@@ -513,7 +526,6 @@ let default_print_context =
 (* If I remember correctly ocaml doc, concat string is actually terrible *)
 (* It might be better to use a Buffer. *)
 and lexp_pretty_string exp = _lexp_to_str (!debug_ppctx) exp
-
 and _lexp_to_str ctx exp =
     (* create a string instead of printing *)
 
@@ -567,8 +579,15 @@ and _lexp_to_str ctx exp =
 
         | Var ((loc, name), idx) -> name ^ (index idx) ;
 
+        (* print metavar result if any *)
+        | Metavar _ when (exp != ! _current_meta_var) ->
+          let meta_ctx, _ = !global_substitution in
+            _current_meta_var := exp;
+            lexp_to_str (clean meta_ctx exp)
+
+        (* print metavar *)
         | Metavar (idx, subst, (loc, name), _)
-          -> "?" ^ name ^ (index idx) (*TODO : print subst*)
+          -> "?" ^ name ^ (subst_string subst) ^ (index idx)
 
         | Let (_, decls, body)   ->
             (* Print first decls without indent *)

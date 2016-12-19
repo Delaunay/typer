@@ -131,11 +131,7 @@ let get_size ctx = let ((n, _), _) = ctx in n
 (*  return its current DeBruijn index *)
 let rec senv_lookup (name: string) (ctx: elab_context): int =
     let ((n, map), _) = ctx in
-    let raw_idx =  n - (SMap.find name map) - 1 in (*
-        if raw_idx > (n - csize) then
-            raw_idx - rof   (* Shift if the variable is not bound *)
-        else *)
-        raw_idx
+      n - (SMap.find name map) - 1
 
 let lexp_ctx_cons (ctx : lexp_context) offset d v t =
   assert (offset >= 0

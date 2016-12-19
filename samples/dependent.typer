@@ -14,19 +14,23 @@ float-to-int x = 1;
 string-to-int : String -> Int;
 string-to-int x = 1;
 
-get-type : Reify -> Type;
-get-type x = case x
-  | RInt    => Int
-  | RFloat  => Float
-  | RString => String;
-
 % Here
 to-int : (a : Type) ≡> (r : (Reify a)) => (x : a) -> Int;
-to-int = lambda a ≡> lambda r => lambda x -> case a
-  | RInt => x
-  | RFloat => float-to-int x
-  | RString => string-to-int x;
+to-int = lambda a ≡>
+  lambda r =>
+    lambda x ->
+      case r
+        | RInt    _ => x
+        | RFloat  _ => float-to-int x
+        | RString _ => string-to-int x;
 
-%a = to-int (a := Float2) (2.0);
-%b = to-int (a := String2) "2";
-%c = to-int (a := Int2) 2;
+main = to-int 2.0;
+main = to-int "2";
+main = to-int 2;
+
+a = cons 1 (cons 2 (cons 3 nil));
+main = (case head a
+  | some v => v
+  | none   => 0);
+
+
