@@ -224,7 +224,17 @@ let rec conv_p' meta_ctx (ctx : DB.lexp_context) (vs : set_plexp) e1 e2 : bool =
     | (Imm (Integer (_, i1)), Imm (Integer (_, i2))) -> i1 = i2
     | (Imm (Float (_, i1)), Imm (Float (_, i2))) -> i1 = i2
     | (Imm (String (_, i1)), Imm (String (_, i2))) -> i1 = i2
-    | (SortLevel sl1, SortLevel sl2) -> sl1 = sl2
+    | (SortLevel sl1, SortLevel sl2)
+      -> (match (sl1, sl2) with
+         | (SLz, SLz) -> true
+         | (SLsucc sl1, SLsucc sl2) -> conv_p sl1 sl2
+         | (SLlub (sl11, sl12), sl2)
+           (* FIXME: This should be "<=" rather than equality!  *)
+           -> conv_p sl11 e2' && conv_p sl12 e2'
+         | (sl1, SLlub (sl21, sl22))
+           (* FIXME: This should be "<=" rather than equality!  *)
+           -> conv_p e1' sl21 && conv_p e1' sl22
+         | _ -> false)
     | (Sort (_, s1), Sort (_, s2))
       -> s1 == s2
         || (match (s1, s2) with
@@ -342,8 +352,9 @@ let rec check' meta_ctx erased ctx e =
     if conv_p meta_ctx ctx t t' then ()
     else (U.msg_error "TC" (lexp_location e)
                      ("Type mismatch for "
-                      ^ lexp_string e ^ " : "
-                      ^ lexp_string t ^ " != " ^ lexp_string t');
+                      ^ lexp_string (L.clean meta_ctx e) ^ " : "
+                      ^ lexp_string (L.clean meta_ctx t) ^ " != "
+                      ^ lexp_string (L.clean meta_ctx t'));
           (* U.internal_error "Type mismatch" *)) in
   let check_type erased ctx t =
     let s = check erased ctx t in
@@ -589,8 +600,11 @@ let rec check' meta_ctx erased ctx e =
                            ^ lexp_string t);
               DB.type_int))
   | Metavar (idx, s, _, t)
-    -> try check erased ctx (push_susp (L.VMap.find idx meta_ctx) s)
-      with Not_found -> t
+    -> (try let e = push_susp (L.VMap.find idx meta_ctx) s in
+           let t' = check erased ctx e in
+           assert_type ctx e t' t
+       with Not_found -> ());
+      t
 
 let check meta_ctx = check' meta_ctx DB.set_empty
 

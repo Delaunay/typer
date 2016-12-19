@@ -238,9 +238,9 @@ let newMetavar l name t =
   mkMetavar (meta, S.Identity, (l, name), t)
 
 let newMetalevel () =
-  newMetavar Util.dummy_location "l" (mkSort (dummy_location, StypeLevel))
+  newMetavar Util.dummy_location "l" type_level
 
-let newMetatype loc = newMetavar loc "t" (newMetalevel ())
+let newMetatype loc = newMetavar loc "t" (mkSort (loc, Stype (newMetalevel ())))
 
 (* Functions used when we need to return some lexp/ltype but
  * an error makes it impossible to return "the right one".  *)
@@ -901,7 +901,7 @@ and lexp_decls_macro (loc, mname) sargs ctx: (pdecl list * elab_context) =
         | _ -> fatal loc ("Macro `" ^ mname ^ "` should return a sexp") in
 
       (* read as pexp_declaraton *)
-      (try pexp_decls_all [decls], ctx
+      (try pexp_p_decls decls, ctx
       (* if an error occur print generated code to ease debugging *)
       with e ->
         error loc "An error occurred while expanding a macro";

@@ -98,12 +98,12 @@ and unify' (e1: lexp) (e2: lexp)
     | ((Imm _, Imm _) | (Cons _, Cons _) | (Builtin _, Builtin _)
        | (Var _, Var _) |  (Inductive _, Inductive _))
       -> if OL.conv_p subst ctx e1' e2' then Some (subst, []) else None
-    | (l, (Metavar _ as r)) -> _unify_metavar  r l subst
+    | (l, (Metavar (idx, s, _, t) as r)) -> _unify_metavar subst ctx idx s t r l
+    | ((Metavar (idx, s, _, t) as l), r) -> _unify_metavar subst ctx idx s t l r
     | (l, (Call _ as r))    -> _unify_call     r l ctx vs' subst
     (* | (l, (Case _ as r))    -> _unify_case     r l subst *)
     | (Arrow _ as l, r)     -> _unify_arrow    l r ctx vs' subst
     | (Lambda _ as l, r)    -> _unify_lambda   l r ctx vs' subst
-    | (Metavar _ as l, r)   -> _unify_metavar  l r subst
     | (Call _ as l, r)      -> _unify_call     l r ctx vs' subst
     (* | (Case _ as l, r)      -> _unify_case     l r subst *)
     (* | (Inductive _ as l, r) -> _unify_induct   l r subst *)
@@ -169,22 +169,36 @@ and _unify_lambda (lambda: lexp) (lxp: lexp) ctx vs (subst: meta_subst) : return
  - metavar   , metavar            -> if Metavar = Metavar then OK else ERROR
  - metavar   , lexp               -> OK
 *)
-and _unify_metavar (meta: lexp) (lxp: lexp) (subst: meta_subst) : return_type =
-  let find_or_unify metavar value lxp s =
-    match find_or_none metavar s with
-    | Some (lxp_)   -> assert false
-    | None          -> (match metavar with
-        | Metavar (_, subst_, _, _) -> (match Inverse_subst.inverse subst_ with
-            | Some s' -> Some (associate value (mkSusp lxp s') s, [])
+and _unify_metavar (subst: meta_subst) ctx idx s t (lxp1: lexp) (lxp2: lexp)
+    : return_type =
+  let unif idx s t lxp = match Inverse_subst.inverse s with
+    | None -> None
+    | Some s'
+      -> let subst = associate idx (mkSusp lxp s') subst in
+        match unify t (OL.get_type subst ctx lxp) ctx subst with
+        | Some (subst, []) as r -> r
+        (* FIXME: Let's ignore the error for now.  *)
+        | _
+          -> print_string ("Unification of metavar type failed:\n  "
+                          ^ lexp_string (Lexp.clean subst t) ^ " != "
+                          ^ lexp_string (Lexp.clean subst (OL.get_type subst ctx lxp)) ^ "\n"
+                          ^ "for " ^ lexp_string lxp ^ "\n");
+            Some (subst, []) in
+  match lxp2 with
+  | Metavar (idx2, s2, _, t2)
+    -> if idx = idx2 then
+        (* FIXME: handle the case where s1 != s2 !!  *)
+        Some ((subst, []))
+      else
+        (* If one of the two subst can't be inverted, try the other.
+         * FIXME: There's probably a more general solution.  *)
+        (match unif idx s t lxp2 with
+         | Some s -> Some s
+         | None ->
+            match unif idx2 s2 t2 lxp1 with
+            | Some s -> Some s
             | None -> None)
-        | _ -> None)
-  in
-  match (meta, lxp) with
-  | (Metavar (val1, s1, _, _), Metavar (val2, s2, _, _)) when val1 = val2
-    (* FIXME: handle the case where s1 != s2 !!  *)
-    -> Some ((subst, []))
-  | (Metavar (v, s1, _, _), _) -> find_or_unify meta v lxp subst
-  | (_, _) -> None
+  | _ -> unif idx s t lxp2
 
 (** Unify a Call (call) and a lexp (lxp)
  - Call      , Call               -> UNIFY
@@ -267,6 +281,7 @@ and _unify_sortlvl (sortlvl: lexp) (lxp: lexp) ctx vs (subst: meta_subst) : retu
   | (SortLevel s, SortLevel s2) -> (match s, s2 with
       | SLz, SLz -> Some (subst, [])
       | SLsucc l1, SLsucc l2 -> unify' l1 l2 ctx vs subst
+      (* FIXME: Handle SLsub!  *)
       | _, _ -> None)
   | _, _ -> None
 
