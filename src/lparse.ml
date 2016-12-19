@@ -82,9 +82,6 @@ let pexp_fatal   = debug_message fatal pexp_name pexp_string
 let pexp_error   = debug_message error pexp_name pexp_string
 let value_fatal  = debug_message fatal value_name value_string
 
-(* :-( *)
-let global_substitution = ref (empty_meta_subst, [])
-
 (** Builtin Macros i.e, special forms.  *)
 type sform_type =
   | Inferred of ltype
