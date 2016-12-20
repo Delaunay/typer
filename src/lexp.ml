@@ -493,27 +493,31 @@ type print_context = print_context_value SMap.t
 let pretty_ppctx =
   List.fold_left (fun map (key, v) -> SMap.add key v map)
     SMap.empty
-    [("pretty"       , Bool (true) ); (* print with new lines and indents   *)
-     ("print_type"   , Bool (true) ); (* print inferred Type                *)
-     ("print_dbi"    , Bool (false)); (* print dbi index                    *)
-     ("indent_size"  , Int  (2)    ); (* indent step                        *)
-     ("color"        , Bool (true) ); (* use console color to display hints *)
-     ("separate_decl", Bool (true) ); (* print newline between declarations *)
-     ("indent_level" , Int  (0)    ); (* current indent level               *)
-     ("parent"       , Expr (None) ); (* parent expression                  *)
-     ("metavar"      , Expr (None) ); (* metavar being printed              *)
-     ("col_max"      , Int  (80)   ); (* col_size + col_ofsset <= col_max   *)
-     ("col_size"     , Int  (0)    ); (* current column size                *)
-     ("col_ofsset"   , Int  (0)    ); (* if col does not start at 0         *)
-     ("grammar"      , Predtl (default_grammar))]
+    [("pretty"        , Bool (true) ); (* print with new lines and indents   *)
+     ("print_type"    , Bool (true) ); (* print inferred Type                *)
+     ("print_dbi"     , Bool (false)); (* print dbi index                    *)
+     ("indent_size"   , Int  (2)    ); (* indent step                        *)
+     ("color"         , Bool (true) ); (* use console color to display hints *)
+     ("separate_decl" , Bool (true) ); (* print newline between declarations *)
+     ("indent_level"  , Int  (0)    ); (* current indent level               *)
+     ("parent"        , Expr (None) ); (* parent expression                  *)
+     ("metavar"       , Expr (None) ); (* metavar being printed              *)
+     ("col_max"       , Int  (80)   ); (* col_size + col_ofsset <= col_max   *)
+     ("col_size"      , Int  (0)    ); (* current column size                *)
+     ("col_ofsset"    , Int  (0)    ); (* if col does not start at 0         *)
+     ("print_erasable", Bool (false));
+     ("print_implicit", Bool (false));
+     ("grammar"       , Predtl (default_grammar))]
 
 (* debug_ppctx is a ref so we can modify it in the REPL *)
 let debug_ppctx = ref (
   List.fold_left (fun map (key, v) -> SMap.add key v map)
     pretty_ppctx
-    [("pretty"       , Bool (false) );
-     ("print_dbi"    , Bool (true)  );
-     ("separate_decl", Bool (false) );])
+    [("pretty"        , Bool (false) );
+     ("print_dbi"     , Bool (true)  );
+     ("print_erasable", Bool (true));
+     ("print_implicit", Bool (true));
+     ("separate_decl" , Bool (false) );])
 
 let pp_pretty ctx = match SMap.find "pretty" ctx with Bool b -> b | _ -> U.typer_unreachable ""
 let pp_type ctx = match SMap.find "print_type" ctx with Bool b -> b | _ -> U.typer_unreachable ""
@@ -527,6 +531,8 @@ let pp_meta ctx = match SMap.find "metavar" ctx with Expr e -> e | _ -> U.typer_
 let pp_grammar ctx = match SMap.find "grammar" ctx with Predtl p -> p | _ -> U.typer_unreachable ""
 let pp_colsize ctx = match SMap.find "col_size" ctx with Int i -> i | _ -> U.typer_unreachable ""
 let pp_colmax ctx = match SMap.find "col_max" ctx with Int i -> i | _ -> U.typer_unreachable ""
+let pp_erasable ctx = match SMap.find "print_erasable" ctx with Bool b -> b | _ -> U.typer_unreachable ""
+let pp_implicit ctx = match SMap.find "print_implicit" ctx with Bool b -> b | _ -> U.typer_unreachable ""
 
 let set_col_size p ctx = SMap.add "col_size" (Int p) ctx
 let add_col_size p ctx = set_col_size ((pp_colsize ctx) + p) ctx
@@ -688,20 +694,23 @@ and _lexp_str ctx (exp : lexp) : string =
             (keyword "datacons ") ^ (lexp_str t) ^ " " ^ ctor_name
 
         | Call(fname, args) ->
-          let name, index = get_name fname in
+          let name, idx = get_name fname in
           let binop_str op (_, lhs) (_, rhs) =
-            "(" ^ (lexp_str lhs) ^ op ^ (* (index idx) ^ *) " " ^ (lexp_str rhs) ^ ")" in (
+            "(" ^ (lexp_str lhs) ^ op ^ (index idx) ^ " " ^ (lexp_str rhs) ^ ")" in
+
+          let print_arg str (arg_type, lxp) =
+            match arg_type with
+              | Aerasable when pp_erasable ctx -> str ^ " " ^ (lexp_str lxp)
+              | Aimplicit when pp_implicit ctx -> str ^ " " ^ (lexp_str lxp)
+              | Aexplicit                      -> str ^ " " ^ (lexp_str lxp)
+              | _ -> str in (
 
           match args with
             | [lhs; rhs]  when is_binary_op name ->
               binop_str (" " ^ (get_binary_op_name name)) lhs rhs
 
-            | _ ->
-                let args = List.fold_left
-                         (fun str (_, lxp)
-                          -> str ^ " " ^ (lexp_str lxp))
-                         "" args in
-               "(" ^ name ^ args ^ ")")
+            | _ -> let args = List.fold_left print_arg "" args in
+               "(" ^ (lexp_str fname) ^ args ^ ")")
 
         | Inductive (_, (_, name), [], ctors) ->
             (keyword "typecons") ^ " (" ^ name ^") " ^ newline ^

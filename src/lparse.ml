@@ -854,7 +854,7 @@ and lexp_eval meta_ctx ectx e =
   let e = L.clean meta_ctx e in
   let ee = OL.erase_type e in
   let rctx = EV.from_ectx meta_ctx ectx in
-  
+
   if not (EV.closed_p rctx (OL.fv e)) then
     lexp_error (lexp_location e) e
                ("Expression `" ^ lexp_string e ^ "` is not closed: "
@@ -1248,6 +1248,25 @@ let dynamic_bind r v body =
 (* Make lxp context with built-in types *)
 let default_ectx
   = let _ = register_special_forms () in
+
+    (* Read BTL files *)
+    let read_file file_name elctx =
+      let pres = prelex_file file_name in
+      let sxps = lex default_stt pres in
+      let nods = sexp_parse_all_to_list default_grammar sxps (Some ";") in
+      let pxps = pexp_decls_all nods in
+      let _, lctx = dynamic_bind _parsing_internals true
+                                 (fun () -> lexp_p_decls pxps elctx) in lctx in
+
+    (* Register predef *)
+    let register_pred elctx =
+      try List.iter (fun name ->
+            let idx = senv_lookup name elctx in
+            let v = Var((dloc, name), idx) in
+              BI.set_predef name v) BI.predef_name;
+      with e ->
+        warning dloc "Predef not found"; in
+
     (* Empty context *)
     let lctx = make_elab_context in
     let lctx = SMap.fold (fun key (e, t) ctx
@@ -1255,35 +1274,17 @@ let default_ectx
                             else ctx_define ctx (dloc, key) e t)
                          (!BI.lmap) lctx in
 
-    (* Read BTL files *)
-    let pres = prelex_file (!btl_folder ^ "builtins.typer") in
-    let sxps = lex default_stt pres in
-    let nods = sexp_parse_all_to_list default_grammar sxps (Some ";") in
-    let pxps = pexp_decls_all nods in
+    (* read base file *)
+    let lctx = read_file (!btl_folder ^ "builtins.typer") lctx in
+    let _ = register_pred lctx in
 
-    let d, lctx = dynamic_bind _parsing_internals true
-                               (fun () -> lexp_p_decls pxps lctx) in
+    (* Does not work, not sure why
+    let files = ["list.typer"; "quote.typer"; "type.typer"] in
+    let lctx = List.fold_left (fun lctx file_name ->
+      read_file (!btl_folder ^ file_name) lctx) lctx files in *)
 
-    (* dump grouped decls * )
-       List.iter (fun decls ->
-       print_string "[";
-       List.iter (fun ((_, s), _, _) ->
-       print_string (s ^ ", ")) decls; print_string "] \n") d; *)
 
-    builtin_size := get_size lctx;
-
-    (* Once default builtin are set we can populate the predef table *)
-    let lctx = try
-        List.iter (fun name ->
-            let idx = senv_lookup name lctx in
-            let v = Var((dloc, name), idx) in
-            BI.set_predef name v) BI.predef_name;
-        (* -- DONE -- *)
-        lctx
-      with e ->
-        warning dloc "Predef not found";
-        lctx in
-    lctx
+    builtin_size := get_size lctx; lctx
 
 let default_rctx =
     let meta_ctx, _ = !global_substitution in

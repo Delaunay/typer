@@ -1,0 +1,49 @@
+%
+%   f = (qquote (uquote x) * x) (node _*_ [(node_ unquote "x") "x"])
+%
+%   f = node_ "*" cons (x, cons (symbol_ "x") nil))
+%
+%
+%     =>       x
+
+get-head : List Sexp -> Sexp;
+get-head x = case x
+  | cons hd _ => hd
+  | nil => symbol_ "error";
+
+symbol  = lambda (y : String)     -> (symbol_ y);
+string  = lambda (y : String)     -> (string_ y);
+integer = lambda (y : Int)        -> (integer_ y);
+float   = lambda (y : Float)      -> (float_ y);
+block   = lambda (y : List Sexp)  -> (block_ y);
+
+quote' : List Sexp -> List Sexp;
+
+has-uquote : List Sexp -> Sexp;
+has-uquote = lambda y ->
+  let expr = case y
+    | cons hd tl => hd
+    | nil => symbol_ "uquote expects one argument" in
+      expr;
+
+% traverse nodes
+node : Sexp -> List Sexp -> Sexp;
+node = lambda (op : Sexp) ->
+    lambda (y : List Sexp) ->
+      case (sexp_eq op (symbol_ "uquote"))
+        | true  => has-uquote y
+        | false => node_ op (quote' y);
+
+% tree traversal
+quote' = lambda (x : List Sexp) ->
+  case x
+    | cons hd tl => (
+        let nhd = sexp_dispatch_ (a := Sexp) hd node symbol string integer float block in
+        let ntl = quote' tl in
+          cons nhd ntl)
+
+    | nil => nil;
+
+% quote definition
+qq = lambda (x : List Sexp) -> get-head (quote' x);
+quote = Macro_ qq;

@@ -1,0 +1,96 @@
+% build a declaration
+% var-name = value-expr;
+make-decl : Sexp -> Sexp -> Sexp;
+make-decl var-name value-expr =
+  node_ (symbol_ "_=_")
+    (cons var-name
+      (cons value-expr nil));
+
+chain-decl : Sexp -> Sexp -> Sexp;
+chain-decl a b =
+    node_ (symbol_ "_;_") (cons a (cons b nil));
+
+% build datacons
+% ctor-name = datacons type-name ctor-name;
+make-cons : Sexp -> Sexp -> Sexp;
+make-cons ctor-name type-name =
+  make-decl ctor-name
+    (node_ (symbol_ "datacons")
+      (cons type-name
+        (cons ctor-name nil)));
+
+% buil type annotation
+% var-name : type-expr;
+make-ann : Sexp -> Sexp -> Sexp;
+make-ann var-name type-expr =
+  node_ (symbol_ "_:_")
+    (cons var-name
+      (cons type-expr nil));
+
+type-impl = lambda (x : List Sexp) ->
+  % x follow the mask -> (_|_ Nat zero (succ Nat))
+  %               Type name  --^    ^------^ constructors
+
+  % Return a list contained inside a node sexp
+  let get-list : Sexp -> List Sexp;
+      get-list node = sexp_dispatch_ (a := List Sexp) node
+        (lambda op lst -> lst)    % Nodes
+        (lambda _ -> nil)    % Symbol
+        (lambda _ -> nil)    % String
+        (lambda _ -> nil)    % Integer
+        (lambda _ -> nil)    % Float
+        (lambda _ -> nil) in % List of Sexp
+
+  % Get a name from a sexp
+  %   - (name t) -> name
+  %   - name -> name
+  let get-name : Sexp -> Sexp;
+      get-name sxp =
+        sexp_dispatch_ (a := Sexp) sxp
+          (lambda op lst -> get-name op)   % Nodes
+          (lambda str    -> symbol_ str)   % Symbol
+          (lambda _ -> symbol_ "error")    % String
+          (lambda _ -> symbol_ "error")    % Integer
+          (lambda _ -> symbol_ "error")    % Float
+          (lambda _ -> symbol_ "error") in % List of Sexp
+
+  let get-head : List Sexp -> Sexp;
+      get-head x = case x
+        | cons hd _ => hd
+        | nil => symbol_ "error" in
+
+  % Get expression
+  let expr = get-head x in
+
+  % Expression is  node_ (symbol_ "|") (list)
+  % we only care about the list bit
+  let lst = get-list expr in
+
+  % head is (node_ type-name (arg list))
+  let name = get-head lst;
+      ctor = tail lst in
+
+  let type-name = get-name name in
+
+  % Create the inductive type definition
+  let inductive = node_ (symbol_ "typecons")
+    (cons name ctor) in
+
+  let decl  = make-decl type-name inductive in
+
+  % Add constructors
+  let ctors =
+   let for-each : List Sexp -> Sexp -> Sexp;
+       for-each ctr acc = case ctr
+        | cons hd tl => (
+          let acc2 = chain-decl (make-cons (get-name hd) type-name) acc in
+            for-each tl acc2)
+        | nil => acc
+      in for-each ctor (node_ (symbol_ "_;_") nil) in
+
+  % return decls
+    (chain-decl decl       % inductive type declaration
+                ctors);    % constructor declarations
+
+
+type_ = Macro_ type-impl;

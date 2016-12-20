@@ -1,0 +1,47 @@
+Option = typecons (Option (a : Type)) (none) (some a);
+some = datacons Option some;
+none = datacons Option none;
+
+length : (a : Type) ≡> List a -> Int;
+length = lambda a ≡>
+  lambda xs ->
+    case xs
+      | nil => 0
+      | cons hd tl => (1 + (length tl));
+
+% ML's typical `head` function is not total, so can't be defined
+% as-is in Typer.  There are several workarounds:
+% - Provide a default value : (a : Type) ≡> List a -> a -> a;
+% - Disallow problem case   : (a : Type) ≡> (l : List a) -> (l != nil) -> a;
+% - Return an Option/Error.
+head : (a : Type) ≡> List a -> Option a;
+head = lambda a ≡>
+  lambda xs ->
+    case xs
+      | nil => none
+      | cons hd tl => some hd;
+
+tail : (a : Type) ≡> List a -> List a;
+tail = lambda a ≡>
+  lambda xs ->
+    case xs
+      | nil => nil
+      | cons hd tl => tl;
+
+accumulate : (t : Type) ≡> (acc-op : (t -> t -> t)) -> (init : t) -> (list : List t) -> t;
+accumulate = lambda (t : Type) ≡>
+  lambda (acc-op : (t -> t -> t)) ->
+    lambda (init : t) ->
+      lambda (list : List t) ->
+        case list
+          | cons hd tl => accumulate acc-op (acc-op init hd) tl
+          | nil        => init;
+
+map : (a : Type) ≡> (b : Type) ≡> (list : List a) -> (f : a -> b) -> List b;
+map = lambda (a : Type) ≡>
+  lambda (b : Type) ≡>
+    lambda (list : List a) ->
+      lambda (f : a -> b) ->
+        case list
+          | cons hd tl => (cons (f hd) (map tl f))
+          | nil => nil;

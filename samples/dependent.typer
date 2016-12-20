@@ -1,8 +1,8 @@
 
 Reify = typecons (Reify (a : Type))
-  (RInt (Eq (t := Type) Int a))
-  (RFloat (Eq (t := Type) Float a))
-  (RString (Eq (t := Type) String a));
+  (RInt (Eq (t := Type) a Int))
+  (RFloat (Eq (t := Type) a Float))
+  (RString (Eq (t := Type) a String));
 
 RInt = datacons Reify RInt;
 RFloat = datacons Reify RFloat;
@@ -20,9 +20,9 @@ to-int = lambda a ≡>
   lambda r =>
     lambda x ->
       case r
-        | RInt    _ => x
-        | RFloat  _ => float-to-int x
-        | RString _ => string-to-int x;
+        | RInt    p => Eq_cast (p := p) (f := (lambda x -> x)) x
+        | RFloat  p => float-to-int (Eq_cast (p := p) (f := (lambda x -> x)) x)
+        | RString p => string-to-int (Eq_cast (p := p) (f := (lambda x -> x)) x);
 
 main = to-int 2.0;
 main = to-int "2";
