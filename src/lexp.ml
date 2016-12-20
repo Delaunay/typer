@@ -476,80 +476,133 @@ and subst_string s = match s with
   | S.Shift (s, n) -> "(↑"^ string_of_int n ^ " " ^ subst_string s ^ ")"
   | S.Cons (l, s) -> lexp_string l ^ " · " ^ subst_string s
 
-(*
- *      Printing
- * --------------------- *)
-(*
-    pretty ?        (print with new lines and indents)
-    indent level
-    print_type?     (print inferred Type)
-    print_index     (print dbi index)
-    separate decl   (print extra newline between declarations)
-    indent size     2/4
-    highlight       (use console color to display hints)
-*)
+(* ------------------------------------------------------------------------- *)
+(*                                   Printing                                *)
 
-type print_context = (bool * int * bool * bool * bool * bool* int)
+(*  Printing Context
+ * ========================================== *)
 
-let pretty_ppctx  = ref (true , 0, true, false, true,  2, true)
-let compact_ppctx = ref (false, 0, true, false, true,  2, false)
-let debug_ppctx   = ref (false, 0, true, true , false, 2, true)
-let _current_meta_var = ref (Var((U.dummy_location, "dummy"), -1))
+type print_context_value =
+  | Bool of bool
+  | Int of int
+  | Expr of lexp option
+  | Predtl of grammar        (* precedence table *)
 
-let rec lexp_print e =  _lexp_print (!debug_ppctx) e
-and _lexp_print ctx e = print_string (_lexp_to_str ctx e)
+type print_context = print_context_value SMap.t
 
-(*
-type print_context2 = int SMap.t
+let pretty_ppctx =
+  List.fold_left (fun map (key, v) -> SMap.add key v map)
+    SMap.empty
+    [("pretty"       , Bool (true) ); (* print with new lines and indents   *)
+     ("print_type"   , Bool (true) ); (* print inferred Type                *)
+     ("print_dbi"    , Bool (false)); (* print dbi index                    *)
+     ("indent_size"  , Int  (2)    ); (* indent step                        *)
+     ("color"        , Bool (true) ); (* use console color to display hints *)
+     ("separate_decl", Bool (true) ); (* print newline between declarations *)
+     ("indent_level" , Int  (0)    ); (* current indent level               *)
+     ("parent"       , Expr (None) ); (* parent expression                  *)
+     ("metavar"      , Expr (None) ); (* metavar being printed              *)
+     ("col_max"      , Int  (80)   ); (* col_size + col_ofsset <= col_max   *)
+     ("col_size"     , Int  (0)    ); (* current column size                *)
+     ("col_ofsset"   , Int  (0)    ); (* if col does not start at 0         *)
+     ("grammar"      , Predtl (default_grammar))]
 
-let default_print_context =
-  List.fold (fun map (key, v) -> SMap.add key v map)
-    [
-      (* true options *)
-      ("pretty",        1);
-      ("print_type",    1);
-      ("print_dbi",     1);
-      ("indent_size",   2);
-      ("color",         1);
-      ("separate_decl", 1);
+(* debug_ppctx is a ref so we can modify it in the REPL *)
+let debug_ppctx = ref (
+  List.fold_left (fun map (key, v) -> SMap.add key v map)
+    pretty_ppctx
+    [("pretty"       , Bool (false) );
+     ("print_dbi"    , Bool (true)  );
+     ("separate_decl", Bool (false) );])
 
-      (* State information *)
-      ("indent_level",  0);
-      ("previous node", 0)
-    ]
-    SMap.empty *)
+let pp_pretty ctx = match SMap.find "pretty" ctx with Bool b -> b | _ -> U.typer_unreachable ""
+let pp_type ctx = match SMap.find "print_type" ctx with Bool b -> b | _ -> U.typer_unreachable ""
+let pp_dbi ctx = match SMap.find "print_dbi" ctx with Bool b -> b | _ -> U.typer_unreachable ""
+let pp_size ctx = match SMap.find "indent_size" ctx with Int i -> i | _ -> U.typer_unreachable ""
+let pp_color ctx = match SMap.find "color" ctx with Bool b -> b | _ -> U.typer_unreachable ""
+let pp_decl ctx = match SMap.find "separate_decl" ctx with Bool b -> b | _ -> U.typer_unreachable ""
+let pp_indent ctx = match SMap.find "indent_level" ctx with Int i -> i | _ -> U.typer_unreachable ""
+let pp_parent ctx = match SMap.find "parent" ctx with Expr e -> e | _ -> U.typer_unreachable ""
+let pp_meta ctx = match SMap.find "metavar" ctx with Expr e -> e | _ -> U.typer_unreachable ""
+let pp_grammar ctx = match SMap.find "grammar" ctx with Predtl p -> p | _ -> U.typer_unreachable ""
+let pp_colsize ctx = match SMap.find "col_size" ctx with Int i -> i | _ -> U.typer_unreachable ""
+let pp_colmax ctx = match SMap.find "col_max" ctx with Int i -> i | _ -> U.typer_unreachable ""
 
-(*  Print a lexp into its typer equivalent                              *)
-(*  Depending on the print_context the output can be correct typer code *)
-(*  This function will be very useful when debugging generated code     *)
+let set_col_size p ctx = SMap.add "col_size" (Int p) ctx
+let add_col_size p ctx = set_col_size ((pp_colsize ctx) + p) ctx
+let reset_col_size ctx = set_col_size 0 ctx
+let set_parent p ctx = SMap.add "parent" (Expr (Some p)) ctx
+let set_meta p ctx   = SMap.add "metavar" (Expr (Some p)) ctx
+let add_indent ctx i = SMap.add "indent_level" (Int ((pp_indent ctx) + i)) ctx
 
-(* If I remember correctly ocaml doc, concat string is actually terrible *)
-(* It might be better to use a Buffer. *)
-and lexp_pretty_string exp = _lexp_to_str (!debug_ppctx) exp
-and _lexp_to_str ctx exp =
-    (* create a string instead of printing *)
+let pp_append_string buffer ctx str =
+  let n = (String.length str) in
+    Buffer.add_string buffer str;
+    add_col_size n ctx
 
-    let (pretty, indent, ptype, pindex, _, isize, color) = ctx in
-    let lexp_to_str = _lexp_to_str ctx in
+let pp_newline buffer ctx =
+  Buffer.add_char buffer '\n';
+  reset_col_size ctx
 
-    (* internal context, when parsing let *)
-    let inter_ctx = (pretty, indent + 1, ptype, pindex, false, isize, color) in
+let is_binary_op str =
+  let c1 = String.get str 0 in
+  let cn = String.get str ((String.length str) - 1) in
+    if (c1 = '_') && (cn = '_') then true else false
 
-    let lexp_to_stri idt e =
-        _lexp_to_str (pretty, indent + idt, ptype, pindex, false, isize, color) e in
+let get_binary_op_name name =
+  String.sub name 1 ((String.length name) - 2)
+
+let rec get_precedence expr ctx =
+  let lkp name = SMap.find name (pp_grammar ctx) in
+  match expr with
+    | Lambda _ -> lkp "lambda"
+    | Case _ -> lkp "case"
+    | Let _ -> lkp "let"
+    | Arrow (Aexplicit, _, _, _, _) -> lkp "->"
+    | Arrow (Aimplicit, _, _, _, _) -> lkp "=>"
+    | Arrow (Aerasable, _, _, _, _) -> lkp "≡>"
+    | Call (exp, _) -> get_precedence exp ctx
+    | Builtin ((_, name), _, _)  when is_binary_op name ->
+      lkp (get_binary_op_name name)
+    | Var ((_, name), _) when is_binary_op name ->
+      lkp (get_binary_op_name name)
+    | _ -> None, None
+
+(*  Printing Functions
+ * ========================================== *)
+
+let rec lexp_print  e = print_string (lexp_string e)
+and     lexp_string e = lexp_cstring (!debug_ppctx) e
+
+(* Context Print *)
+and lexp_cprint ctx e  = print_string (lexp_cstring ctx e)
+and lexp_cstring ctx e = _lexp_str ctx e
+
+(* Implementation *)
+and _lexp_str ctx (exp : lexp) : string =
+
+    let ctx             = set_parent exp ctx in
+    let inter_ctx       = add_indent ctx 1 in
+    let lexp_str        = _lexp_str ctx in
+    let lexp_stri idt e = _lexp_str (add_indent ctx idt) e in
+
+    let pretty = pp_pretty ctx in
+    let color  = pp_color ctx in
+    let indent = pp_indent ctx in
+    let isize  = pp_size ctx in
 
     (* colors *)
-    let red     = if color then red else "" in
-    let green   = if color then green else "" in
-    let yellow  = if color then yellow else "" in
-    let magenta = if color then magenta else "" in
-    let cyan    = if color then cyan else "" in
-    let reset   = if color then reset  else "" in
+      let red     = if color then red     else "" in
+      let green   = if color then green   else "" in
+      let yellow  = if color then yellow  else "" in
+      let magenta = if color then magenta else "" in
+      let cyan    = if color then cyan    else "" in
+      let reset   = if color then reset   else "" in
 
-    let _index idx = if pindex then ("[" ^ (string_of_int idx) ^ "]") else "" in
+    let make_indent idt = if pretty then
+      (make_line ' ' ((idt + indent) * isize)) else "" in
 
-    let make_indent idt = if pretty then (make_line ' ' ((idt + indent) * isize)) else "" in
-    let newline = (if pretty then "\n" else " ") in
+    let newline = if pretty then "\n" else " " in
     let nl = newline in
 
     let keyword str  = magenta ^ str ^ reset in
@@ -557,16 +610,23 @@ and _lexp_to_str ctx exp =
     let tval str     = yellow  ^ str ^ reset in
     let fun_call str = cyan    ^ str ^ reset in
 
-    let index idx = let str = _index idx in if idx < 0 then (error str) else
+    let index idx =
+      let _index idx = if pp_dbi ctx then ("[" ^ (string_of_int idx) ^ "]") else "" in
+      let str = _index idx in if idx < 0 then (error str) else
         (green ^ str ^ reset) in
 
-    let kind_str k =
-        match k with
-            | Aexplicit -> "->" | Aimplicit -> "=>" | Aerasable -> "≡>" in
+    let kind_str k = match k with
+      | Aexplicit -> "->" | Aimplicit -> "=>" | Aerasable -> "≡>" in
 
-    let kindp_str k =
-        match k with
-            | Aexplicit -> ":" | Aimplicit -> "::" | Aerasable -> ":::" in
+    let kindp_str k =  match k with
+      | Aexplicit -> ":" | Aimplicit -> "::" | Aerasable -> ":::" in
+
+    let get_name fname = match fname with
+      | Builtin ((_, name), _, _) -> name,  0
+      | Var((_, name), idx)       -> name, idx
+      | Lambda _                  -> "__",  0
+      | Cons _                    -> "__",  0
+      | _                         -> "__", -1  in
 
     match exp with
         | Imm(value) -> (match value with
@@ -575,92 +635,73 @@ and _lexp_to_str ctx exp =
             | Float  (_, s) -> tval (string_of_float s)
             | e -> sexp_string e)
 
-        | Susp (e, s) -> _lexp_to_str ctx (push_susp e s)
+        | Susp (e, s) -> _lexp_str ctx (push_susp e s)
 
         | Var ((loc, name), idx) -> name ^ (index idx) ;
 
-        (* print metavar result if any *)
-        | Metavar _ when (exp != ! _current_meta_var) ->
-          let meta_ctx, _ = !global_substitution in
-            _current_meta_var := exp;
-            lexp_to_str (clean meta_ctx exp)
+        | Metavar (idx, subst, (loc, name), _) ->(
+          (* print metavar result if any *)
+          let print_meta exp =
+            let meta_ctx, _ = !global_substitution in
+            let ctx = set_meta exp ctx in
+              _lexp_str ctx (clean meta_ctx exp) in
 
-        (* print metavar *)
-        | Metavar (idx, subst, (loc, name), _)
-          -> "?" ^ name ^ (subst_string subst) ^ (index idx)
+          match pp_meta ctx with
+            | None                 -> print_meta exp
+            | Some e when e != exp -> print_meta exp
+            | _ ->
+              "?" ^ name ^ (subst_string subst) ^ (index idx))
 
         | Let (_, decls, body)   ->
             (* Print first decls without indent *)
             let h1, decls, idt_lvl =
                 match _lexp_str_decls inter_ctx decls with
                     | h1::decls -> h1, decls, 2
+                    | h1::[] -> h1, [], 1
                     | _ -> "", [], 1 in
 
-            let decls = List.fold_left (fun str elem
-                                        -> str ^ (make_indent 1) ^ elem ^ nl)
-                                       (h1 ^ nl) decls  in
+            let decls = List.fold_left (fun str elem ->
+              str ^ nl ^ (make_indent 1) ^ elem ^ " ") h1 decls in
 
             let n = String.length decls - 2 in
             (* remove last newline *)
             let decls = (String.sub decls 0 n) in
 
             (keyword "let ") ^ decls ^ (keyword " in ") ^ newline ^
-                (make_indent idt_lvl) ^ (lexp_to_stri 1 body)
+                (make_indent idt_lvl) ^ (lexp_stri idt_lvl body)
 
         | Arrow(k, Some (_, name), tp, loc, expr) ->
-            "(" ^ name ^ " : " ^ (lexp_to_str tp) ^ ") " ^
-                (kind_str k) ^ " " ^ (lexp_to_str expr)
+            "(" ^ name ^ " : " ^ (lexp_str tp) ^ ") " ^
+                (kind_str k) ^ " " ^ (lexp_str expr)
 
         | Arrow(k, None, tp, loc, expr) ->
-           "(" ^ (lexp_to_str tp) ^ " "
-           ^ (kind_str k) ^ " " ^ (lexp_to_str expr) ^ ")"
+           "(" ^ (lexp_str tp) ^ " "
+           ^ (kind_str k) ^ " " ^ (lexp_str expr) ^ ")"
 
         | Lambda(k, (loc, name), ltype, lbody) ->
-            let arg = "(" ^ name ^ " : " ^ (lexp_to_str ltype) ^ ")" in
+            let arg = "(" ^ name ^ " : " ^ (lexp_str ltype) ^ ")" in
 
             (keyword "lambda ") ^ arg ^ " " ^ (kind_str k) ^ newline ^
-                (make_indent 1) ^ (lexp_to_stri 1 lbody)
+                (make_indent 1) ^ (lexp_stri 1 lbody)
 
         | Cons(t, (_, ctor_name)) ->
-            (keyword "datacons ") ^ (lexp_to_str t) ^ " " ^ ctor_name
+            (keyword "datacons ") ^ (lexp_str t) ^ " " ^ ctor_name
 
-        | Call(fname, args) -> (
-            (*  get function name *)
-            let str, idx, inner_parens, outer_parens = match fname with
-                | Builtin ((_, name), _, _) -> name,  0,  false, true
-                | Var((_, name), idx)    -> name, idx, false, true
-                | Lambda _               -> "__",  0,  true,  false
-                | Cons _                 -> "__",  0,  false, false
-                | _                      -> "__", -1,  true,  true  in
+        | Call(fname, args) ->
+          let name, index = get_name fname in
+          let binop_str op (_, lhs) (_, rhs) =
+            "(" ^ (lexp_str lhs) ^ op ^ (* (index idx) ^ *) " " ^ (lexp_str rhs) ^ ")" in (
 
-            let binop_str op (_, lhs) (_, rhs) =
-                (lexp_to_str lhs) ^ op ^ (index idx) ^ " " ^ (lexp_to_str rhs) in
+          match args with
+            | [lhs; rhs]  when is_binary_op name ->
+              binop_str (" " ^ (get_binary_op_name name)) lhs rhs
 
-            let add_parens bl str =
-                if bl then "(" ^ str ^ ")" else str in
-
-            match (str, args) with
-                (* Special Operators *)
-                (* FIXME: Get rid of these special cases:
-                 * Either use the boring (_+_ e1 e2) notation, or check the
-                 * grammar to decide when we can use the infix notation and
-                 * when to add parenthese.  *)
-                | ("_=_", [lhs; rhs]) -> binop_str " =" lhs rhs
-                | ("_+_", [lhs; rhs]) -> binop_str " +" lhs rhs
-                | ("_-_", [lhs; rhs]) -> binop_str " -" lhs rhs
-                | ("_/_", [lhs; rhs]) -> binop_str " /" lhs rhs
-                | ("_*_", [lhs; rhs]) -> binop_str " *" lhs rhs
-                (* not an operator *)
-                | _ ->
-                    let args = List.fold_left
-                                 (fun str (_, lxp)
-                                  -> str ^ " " ^ (lexp_to_str lxp))
-                                 "" args in
-
-                    let str = fun_call (lexp_to_str fname) in
-                    let str = add_parens inner_parens str in
-                    let str = str ^ args in
-                        add_parens outer_parens str)
+            | _ ->
+                let args = List.fold_left
+                         (fun str (_, lxp)
+                          -> str ^ " " ^ (lexp_str lxp))
+                         "" args in
+               "(" ^ name ^ args ^ ")")
 
         | Inductive (_, (_, name), [], ctors) ->
             (keyword "typecons") ^ " (" ^ name ^") " ^ newline ^
@@ -671,27 +712,24 @@ and _lexp_to_str ctx exp =
               = List.fold_left
                   (fun str (arg_kind, (_, name), ltype)
                    -> str ^ " (" ^ name ^ " " ^ (kindp_str arg_kind) ^ " "
-                     ^ (lexp_to_str ltype) ^ ")")
+                     ^ (lexp_str ltype) ^ ")")
                   "" args in
 
             (keyword "typecons") ^ " (" ^ name ^ args_str ^") " ^
               (lexp_str_ctor ctx ctors)
 
         | Case (_, target, _ret, map, dflt) ->(
-            let str = (keyword "case ") ^ (lexp_to_str target)
-            (* FIXME: `tpe' is the *base* type of `target`.  E.g. if `target`
-             * is a `List Int`, then `tpe` will be `List`.
-               ^ * " : " ^ (lexp_to_str tpe) *) in
+            let str = (keyword "case ") ^ (lexp_str target) in
             let arg_str arg
               = List.fold_left (fun str v
                                 -> match v with
-                                  | (_,None) -> str ^ " _"
+                                  | (_ ,None) -> str ^ " _"
                                   | (_, Some (_, n)) -> str ^ " " ^ n)
                                "" arg in
 
             let str = SMap.fold (fun k (_, arg, exp) str ->
                 str ^ nl ^ (make_indent 1) ^
-                    "| " ^ (fun_call k) ^ (arg_str arg) ^ " => " ^ (lexp_to_stri 1 exp))
+                    "| " ^ (fun_call k) ^ (arg_str arg) ^ " => " ^ (lexp_stri 1 exp))
                 map str in
 
             match dflt with
@@ -699,7 +737,7 @@ and _lexp_to_str ctx exp =
                 | Some (v, df) ->
                    str ^ nl ^ (make_indent 1)
                    ^ "| " ^ (match v with None -> "_" | Some (_,name) -> name)
-                   ^ " => " ^ (lexp_to_stri 1 df))
+                   ^ " => " ^ (lexp_stri 1 df))
 
         | Builtin ((_, name), _, _) -> "##" ^ name
 
@@ -715,35 +753,34 @@ and _lexp_to_str ctx exp =
           -> "(##TypeLevel.∪ " ^ lexp_string e1 ^ " " ^ lexp_string e1 ^ ")"
 
 and lexp_str_ctor ctx ctors =
-  let (pretty, indent, ptype, pindex, _, isize, color) = ctx in
-  let make_indent idt = if pretty then (make_line ' ' ((idt + indent) * isize)) else "" in
+
+  let pretty = pp_pretty ctx in
+  let make_indent idt = if pretty then (make_line ' ' ((idt + (pp_indent ctx)) * (pp_size ctx))) else "" in
   let newline = (if pretty then "\n" else " ") in
 
   SMap.fold (fun key value str
              -> let str = str ^ newline ^ (make_indent 1) ^ "(" ^ key in
                let str = List.fold_left (fun str (k, _, arg)
-                                         -> str ^ " " ^ (_lexp_to_str ctx arg))
+                                         -> str ^ " " ^ (_lexp_str ctx arg))
                                         str value in
                str ^ ")")
             ctors ""
 
 and _lexp_str_decls ctx decls =
 
-    let (pretty, indent, ptype, pindex, sepdecl, isize, _) = ctx in
-    let lexp_to_str = _lexp_to_str ctx in
+    let lexp_str = _lexp_str ctx in
+    let sepdecl = (if pp_decl ctx then "\n" else "") in
+    let septp  = match pp_parent ctx with
+      | Some _ -> ""
+      | None -> "\n" in
 
-    (* let make_indent idt =
-        if pretty then (make_line ' ' ((idt + indent) * isize)) else "" in *)
-
-    let sepdecl = (if sepdecl then "\n" else "") in
-
-    let type_str name lxp = (if ptype then (
-         name ^ " : " ^ (lexp_to_str lxp) ^ ";") else "") in
+    let type_str name lxp = (if pp_type ctx then (
+         name ^ " : " ^ (lexp_str lxp) ^ ";") else "") in
 
     let ret = List.fold_left
                 (fun str ((_, name), lxp, ltp)
-                 -> let str = if ptype then (type_str name ltp)::str else str in
-                   (name ^ " = " ^ (lexp_to_str lxp) ^ ";" ^ sepdecl)::str)
+                 -> let str = if pp_type ctx then (type_str name ltp)::str else str in
+                   (name ^ " = " ^ (lexp_str lxp) ^ ";" ^ sepdecl)::str)
                 [] decls in
     List.rev ret
 

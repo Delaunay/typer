@@ -87,29 +87,29 @@ let get_p_option name =
 *)
 
 let _format_mode = ref false
-let _ppctx  = ref (true , 0, true, false, true,  2, true)
+let _ppctx  = ref pretty_ppctx
 let _format_dest = ref ""
 let _write_file = ref false
 let _typecheck = ref false
 
 
 let _set_print_pretty ctx v =
-    let (a, b, c, d, e, f, g) = !ctx in ctx := (v, b, c, d, e, f, g)
+  ctx := SMap.add "pretty" (Bool (v)) !ctx
 
 let _set_print_type ctx v =
-    let (a, b, c, d, e, f, g) = !ctx in ctx := (a, b, v, d, e, f, g)
+  ctx := SMap.add "print_type" (Bool (v)) !ctx
 
 let _set_print_index ctx v =
-    let (a, b, c, d, e, f, g) = !ctx in ctx := (a, b, c, v, e, f, g)
+  ctx := SMap.add "print_dbi" (Bool (v)) !ctx
 
 let _set_print_indent_size ctx v =
-    let (a, b, c, d, e, f, g) = !ctx in ctx := (a, b, c, d, e, v, g)
+  ctx := SMap.add "indent_size" (Int (v)) !ctx
 
 let _set_highlight ctx v =
-    let (a, b, c, d, e, f, g) = !ctx in ctx := (a, b, c, d, e, f, v)
-
+  ctx := SMap.add "color" (Bool (v))!ctx
 
 let mod_ctx f v = f _ppctx v; f debug_ppctx v
+
 let set_print_type v () = mod_ctx _set_print_type v
 let set_print_index v () = mod_ctx _set_print_index v
 let set_print_indent_size v =  mod_ctx _set_print_indent_size v

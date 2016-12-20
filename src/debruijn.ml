@@ -236,7 +236,7 @@ let print_lexp_ctx_n (ctx : lexp_context) start =
             let _ = match exp with
                 | None -> print_string "<var>"
                 | Some exp -> (
-                  let str = _lexp_to_str (!debug_ppctx) exp in
+                  let str = _lexp_str (!debug_ppctx) exp in
                     let str = (match str_split str '\n' with
                         | hd::tl -> print_string hd; tl
                         | _ -> []) in

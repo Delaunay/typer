@@ -33,35 +33,51 @@ open Lparse     (* add_def       *)
 
 open Builtin
 
-(* default environment * )
-let lctx = default_lctx
+(* default environment *)
+let ectx = default_ectx
+let rctx = default_rctx
 
-
+(*)
 let _ = (add_test "LEXP" "lexp_print" (fun () ->
 
     let dcode = "
-        sqr = lambda (x : Int) -> x * x;
-        cube = lambda (x : Int) -> x * (sqr x);
+sqr : (x : Int) -> Int;
+sqr = lambda (x : Int) ->
+  (x * x);
 
-        mult = lambda (x : Int) -> lambda (y : Int) -> x * y;
+cube : (x : Int) -> Int;
+cube = lambda (x : Int) ->
+  (x * (sqr x));
 
-        twice = (mult 2);
+mult : (x : Int) -> (y : Int) -> Int;
+mult = lambda (x : Int) ->
+  lambda (y : Int) ->
+    (x * y);
 
-        let_fun = lambda (x : Int) ->
-            let a = (twice x); b = (mult 2 x); in
-                a + b;" in
+twice : (y : Int) -> Int;
+twice = (mult 2);
 
-    let ret1, _ = lexp_decl_str dcode lctx in
+let_fun : (x : Int) -> Int;
+let_fun = lambda (x : Int) ->
+  let a : Int;
+    a = (twice x); in
+      let b : Int;
+        b = (mult 2 x); in
+          (a + b);" in
+
+    let ret1, _ = lexp_decl_str dcode ectx in
 
     let to_str decls =
-        let str = _lexp_str_decls (!compact_ppctx) (List.flatten ret1) in
-            List.fold_left (fun str lxp -> str ^ lxp) "" str in
+        let str = _lexp_str_decls pretty_ppctx (List.flatten ret1) in
+            List.fold_left (fun str lxp -> str ^ "\n" ^ lxp) "" str in
 
     (* Cast to string *)
-    let str1 = to_str ret1 in
+    let str1 = (to_str ret1) ^ "\n" in
+
+    print_string str1;
 
     (* read code again *)
-    let ret2, _ = lexp_decl_str str1 lctx in
+    let ret2, _ = lexp_decl_str str1 ectx in
 
     (* Cast to string *)
     let str2 = to_str ret2 in
