@@ -1,0 +1,23 @@
+accumulate : (t : Type) ≡> (acc-op : (t -> t -> t)) -> (init : t) -> (list : List t) -> t;
+accumulate = lambda (t : Type) ≡>
+  lambda (acc-op : (t -> t -> t)) ->
+    lambda (init : t) ->
+      lambda (list : List t) ->
+        case list
+          | cons hd tl => accumulate acc-op (acc-op init hd) tl
+          | nil        => init;
+
+
+map : (a : Type) ≡> (b : Type) ≡> (list : List a) -> (f : a -> b) -> List b;
+map = lambda (a : Type) ≡>
+  lambda (b : Type) ≡>
+    lambda (list : List a) ->
+      lambda (f : a -> b) ->
+        case list
+          | cons hd tl => (cons (f hd) (map tl f))
+          | nil => nil;
+
+list = (cons 1 (cons 2 (cons 3 (cons 4 nil))));
+
+% main = accumulate _+_ 0 list;
+% main = map list (lambda x -> (x + 1));

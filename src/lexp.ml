@@ -545,7 +545,6 @@ let pp_append_string buffer ctx str =
   let n = (String.length str) in
     Buffer.add_string buffer str;
     add_col_size n ctx
-
 let pp_newline buffer ctx =
   Buffer.add_char buffer '\n';
   reset_col_size ctx
