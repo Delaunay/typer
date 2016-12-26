@@ -1,0 +1,70 @@
+type Location
+  | location (line : col) (col : Int) (file : String);
+
+% Symbolic Expression
+Sexp : Type;
+type Sexp
+  | epsilon
+  | block   (loc_start : Location) (tok : List Pretoken) (loc_end : Location)
+  | symbol  (loc : Location) (name : String)
+  | string  (loc : Location) (value : String)
+  | integer (loc : Location) (value : Int)
+  | float   (loc : Location) (value : Float)
+  | node    (op  : Sexp) (args : List Sexp);
+
+sexp_loc : Sexp -> Location;
+sexp_loc s =
+  case s
+    | block    loc _ _  => loc
+    | symbol   loc _    => loc
+    | string   loc _    => loc
+    | integer  loc _    => loc
+    | float    loc _    => loc
+    | node     loc _    => sexp_loc op
+    | _                 => dummy_location;
+
+sexp_name : Sexp -> String;
+sexp_name s =
+  case s
+    | epsilon         => "Epsilon"
+    | block    _ _ _  => "Block"
+    | symbol   _ _    => "Symbol"
+    | string   _ _    => "String"
+    | integer  _ _    => "Integer"
+    | float    _ _    => "Float"
+    | node     _ _    => "Node";
+
+sexp_string : Sexp -> String;
+sexp_string s =
+  case s
+    | epsilon          => "ε"
+    | symbol   _ v     => v
+    | string   _ v     => v
+    | integer  _ v     => to-string v
+    | float    _ v     => to-string v
+    | block    _ v _   => "{" ++ (pretokens_string v) ++ "}"
+    | node     op args =>
+      let args = accumulate
+        (lambda str val -> str ++ " " ++ sexp_string val) "" args in
+          "(" ++ (sexp_string op) ++ args ++ ")";
+
+% is there a simplier way ?
+sexp_equal : Sexp -> Sexp -> Bool;
+sexp_equal a b =
+  case a
+    | epsilon             => case b |
+      epsilon             => true   | _ => false
+    | symbol   _ v        => case b |
+      symbol   _ v'       => v = v' | _ => false
+    | string   _ v        => case b |
+      string   _ v'       => v = v' | _ => false
+    | integer  _ v        => case b |
+      integer  _ v'       => v = v' | _ => false
+    | float    _ v        => case b |
+      float    _ v'       => v = v' | _ => false
+    | block    _ lst  _   => case b |
+      block    _ lst' _   => (lst = lst) | _ => false
+    | node     op  args   => case b |
+      node     op' args'  => (op = op') && (args = args') | _ => false;
+
+
