@@ -3,7 +3,7 @@
  *
  * ---------------------------------------------------------------------------
  *
- *      Copyright (C) 2011-2016  Free Software Foundation, Inc.
+ *      Copyright (C) 2011-2017  Free Software Foundation, Inc.
  *
  *   Author: Pierre Delaunay <pierre.delaunay@hec.ca>
  *   Keywords: languages, lisp, dependent types.
@@ -93,7 +93,7 @@ let type_float = mkBuiltin ((dloc, "Float"), type0, None)
 let type_string = mkBuiltin ((dloc, "String"), type0, None)
 
 (* easier to debug with type annotations *)
-type env_elem = (db_offset * vdef option * varbind * ltype)
+type env_elem = (db_offset * vname option * varbind * ltype)
 type lexp_context = env_elem M.myers
 
 type db_ridx = int (* DeBruijn reverse index (i.e. counting from the root).  *)
@@ -145,26 +145,26 @@ let lexp_ctx_cons (ctx : lexp_context) offset d v t =
                   || previous_offset = 1 + offset)));
   M.cons (offset, d, v, t) ctx
 
-let lctx_extend (ctx : lexp_context) (def: vdef option) (v: varbind) (t: lexp) =
+let lctx_extend (ctx : lexp_context) (def: vname option) (v: varbind) (t: lexp) =
   lexp_ctx_cons ctx 0 def v t
 
-let env_extend_rec r (ctx: elab_context) (def: vdef) (v: varbind) (t: lexp) =
+let env_extend_rec r (ctx: elab_context) (def: vname) (v: varbind) (t: lexp) =
   let (loc, name) = def in
   let ((n, map), env) = ctx in
   let nmap = SMap.add name n map in
   ((n + 1, nmap),
    lexp_ctx_cons env r (Some def) v t)
 
-let env_extend (ctx: elab_context) (def: vdef) (v: varbind) (t: lexp) = env_extend_rec 0 ctx def v t
+let env_extend (ctx: elab_context) (def: vname) (v: varbind) (t: lexp) = env_extend_rec 0 ctx def v t
 
-let ectx_extend (ectx: elab_context) (def: vdef option) (v: varbind) (t: lexp)
+let ectx_extend (ectx: elab_context) (def: vname option) (v: varbind) (t: lexp)
     : elab_context =
   match def with
   | None -> let ((n, map), lctx) = ectx in
            ((n + 1, map), lexp_ctx_cons lctx 0 None v t)
   | Some def -> env_extend ectx def v t
 
-let lctx_extend_rec (ctx : lexp_context) (defs: (vdef * lexp * ltype) list) =
+let lctx_extend_rec (ctx : lexp_context) (defs: (vname * lexp * ltype) list) =
   let (ctx, _) =
     List.fold_left
       (fun (ctx, recursion_offset) (def, e, t) ->
@@ -173,7 +173,7 @@ let lctx_extend_rec (ctx : lexp_context) (defs: (vdef * lexp * ltype) list) =
       (ctx, List.length defs) defs in
   ctx
 
-let ectx_extend_rec (ctx: elab_context) (defs: (vdef * lexp * ltype) list) =
+let ectx_extend_rec (ctx: elab_context) (defs: (vname * lexp * ltype) list) =
   let ((n, senv), lctx) = ctx in
   let senv', _ = List.fold_left
                    (fun (senv, i) ((_, vname), _, _) ->

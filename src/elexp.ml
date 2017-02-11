@@ -3,7 +3,7 @@
  *
  * ---------------------------------------------------------------------------
  *
- *      Copyright (C) 2011-2016  Free Software Foundation, Inc.
+ *      Copyright (C) 2011-2017  Free Software Foundation, Inc.
  *
  *   Author: Pierre Delaunay <pierre.delaunay@hec.ca>
  *   Keywords: languages, lisp, dependent types.
@@ -36,7 +36,7 @@ open Pexp (* Aexplicit *)
 
 module U = Util
 
-type vdef = U.vdef
+type vname = U.vname
 type vref = U.vref
 type label = symbol
 
@@ -45,16 +45,16 @@ module SMap = U.SMap
 type elexp =
     | Imm of sexp
 
-    | Builtin of vdef
+    | Builtin of vname
     | Var of vref
 
-    | Let of U.location * (vdef * elexp) list * elexp
-    | Lambda of vdef * elexp
+    | Let of U.location * (vname * elexp) list * elexp
+    | Lambda of vname * elexp
     | Call of elexp * elexp list
     | Cons of symbol
     | Case of U.location * elexp
-              * (U.location * (vdef option) list * elexp) SMap.t
-              * (vdef option * elexp) option
+              * (U.location * (vname option) list * elexp) SMap.t
+              * (vname option * elexp) option
     (* Type place-holder just in case *)
     | Type
     (* Inductive takes a slot in the env that is why it need to be here *)

@@ -3,7 +3,7 @@
  *
  * ---------------------------------------------------------------------------
  *
- *      Copyright (C) 2011-2016  Free Software Foundation, Inc.
+ *      Copyright (C) 2011-2017  Free Software Foundation, Inc.
  *
  *   Author: Pierre Delaunay <pierre.delaunay@hec.ca>
  *   Keywords: languages, lisp, dependent types.
@@ -400,7 +400,7 @@ and build_arg_list args ctx i =
     (*  Add args inside context *)
     List.fold_left (fun c v -> add_rte_variable None v c) ctx arg_val
 
-and _eval_decls (decls: (vdef * elexp) list)
+and _eval_decls (decls: (vname * elexp) list)
                         (ctx: runtime_env) i: runtime_env =
 
     let n = (List.length decls) - 1 in
@@ -610,7 +610,7 @@ let debug_eval lxp ctx =
 
 let eval_decls decls ctx = _eval_decls decls ctx ([], [])
 
-let eval_decls_toplevel (decls: (vdef * elexp) list list) ctx =
+let eval_decls_toplevel (decls: (vname * elexp) list list) ctx =
   (* Add toplevel decls function *)
   List.fold_left (fun ctx decls ->
     eval_decls decls ctx) ctx decls

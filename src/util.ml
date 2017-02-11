@@ -1,6 +1,6 @@
 (* util.ml --- Misc definitions for Typer.  -*- coding: utf-8 -*-
 
-Copyright (C) 2011-2013, 2016  Free Software Foundation, Inc.
+Copyright (C) 2011-2017  Free Software Foundation, Inc.
 
 Author: Stefan Monnier <monnier@iro.umontreal.ca>
 Keywords: languages, lisp, dependent types.
@@ -35,11 +35,11 @@ let dummy_location = {file=""; line=0; column=0}
 (* Occurrence of a variable's symbol: we use DeBruijn index, and for
  * debugging purposes, we remember the name that was used in the source
  * code.  *)
-type vdef = location * string
+type vname = location * string
 type db_index = int             (* DeBruijn index.  *)
 type db_offset = int            (* DeBruijn index offset.  *)
 type db_revindex = int          (* DeBruijn index counting from the root.  *)
-type vref = vdef * db_index
+type vref = vname * db_index
 
 type bottom = | B_o_t_t_o_m_ of bottom
 
