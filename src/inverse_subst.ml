@@ -1,6 +1,6 @@
 (* inverse_subst.ml --- Computing the inverse of a substitution
 
-Copyright (C) 2016  Free Software Foundation, Inc.
+Copyright (C) 2016-2017  Free Software Foundation, Inc.
 
 Author: Vincent Bonnevalle <tiv.crb@gmail.com>
 
@@ -29,6 +29,14 @@ this program.  If not, see <http://www.gnu.org/licenses/>.  *)
  *     X = e[σ⁻¹]
  *
  * where σ⁻¹ is such that e[σ⁻¹][σ] = e[σ⁻¹ ∘ σ] = e
+ *
+ * Another way to look at it is that
+ *
+ *     X[σ] = e   ==>    X[σ][σ⁻¹] = e[σ⁻¹]
+ *
+ * so if we can find a σ⁻¹ such that σ ∘ σ⁻¹ = Id, e have X = e[σ⁻¹]
+ *
+ * So either left or right inverse can be used!
  *)
 
 open Lexp

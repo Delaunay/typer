@@ -306,6 +306,27 @@ let env_lookup_type ctx (v : vref): lexp =
 let env_lookup_expr ctx (v : vref): lexp option =
   lctx_lookup_value (ectx_to_lctx ctx) v
 
+type lct_view =
+  | CVempty
+  | CVlet of vname option * varbind * ltype * lexp_context
+  | CVfix of (vname option * varbind * ltype) list * lexp_context
+
+let rec lctx_view lctx =
+  match lctx with
+  | Myers.Mnil -> CVempty
+  | Myers.Mcons ((0, loname, odef, t), lctx, _, _)
+    -> CVlet (loname, odef, t, lctx)
+  | Myers.Mcons ((1, loname, odef, t), lctx, _, _)
+    -> let rec loop i lctx defs =
+        match lctx with
+        | Myers.Mcons ((o, loname, odef, t), lctx, _, _)
+             when o = i
+          -> loop (i + 1) lctx ((loname, odef, t) :: defs)
+        | _ -> CVfix (defs, lctx) in
+      loop 2 lctx [(loname, odef, t)]
+  | _ -> U.internal_error "Unexpected lexp_context shape!"
+
+
 (**          Sets of DeBruijn indices          **)
 
 type set = db_offset * unit VMap.t

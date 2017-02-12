@@ -645,51 +645,54 @@ let closed_p rctx (fvs, mvs) =
   (* FIXME: Handle metavars!  *)
   && VMap.is_empty mvs
 
-let rec from_lctx meta_ctx (lctx: lexp_context): runtime_env =
-  (* FIXME: `eval` with a disabled runIO.  *)
-  let from_lctx' (lctx: lexp_context): runtime_env =
-    match lctx with
-    | Myers.Mnil -> Myers.nil
-    | Myers.Mcons ((0, loname, def, _), lctx, _, _)
-      -> let rctx = from_lctx meta_ctx lctx in
-        Myers.cons (roname loname,
-                    ref (match def with
+let from_lctx meta_ctx (lctx: lexp_context): runtime_env =
+  (* FIXME: `eval` with a disabled IO.run.  *)
+  let rec from_lctx' (lctx: lexp_context): runtime_env =
+    match lctx_view lctx with
+    | CVempty -> Myers.nil
+    | CVlet (loname, def, _, lctx)
+      -> let rctx = from_lctx lctx in
+         Myers.cons (roname loname,
+                     ref (match def with
+                          | LetDef e
+                            -> let e = L.clean meta_ctx e in
+                               if closed_p rctx (OL.fv e) then
+                                 eval (OL.erase_type e) rctx
+                               else Vundefined
+                          | _ -> Vundefined))
+                    rctx
+    | CVfix (defs, lctx)
+      -> let fvs = List.fold_left
+                     (fun fvs (_, odef, _)
+                      -> match odef with
                          | LetDef e
-                           -> let e = L.clean meta_ctx e in
-                             if closed_p rctx (OL.fv e) then
-                               eval (OL.erase_type e) rctx
-                             else Vundefined
-                         | _ -> Vundefined))
-                   rctx
-    | Myers.Mcons ((1, loname, LetDef e, _), lctx, _, _)
-      -> let rec getdefs i lctx rdefs fvs =
-          match lctx with
-          | Myers.Mcons ((o, loname, LetDef e, _), lctx, _, _)
-               when o = i
-            -> let e = L.clean meta_ctx e in
-              getdefs (i + 1) lctx ((loname, e) :: rdefs)
-                      (OL.fv_union fvs (OL.fv e))
-          | _ -> (lctx, rdefs, fvs) in
-        let (lctx, rdefs, fvs) = getdefs 2 lctx [(loname, e)] OL.fv_empty in
-        let rctx = from_lctx meta_ctx lctx in
-        let (nrctx, evs)
-          = List.fold_left (fun (rctx, evs) (loname, e)
-                            -> let rc = ref Vundefined in
-                              (Myers.cons (roname loname, rc) rctx,
-                               (e, rc)::evs))
-                           (rctx, []) rdefs in
-        let _ =
-          if closed_p rctx (OL.fv_hoist (List.length rdefs) fvs) then
-            List.iter (fun (e, rc) -> rc := eval (OL.erase_type e) nrctx) evs
-          else () in
-        nrctx
-    | _ -> U.internal_error "Unexpected lexp_context shape!"
-  in
-  try CMap.find ctx_memo lctx
-  with Not_found
-       -> let r = from_lctx' lctx in
-         CMap.add ctx_memo lctx r;
-         r
+                           -> OL.fv_union fvs (OL.fv (L.clean meta_ctx e))
+                         | _ -> fvs)
+                     OL.fv_empty
+                     defs in
+         let rctx = from_lctx lctx in
+         let (nrctx, evs, alldefs)
+           = List.fold_left (fun (rctx, evs, alldefs) (loname, odef, _)
+                             -> let rc = ref Vundefined in
+                                let nrctx = Myers.cons (roname loname, rc) rctx in
+                                match odef with
+                                | LetDef e -> (nrctx, (e, rc)::evs, alldefs)
+                                | _ -> nrctx, [], false)
+                            (rctx, [], true) defs in
+         let _ =
+           (* FIXME: Evaluate those defs that we can, even if not all defs
+            * are present!  *)
+           if alldefs && closed_p rctx (OL.fv_hoist (List.length defs) fvs) then
+             List.iter (fun (e, rc) -> rc := eval (OL.erase_type e) nrctx) evs
+           else () in
+         nrctx
+  and from_lctx lctx =
+    try CMap.find ctx_memo lctx
+    with Not_found
+         -> let r = from_lctx' lctx in
+            CMap.add ctx_memo lctx r;
+            r
+  in from_lctx lctx
 
 (* build a rctx from a ectx.  *)
 let from_ectx meta_ctx (ctx: elab_context): runtime_env =

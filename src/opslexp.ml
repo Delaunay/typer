@@ -1,6 +1,6 @@
 (* opslexp.ml --- Operations on Lexps
 
-Copyright (C) 2011-2016  Free Software Foundation, Inc.
+Copyright (C) 2011-2017  Free Software Foundation, Inc.
 
 Author: Stefan Monnier <monnier@iro.umontreal.ca>
 Keywords: languages, lisp, dependent types.
@@ -72,30 +72,28 @@ let rec lexp_defs_subst l s defs = match defs with
 (** Convert a lexp_context into a substitution.  *)
 
 let rec lctx_to_subst lctx =
-  match lctx with
-  | Myers.Mnil -> Subst.identity
-  | Myers.Mcons ((0, _, LetDef e, _), lctx, _, _)
+  match DB.lctx_view lctx with
+  | DB.CVempty -> Subst.identity
+  | DB.CVlet (_, LetDef e, _, lctx)
     -> let s = lctx_to_subst lctx in
-      L.scompose (S.substitute e) s
-  | Myers.Mcons ((0, ov, _, _), lctx, _, _)
+       L.scompose (S.substitute e) s
+  | DB.CVlet (ov, _, _, lctx)
     -> let s = lctx_to_subst lctx in
-      (* Here we decide to keep those vars in the target domain.
-       * Another option would be to map them to `L.impossible`,
-       * hence making the target domain be empty (i.e. making the substitution
-       * generate closed results).  *)
-      L.ssink (maybev ov) s
-  | Myers.Mcons ((1, ov, LetDef e, t), lctx, _, _)
-    -> let rec getdefs i lctx rdefs =
-        match lctx with
-        | Myers.Mcons ((o, ov, LetDef e, t), lctx, _, _)
-             when o = i
-          -> getdefs (i + 1) lctx ((maybev ov, e, t) :: rdefs)
-        | _ -> (lctx, List.rev rdefs) in
-      let (lctx, defs) = getdefs 2 lctx [(maybev ov, e, t)] in
-      let s1 = lctx_to_subst lctx in
-      let s2 = lexp_defs_subst DB.dloc S.identity defs in
-      L.scompose s2 s1
-  | _ -> U.internal_error "Unexpected lexp_context shape!"
+       (* Here we decide to keep those vars in the target domain.
+        * Another option would be to map them to `L.impossible`,
+        * hence making the target domain be empty (i.e. making the substitution
+        * generate closed results).  *)
+       L.ssink (maybev ov) s
+  | DB.CVfix (defs, lctx)
+    -> let s1 = lctx_to_subst lctx in
+       let s2 = lexp_defs_subst DB.dloc S.identity
+                                (List.map (fun (oname, odef, t)
+                                           -> (maybev oname,
+                                               (match odef with LetDef e -> e
+                                                              | _ -> L.impossible),
+                                               t))
+                                          (List.rev defs)) in
+       L.scompose s2 s1
 
 (* Take an expression `e` that is "closed" relatively to context lctx
  * and return an equivalent expression valid in the empty context.
