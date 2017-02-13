@@ -1,6 +1,6 @@
 (* lexer.ml --- Second half of lexical analysis of Typer.
 
-Copyright (C) 2011-2012, 2016  Free Software Foundation, Inc.
+Copyright (C) 2011-2017  Free Software Foundation, Inc.
 
 Author: Stefan Monnier <monnier@iro.umontreal.ca>
 Keywords: languages, lisp, dependent types.
@@ -92,7 +92,7 @@ let nexttoken (stt : token_env) (pts : pretoken list) bpos cpos
       else
         let rec lexsym bpos cpos =
           let mksym epos escaped
-            = if epos = bpos then Epsilon else
+            = if epos = bpos then epsilon {file;line;column=column+cpos} else
                 let rawstr = string_sub name bpos epos in
                 let str = if escaped then unescape rawstr else rawstr in
                 hSymbol ({file;line;column=column+cpos}, str) in
@@ -120,7 +120,7 @@ let nexttoken (stt : token_env) (pts : pretoken list) bpos cpos
                    when bpos != bp
                         || (not is_last
                            && CKseparate != (stt.(Char.code name.[bp'])))
-                        || lf Epsilon != Epsilon
+                        || not (lf dummy_epsilon = dummy_epsilon)
                 -> let left = mksym bp escaped in
                   let op = hSymbol ({file;line;column=column+cp},
                                     "__" ^ String.sub name bp 1 ^ "__") in

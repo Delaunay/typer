@@ -129,7 +129,7 @@ let empty_meta_subst : meta_subst = VMap.empty
 
 let empty_constraint : constraints = []
 
-let impossible = Imm Sexp.Epsilon
+let impossible = Imm Sexp.dummy_epsilon
 
 let builtin_size = ref 0
 

@@ -1,6 +1,6 @@
 (* sexp.ml --- The Lisp-style Sexp abstract syntax tree.
 
-Copyright (C) 2011-2016  Free Software Foundation, Inc.
+Copyright (C) 2011-2017  Free Software Foundation, Inc.
 
 Author: Stefan Monnier <monnier@iro.umontreal.ca>
 Keywords: languages, lisp, dependent types.
@@ -39,13 +39,15 @@ type integer = (* Num.num  *) int
 type symbol = location * string
 
 type sexp =                  (* Syntactic expression, kind of like Lisp.  *)
-  | Epsilon
   | Block of location * pretoken list * location
   | Symbol of symbol
   | String of location * string
   | Integer of location * integer
   | Float of location * float
   | Node of sexp * sexp list
+
+let epsilon l = Symbol (l, "")
+let dummy_epsilon = epsilon dummy_location
 
 (**************** Hash-consing symbols *********************)
 
@@ -65,8 +67,8 @@ let emptyString = hString ""
 
 let rec sexp_string sexp =
   match sexp with
-    | Epsilon -> "ε"  (* "ε" *)
     | Block(_,pts,_) -> "{" ^ (pretokens_string pts) ^ " }"
+    | Symbol(_, "") ->  "()"    (* Epsilon *)
     | Symbol(_, name) ->  name
     | String(_, str) -> "\"" ^ str ^ "\""
     | Integer(_, n) -> string_of_int n
@@ -86,17 +88,16 @@ let rec sexp_location s =
     | Integer (l, _) -> l
     | Float (l, _) -> l
     | Node (s, _) -> sexp_location s
-    | Epsilon -> (internal_error "Looking for the location of Epsilon")
 
 let rec sexp_name s =
   match s with
     | Block   _ -> "Block"
+    | Symbol (_, "") -> "ε"
     | Symbol  _ -> "Symbol"
     | String  _ -> "String"
     | Integer _ -> "Integer"
     | Float   _ -> "Float"
     | Node    _ -> "Node"
-    | Epsilon   -> "Epsilon"
 
 (*************** The Sexp Parser *********************)
 
@@ -128,24 +129,24 @@ let rec sexp_parse (g : grammar) (rest : sexp list)
                                                    (List.rev ss))) in
 
   let push_largs largs rargs closer = match List.rev rargs with
-      | [] -> if closer then Epsilon :: largs else largs
+      | [] -> if closer then dummy_epsilon :: largs else largs
       | e::es -> (match es with [] -> e | _ -> Node (e, es)) :: largs in
 
   let mk_node op largs rargs closer =
     let args = List.rev (push_largs largs rargs closer) in
     match op with
-      | [] -> (match args with [] -> Epsilon
-                            | [e] -> e
-                            | e::es -> Node (e, es))
-      | ss -> let headname = compose_symbol ss in
-             match (headname, args) with
-             (* FIXME: While it's uaulyl good to strip away parens,
-              * this makes assumptions about the grammar (i.e. there's
-              * a rule « exp ::= '(' exp ')' » ), and this is sometimes
-              * not desired (e.g. to distinguish "a b ⊢ c d" from
-              * "(a b) ⊢ (c d)").  *)
-             | ((_,"(_)"), [arg]) -> arg (* Strip away parens.  *)
-             | _ -> Node (hSymbol (headname), args) in
+    | [] -> (match args with [] -> dummy_epsilon
+                           | [e] -> e
+                           | e::es -> Node (e, es))
+    | ss -> let headname = compose_symbol ss in
+            match (headname, args) with
+            (* FIXME: While it's uaulyl good to strip away parens,
+             * this makes assumptions about the grammar (i.e. there's
+             * a rule « exp ::= '(' exp ')' » ), and this is sometimes
+             * not desired (e.g. to distinguish "a b ⊢ c d" from
+             * "(a b) ⊢ (c d)").  *)
+            | ((_,"(_)"), [arg]) -> arg (* Strip away parens.  *)
+            | _ -> Node (hSymbol (headname), args) in
 
   match rest with
   | (((Symbol ((l,name) as s)) as e)::rest') ->
@@ -220,14 +221,14 @@ let sexp_parse_all grm tokens limit =
 
 let sexp_p_list (s : sexp) (exceptions : string list) : sexp list =
   match s with
-  | Epsilon -> []
+  | Symbol (_, "") -> []
   | Node (Symbol (_, head), tail) when List.mem head exceptions -> [s]
   | Node (head, tail)  -> head :: tail
   | _ -> [s]
 
 let sexp_u_list (ss : sexp list) : sexp =
   match ss with
-  | [] -> Epsilon
+  | [] -> dummy_epsilon
   | [s] -> s
   | (s :: ss) -> Node (s, ss)
 
@@ -244,7 +245,6 @@ let sexp_parse_all_to_list grm tokens limit =
 
 (* Sexp comparison, ignoring source-line-number info, used for tests.  *)
 let rec sexp_equal s1 s2 = match s1, s2 with
-  | Epsilon, Epsilon -> true
   | Block (_, ps1, _), Block (_, ps2, _) -> pretokens_eq_list ps1 ps2
   | Symbol (_, s1), Symbol (_, s2) -> s1 = s2
   | String (_, s1), String (_, s2) -> s1 = s2

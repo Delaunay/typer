@@ -367,7 +367,7 @@ let rec check' meta_ctx erased ctx e =
   | Imm (Float (_, _)) -> DB.type_float
   | Imm (Integer (_, _)) -> DB.type_int
   | Imm (String (_, _)) -> DB.type_string
-  | Imm (Epsilon | Block (_, _, _) | Symbol _ | Node (_, _))
+  | Imm (Block (_, _, _) | Symbol _ | Node (_, _))
     -> (U.msg_error "TC" (lexp_location e) "Unsupported immediate value!";
        DB.type_int)
   | SortLevel SLz -> DB.type_level
@@ -710,7 +710,7 @@ let rec get_type meta_ctx ctx e =
   | Imm (Float (_, _)) -> DB.type_float
   | Imm (Integer (_, _)) -> DB.type_int
   | Imm (String (_, _)) -> DB.type_string
-  | Imm (Epsilon | Block (_, _, _) | Symbol _ | Node (_, _)) -> DB.type_int
+  | Imm (Block (_, _, _) | Symbol _ | Node (_, _)) -> DB.type_int
   | Builtin (_, t, _) -> t
   | SortLevel _ -> DB.type_level
   | Sort (l, Stype e) -> mkSort (l, Stype (mkSortLevel (SLsucc e)))

@@ -1,6 +1,6 @@
 (* pexp.ml --- Proto lambda-expressions, half-way between Sexp and Lexp.
 
-Copyright (C) 2011-2012, 2015, 2016  Free Software Foundation, Inc.
+Copyright (C) 2011-2017  Free Software Foundation, Inc.
 
 Author: Stefan Monnier <monnier@iro.umontreal.ca>
 Keywords: languages, lisp, dependent types.
@@ -102,7 +102,6 @@ let rec pexp_parse (s : sexp) : pexp =
   match s with
   (* This is an internal error because Epsilon does not have any location
    * information so it needs to be caught elsewhere.  *)
-  | Epsilon -> (internal_error "Epsilon in pexp_parse")
   | (Block _ | Integer _ | Float _ | String _) -> Pimm s
   (* | Symbol (l, "Type") -> Psort (l, Type) *)
   | Symbol (l, name) when String.length name > 0 && String.get name 0 == '?'
@@ -265,7 +264,7 @@ and pexp_u_pat (p : ppat) : sexp = match p with
 
 and pexp_p_decls e: pdecl list =
   match e with
-  | Epsilon -> []
+  | Symbol (_, "") -> []
   | Node (Symbol (_, ("_;_" | "_;" | ";_")), decls)
     -> List.concat (List.map pexp_p_decls decls)
   | Node (Symbol (_, "_:_"), [Symbol s; t]) -> [Ptype(s, pexp_parse t)]
@@ -342,7 +341,7 @@ and pexp_u_decl decl =
 
 and pexp_u_decls (ds: pdecl list) =
   match ds with
-  | [] -> Epsilon
+  | [] -> dummy_epsilon
   | [d] -> pexp_u_decl d
   | _ -> Node (Symbol (dummy_location, "_;_"),
               List.map pexp_u_decl ds)
