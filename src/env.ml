@@ -57,6 +57,7 @@ type value_type =
     (* Unable to eval during macro expansion, only throw if the value is used *)
     | Vundefined
     | Vdummy
+    | Vinductive
     | Vin of in_channel
     | Vout of out_channel
     | Vcommand of (unit -> value_type)
@@ -76,6 +77,7 @@ let rec value_equal a b =
     | Vout (c1), Vout(c2)        -> c2 = c2
     | Vcommand (f1), Vcommand(f2)-> f1 = f2
     | Vdummy, Vdummy             -> warning dloc "Vdummy"; true
+    | Vinductive, Vinductive     -> warning dloc "Vinductive"; true
 
     | Closure(s1, b1, ctx1), Closure(s2, b2, ctx2) ->
       warning dloc "Closure";
@@ -116,12 +118,14 @@ let value_name v =
     | Closure  _ -> "Closure"
     | Vbuiltin _ -> "Vbuiltin"
     | Vcommand _ -> "Vcommand"
+    | Vinductive  -> "Vinductive"
 
 let rec value_string v =
   match v with
     | Vin   _ -> "in_channel"
     | Vout  _ -> "out_channe;"
     | Vdummy     -> "dummy"
+    | Vinductive -> "inductive"
     | Vundefined -> "<undefined!>"
     | Vcommand _ -> "command"
     | Vstring  s -> "\"" ^ s ^ "\""

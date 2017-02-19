@@ -1,0 +1,78 @@
+%   Example from `An Introduction to programming and proving with Dependent Types in Coq`
+%   http://adam.chlipala.net/cpdt/
+%
+%
+
+type OperatorType
+    | Plus
+    | Times;
+
+Exp : Type;
+type Exp
+    | Const Int
+    | BinaryNode OperatorType Exp Exp;
+
+% retrieve function from OperatorType
+binopDenote : OperatorType -> Int -> Int -> Int;
+binopDenote b =
+    case b
+        | Plus => _+_
+        | Times => _*_;
+
+
+% Tree based interpreter
+expDenote : Exp -> Int;
+expDenote e =
+    case e
+        | Const n => n
+        | BinaryNode op lhs rhs =>
+            (binopDenote op) (expDenote lhs) (expDenote rhs);
+
+% Create a Stack based VM
+% -----------------------
+
+% Instruction set
+type Instr
+    | IConst Int
+    | IBinop OperatorType;
+
+% Type alias
+Program = List Instr;
+Stack   = List Int;
+
+% eval instruction
+instrDenote : Instr -> Stack -> Option Stack;
+instrDenote i s =
+    case i
+        | IConst n => some (cons n s)
+        | IBinop b =>
+            (case s
+                | cons arg1 s' => (case s'
+                    | cons arg2 s'' => some
+                        (cons ((binopDenote b) arg1 arg2) s'')
+                    | _ => none)
+                | _ => none);
+
+% eval program
+progDenote : Program -> Stack -> Option Stack;
+progDenote p s =
+    case p
+        | nil => some s
+        | cons i p' => (case instrDenote i s
+            | none => none
+            | some s' => progDenote p' s');
+
+% Compile expression to Program
+compile : Exp -> Program;
+compile e =
+    case e
+        | Const n => cons (IConst n) nil
+        | BinaryNode b lhs rhs =>
+            concat (compile rhs) (concat (compile lhs) (cons (IBinop b) nil));
+
+% Make a proof that our VM is behaving like our interpreter
+% ---------------------------------------------------------
+
+%             Stack VM         ==       Interpreter
+%   progDenote (compile e) nil == some (expDenote (cons e nil))
+

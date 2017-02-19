@@ -393,6 +393,9 @@ let _ = test_eval_eqv_named
 
   "2;"
 
+let _ = test_eval_eqv_named
+  "Type Alias" "ListInt = List Int;" "" (* == *) ""
+
 (* run all tests *)
 let _ = run_all ()
 

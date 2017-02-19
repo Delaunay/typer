@@ -127,6 +127,7 @@ float_   = Built-in "float_"   (Float     -> Sexp);
 
 Macro  = typecons (Macro)
   (Macro_ (List Sexp -> Sexp));
+% (macro ((ctx : Context) ≡> (a : Type) ≡> (arg : List Sexp) -> Sexp));
 
 Macro_ = datacons Macro Macro_ ;
 
@@ -206,6 +207,18 @@ length = lambda a ≡>
     case xs
       | nil => 0
       | cons hd tl => (1 + (length tl));
+
+reverse : (a : Type) ≡> List a -> List a -> List a;
+reverse = lambda a ≡> lambda l -> lambda t ->
+    case l
+        | nil => t
+        | cons hd tl => reverse tl (cons hd t);
+
+concat : (a : Type) ≡> List a -> List a -> List a;
+concat = lambda a ≡>
+    lambda l -> lambda t ->
+        let l' = reverse l nil in
+            reverse l' t;
 
 % ML's typical `head` function is not total, so can't be defined
 % as-is in Typer.  There are several workarounds:

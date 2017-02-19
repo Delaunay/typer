@@ -277,7 +277,7 @@ let main () =
     print_string (make_sep '-');
     flush stdout;
 
-    let (i, ectx, rctx) = readfiles (!arg_files) (1, ectx, rctx) true in
+    let (i, ectx, rctx) = readfiles (List.rev !arg_files) (1, ectx, rctx) true in
 
     flush stdout;
 

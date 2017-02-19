@@ -267,7 +267,7 @@ let rec _eval lxp (ctx : Env.runtime_env) (trace : eval_debug_info): (value_type
         | Imm(Integer (_, i))       -> Vint(i)
         | Imm(String (_, s))        -> Vstring(s)
         | Imm(sxp)                  -> Vsexp(sxp)
-        | Inductive (_, _)          -> Vdummy
+        | Inductive (_, _)          -> Vinductive
         | Cons (label)              -> Vcons (label, [])
         | Lambda ((_, n), lxp)      -> Closure(n, lxp, ctx)
         | Builtin ((_, str))        -> Vbuiltin(str)
@@ -354,6 +354,8 @@ and eval_call loc unef i f args =
             error loc ("Requested Built-in `" ^ name ^ "` does not exist")
           | e -> error loc ("Exception thrown from primitive `" ^ name ^"`"))
 
+  (* Type Alias is not a fun call, we just ignore it*)
+  | Vinductive, _ -> Vundefined
   | _ -> value_fatal loc f "Trying to call a non-function!"
 
 and eval_case ctx i loc target pat dflt =
