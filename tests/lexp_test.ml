@@ -3,7 +3,7 @@
  *
  * ---------------------------------------------------------------------------
  *
- *      Copyright (C) 2011-2016  Free Software Foundation, Inc.
+ *      Copyright (C) 2011-2017  Free Software Foundation, Inc.
  *
  *   Author: Pierre Delaunay <pierre.delaunay@hec.ca>
  *   Keywords: languages, lisp, dependent types.
@@ -37,7 +37,7 @@ open Builtin
 let ectx = default_ectx
 let rctx = default_rctx
 
-(*)
+(*
 let _ = (add_test "LEXP" "lexp_print" (fun () ->
 
     let dcode = "

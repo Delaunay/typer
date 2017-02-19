@@ -1,6 +1,6 @@
 (* REPL.ml --- Read Eval Print Loop (REPL)
 
-Copyright (C) 2016  Pierre Delaunay
+Copyright (C) 2016-2017  Free Software Foundation, Inc.
 
 Author: Pierre Delaunay <pierre.delaunay@hec.ca>
 
@@ -99,7 +99,7 @@ let rec read_input i =
 
 (* Interactive mode is not usual typer
  It makes things easier to test out code *)
-type ldecl = vdef * lexp * ltype
+type ldecl = vname * lexp * ltype
 type lexpr = lexp
 
 (* Grouping declaration together will enable us to support mutually recursive

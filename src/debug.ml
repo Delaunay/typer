@@ -3,7 +3,7 @@
  *
  * ---------------------------------------------------------------------------
  *
- *      Copyright (C) 2011-2016  Free Software Foundation, Inc.
+ *      Copyright (C) 2011-2017  Free Software Foundation, Inc.
  *
  *   Author: Pierre Delaunay <pierre.delaunay@hec.ca>
  *   Keywords: languages, lisp, dependent types.
@@ -75,7 +75,7 @@ let rec debug_sexp_print sexp =
     print_string msg;
     print_string "["; loc_print loc; print_string "]\t" in
   match sexp with
-    | Epsilon
+    | Symbol(_, "")
         -> print_string "Epsilon  "  (* "ε" *)
 
     | Block(loc, pts, _)

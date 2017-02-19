@@ -3,7 +3,7 @@
  *
  * ---------------------------------------------------------------------------
  *
- *      Copyright (C) 2011-2016  Free Software Foundation, Inc.
+ *      Copyright (C) 2011-2017  Free Software Foundation, Inc.
  *
  *   Author: Pierre Delaunay <pierre.delaunay@hec.ca>
  *   Keywords: languages, lisp, dependent types.
@@ -168,7 +168,7 @@ let elab_check_def (ctx : elab_context) var lxp ltype =
       "                    because";
       lexp_string ltype' ^ " != " ^ lexp_string ltype])
 
-let ctx_extend (ctx: elab_context) (var : vdef option) def ltype =
+let ctx_extend (ctx: elab_context) (var : vname option) def ltype =
   elab_check_proper_type ctx ltype var;
   ectx_extend ctx var def ltype
 
@@ -805,7 +805,7 @@ and infer_call ctx (func, ltp) (sargs: sexp list) =
 and lexp_parse_inductive ctors ctx =
 
     let make_args (args:(arg_kind * pvar option * pexp) list) ctx
-        : (arg_kind * vdef option * ltype) list =
+        : (arg_kind * vname option * ltype) list =
         let rec loop args acc ctx =
             match args with
                 | [] -> (List.rev acc)
@@ -910,8 +910,8 @@ and lexp_decls_macro (loc, mname) sargs ctx: (pdecl list * elab_context) =
 
 and lexp_check_decls (ectx : elab_context) (* External context.  *)
                      (nctx : elab_context) (* Context with type declarations. *)
-                     (defs : (vdef * pexp * ltype) list)
-    : (vdef * lexp * ltype) list * elab_context =
+                     (defs : (vname * pexp * ltype) list)
+    : (vname * lexp * ltype) list * elab_context =
   let (declmap, nctx)
     = List.fold_right
                   (fun ((_, vname) as v, pexp, ltp) (map, nctx) ->
@@ -936,8 +936,8 @@ and lexp_decls_1
       (ectx : elab_context)                       (* External ctx.  *)
       (nctx : elab_context)                       (* New context.  *)
       (pending_decls : (location * ltype) SMap.t) (* Pending type decls. *)
-      (pending_defs : (vdef * pexp * ltype) list) (* Pending definitions. *)
-    : (vdef * lexp * ltype) list * pdecl list * elab_context =
+      (pending_defs : (vname * pexp * ltype) list) (* Pending definitions. *)
+    : (vname * lexp * ltype) list * pdecl list * elab_context =
 
   match pdecls with
   | [] -> (if not (SMap.is_empty pending_decls) then
@@ -1004,7 +1004,7 @@ and lexp_decls_1
       else fatal l "Context changed in already changed context")
 
 
-and lexp_p_decls pdecls ctx: ((vdef * lexp * ltype) list list * elab_context) =
+and lexp_p_decls pdecls ctx: ((vname * lexp * ltype) list list * elab_context) =
   if pdecls = [] then [], ctx else
     let decls, pdecls, nctx = lexp_decls_1 pdecls ctx ctx SMap.empty [] in
     let declss, nnctx = lexp_p_decls pdecls nctx in

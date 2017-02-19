@@ -1,6 +1,6 @@
 (* lexp.ml --- Lambda-expressions: the core language.
 
-Copyright (C) 2011-2016  Free Software Foundation, Inc.
+Copyright (C) 2011-2017  Free Software Foundation, Inc.
 
 Author: Stefan Monnier <monnier@iro.umontreal.ca>
 Keywords: languages, lisp, dependent types.
@@ -34,7 +34,7 @@ open Grammar
 (* open Unify *)
 module S = Subst
 
-type vdef = U.vdef
+type vname = U.vname
 type vref = U.vref
 
 type label = symbol
@@ -63,25 +63,25 @@ type ltype = lexp
    | Imm of sexp                        (* Used for strings, ...  *)
    | SortLevel of sort_level
    | Sort of U.location * sort
-   | Builtin of vdef * ltype * lexp AttributeMap.t option
+   | Builtin of vname * ltype * lexp AttributeMap.t option
    | Var of vref
    | Susp of lexp * subst  (* Lazy explicit substitution: e[σ].  *)
    (* This "Let" allows recursion.  *)
-   | Let of U.location * (vdef * lexp * ltype) list * lexp
-   | Arrow of arg_kind * vdef option * ltype * U.location * lexp
-   | Lambda of arg_kind * vdef * ltype * lexp
+   | Let of U.location * (vname * lexp * ltype) list * lexp
+   | Arrow of arg_kind * vname option * ltype * U.location * lexp
+   | Lambda of arg_kind * vname * ltype * lexp
    | Call of lexp * (arg_kind * lexp) list (* Curried call.  *)
    | Inductive of U.location * label
-                  * ((arg_kind * vdef * ltype) list) (* formal Args *)
-                  * ((arg_kind * vdef option * ltype) list) SMap.t
+                  * ((arg_kind * vname * ltype) list) (* formal Args *)
+                  * ((arg_kind * vname option * ltype) list) SMap.t
    | Cons of lexp * symbol (* = Type info * ctor_name  *)
    | Case of U.location * lexp
              * ltype (* The type of the return value of all branches *)
-             * (U.location * (arg_kind * vdef option) list * lexp) SMap.t
-             * (vdef option * lexp) option               (* Default.  *)
+             * (U.location * (arg_kind * vname option) list * lexp) SMap.t
+             * (vname option * lexp) option               (* Default.  *)
    (* The `subst` only applies to the lexp associated
     * with the metavar's index (i.e. its "value"), not to the ltype.  *)
-   | Metavar of int * subst * vdef * ltype
+   | Metavar of int * subst * vname * ltype
  (*   (\* For logical metavars, there's no substitution.  *\)
   *   | Metavar of (U.location * string) * metakind * metavar ref
   * and metavar =
@@ -125,16 +125,11 @@ module VMap = Map.Make (struct type t = int let compare = compare end)
 type meta_subst = lexp VMap.t
 type constraints  = (lexp * lexp) list
 
-(* What people do to statisfy Ocaml type inference ...*)
-let empty_meta_subst =
-  let lxp = Var((U.dummy_location, "dummy"), -1) in
-  let v = VMap.empty in
-  let c = VMap.add 1 lxp v in VMap.remove 1 c
+let empty_meta_subst : meta_subst = VMap.empty
 
-let empty_constraint =
-  let lxp = Var((U.dummy_location, "dummy"), -1) in List.tl [(lxp, lxp)]
+let empty_constraint : constraints = []
 
-let impossible = Imm Sexp.Epsilon
+let impossible = Imm Sexp.dummy_epsilon
 
 let builtin_size = ref 0
 
